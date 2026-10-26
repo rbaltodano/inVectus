@@ -1,0 +1,82 @@
+[
+  {
+    "model": "nomic",
+    "repo": "nomic-ai/nomic-embed-text-v1.5",
+    "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+    "file": "onnx/model.onnx",
+    "bytes": 547310275,
+    "sha256": "147d5aa88c2101237358e17796cf3a227cead1ec304ec34b465bb08e9d952965"
+  },
+  {
+    "model": "nomic",
+    "repo": "nomic-ai/nomic-embed-text-v1.5",
+    "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+    "file": "tokenizer.json",
+    "bytes": 711396,
+    "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+  },
+  {
+    "model": "nomic",
+    "repo": "nomic-ai/nomic-embed-text-v1.5",
+    "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+    "file": "config.json",
+    "bytes": 2538,
+    "sha256": "9ab00bd92cee80a569f708140b7b6c1661a65891ff3765b1519e181ba2f2c92b"
+  },
+  {
+    "model": "nomic",
+    "repo": "nomic-ai/nomic-embed-text-v1.5",
+    "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+    "file": "special_tokens_map.json",
+    "bytes": 695,
+    "sha256": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a"
+  },
+  {
+    "model": "nomic",
+    "repo": "nomic-ai/nomic-embed-text-v1.5",
+    "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+    "file": "tokenizer_config.json",
+    "bytes": 1191,
+    "sha256": "d7e0000bcc80134debd2222220427e6bf5fa20a669f40a0d0d1409cc18e0a9bc"
+  },
+  {
+    "model": "bge",
+    "repo": "Xenova/bge-small-en-v1.5",
+    "revision": "ea104dacec62c0de699686887e3f920caeb4f3e3",
+    "file": "onnx/model.onnx",
+    "bytes": 133093490,
+    "sha256": "828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35"
+  },
+  {
+    "model": "bge",
+    "repo": "Xenova/bge-small-en-v1.5",
+    "revision": "ea104dacec62c0de699686887e3f920caeb4f3e3",
+    "file": "tokenizer.json",
+    "bytes": 711396,
+    "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+  },
+  {
+    "model": "bge",
+    "repo": "Xenova/bge-small-en-v1.5",
+    "revision": "ea104dacec62c0de699686887e3f920caeb4f3e3",
+    "file": "config.json",
+    "bytes": 683,
+    "sha256": "fa73f90bf92c8cace1fbcb709626306f2bdbc9ea3e5b5f94b440df9b6aa56350"
+  },
+  {
+    "model": "bge",
+    "repo": "Xenova/bge-small-en-v1.5",
+    "revision": "ea104dacec62c0de699686887e3f920caeb4f3e3",
+    "file": "special_tokens_map.json",
+    "bytes": 125,
+    "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3"
+  },
+  {
+    "model": "bge",
+    "repo": "Xenova/bge-small-en-v1.5",
+    "revision": "ea104dacec62c0de699686887e3f920caeb4f3e3",
+    "file": "tokenizer_config.json",
+    "bytes": 366,
+    "sha256": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "at_512_tokens": 5,
+  "batch": 32,
+  "dim": 384,
+  "items": 256,
+  "items_per_s": [
+    71.18496715574416,
+    72.33438776036877,
+    71.9476052873759
+  ],
+  "load_s": 0.08526725,
+  "max_tokens": 512,
+  "mean_tokens_capped": 203.71484375,
+  "model": "bge",
+  "provider": "CPU, AutoDevicePolicy::PreferCPU",
+  "seconds": [
+    3.596264917,
+    3.539118916,
+    3.558144833
+  ],
+  "threads": 8
+}

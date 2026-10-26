@@ -1,0 +1,8 @@
+{
+  "clusters": 11,
+  "items": 2000,
+  "min_cluster_size": 30,
+  "min_samples": 10,
+  "noise": 0.294,
+  "seconds": 0.018683042
+}

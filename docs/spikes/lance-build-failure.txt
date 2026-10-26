@@ -1,0 +1,8 @@
+lancedb 0.40.0, default features, Rust 1.99.1, macOS arm64:
+error[E0599]: no variant named `Http` found for enum `error::Error`
+  --> lancedb-0.40.0/src/job.rs:102:40
+error[E0599]: no variant named `Http` found for enum `error::Error`
+  --> lancedb-0.40.0/src/job.rs:112:40
+
+src/error.rs gates Error::Http on #[cfg(feature = "remote")].
+Workaround under test: enable remote feature, use local filesystem connections only.

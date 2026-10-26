@@ -1,0 +1,18 @@
+[
+  {
+    "dimensions": 2,
+    "epochs": 200,
+    "items": 2000,
+    "knn_k": 30,
+    "run": 0,
+    "seconds": 0.114309667
+  },
+  {
+    "dimensions": 2,
+    "epochs": 200,
+    "items": 2000,
+    "knn_k": 30,
+    "run": 1,
+    "seconds": 0.1136875
+  }
+]

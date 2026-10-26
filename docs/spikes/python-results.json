@@ -1,0 +1,29 @@
+{
+  "items": 2000,
+  "knn_s": 0.09325762512162328,
+  "numba_warm_s": 3.0388900418765843,
+  "projections": [
+    {
+      "dimensions": 10,
+      "seconds": 1.1270971661433578
+    },
+    {
+      "dimensions": 2,
+      "seconds": 0.692342417081818
+    }
+  ],
+  "clusters": [
+    {
+      "selection": "leaf",
+      "seconds": 0.02131008286960423,
+      "clusters": 14,
+      "noise": 0.475
+    },
+    {
+      "selection": "eom",
+      "seconds": 0.019511125050485134,
+      "clusters": 11,
+      "noise": 0.305
+    }
+  ]
+}

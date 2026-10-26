@@ -1,0 +1,40 @@
+{
+  "clustering": {
+    "leaf": {
+      "ari": 0.49161278934241787,
+      "mean_best_jaccard": 0.6853682157477375,
+      "noise_agreement": 0.812
+    },
+    "eom": {
+      "ari": 0.9331983255241901,
+      "mean_best_jaccard": 0.9691280690684817,
+      "noise_agreement": 0.977
+    }
+  },
+  "maps": {
+    "python": {
+      "trustworthiness_15": 0.8662696341257798,
+      "finite": true,
+      "axis_std": [
+        1.662184715270996,
+        1.6047110557556152
+      ]
+    },
+    "rust-0": {
+      "trustworthiness_15": 0.6232333670544596,
+      "finite": true,
+      "axis_std": [
+        7.6317267417907715,
+        7.484158039093018
+      ]
+    },
+    "rust-1": {
+      "trustworthiness_15": 0.6255534985668522,
+      "finite": true,
+      "axis_std": [
+        7.552623271942139,
+        7.470420837402344
+      ]
+    }
+  }
+}

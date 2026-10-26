@@ -1,0 +1,7 @@
+{
+  "items": 2000,
+  "dimensions": 768,
+  "sample": "first 2000 rows in Lance scan order; not random or representative",
+  "vector_sha256": "d1f32906724cf97e97a751541bf8e06a029d4b742d3afd339b8a795d67221c64",
+  "ids_sha256": "5432aef8d32141e9849d0bdb0176df11cc1407f3bb116bb23c183146d846b982"
+}

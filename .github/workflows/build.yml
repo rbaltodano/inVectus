@@ -32,3 +32,25 @@ jobs:
       - run: cargo run --locked --bin invectus
       - name: Build desktop executable
         run: npm run tauri build -- --no-bundle --ci
+
+  spike-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: "36.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev clang
+      - run: cargo fmt --manifest-path spikes/Cargo.toml --check
+      - name: Compile ML spikes without model or benchmark downloads
+        run: cargo build --release --manifest-path spikes/Cargo.toml --locked --features embedding,lance

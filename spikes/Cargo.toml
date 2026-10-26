@@ -1,0 +1,44 @@
+[package]
+name = "invectus-p0-spikes"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+embedding = ["dep:fastembed", "dep:ort", "dep:tokenizers"]
+lance = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ndarray = "0.17"
+umap-rs = "=0.4.5"
+hdbscan = "=0.12.0"
+tokenizers = { version = "0.23", default-features = false, features = ["onig"], optional = true }
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std"], optional = true }
+fastembed = { version = "=7.5.0", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"], optional = true }
+lancedb = { version = "=0.40.0", features = ["remote"], optional = true }
+arrow-array = { version = "58", optional = true }
+arrow-schema = { version = "58", optional = true }
+futures = { version = "0.3", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
+
+[[bin]]
+name = "embedding"
+required-features = ["embedding"]
+
+[[bin]]
+name = "lance"
+required-features = ["lance"]
+
+[profile.dev]
+debug = 0
+incremental = false
+opt-level = 1
+
+[profile.release]
+debug = 0
+strip = "debuginfo"

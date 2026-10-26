@@ -1,0 +1,22 @@
+{
+  "at_512_tokens": 5,
+  "batch": 32,
+  "dim": 768,
+  "items": 256,
+  "items_per_s": [
+    26.68936026828437,
+    26.46666278282175,
+    27.31345776535459
+  ],
+  "load_s": 0.2418985,
+  "max_tokens": 512,
+  "mean_tokens_capped": 207.63671875,
+  "model": "nomic",
+  "provider": "CPU, AutoDevicePolicy::PreferCPU",
+  "seconds": [
+    9.59183725,
+    9.6725455,
+    9.372669041
+  ],
+  "threads": 8
+}

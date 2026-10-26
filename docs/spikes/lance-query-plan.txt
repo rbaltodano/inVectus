@@ -1,0 +1,5 @@
+ProjectionExec: expr=[id@2 as id, vector@3 as vector, _distance@0 as _distance]
+  LanceRead: uri=Users/ryanbaltodano/Developer/inVectus/.spike-data/lance-89430/sample.lance/data, projection=[id, vector], source=stream(_rowid)
+    SortExec: TopK(fetch=50), expr=[_distance@0 ASC NULLS LAST, _rowid@1 ASC NULLS LAST], preserve_partitioning=[false]
+      ANNSubIndex: name=vector_idx, k=50, deltas=1, metric=Cosine
+        ANNIvfPartition: uuid=d066dbf9-f9ff-4b7d-baf5-39b6ba0d260e, minimum_nprobes=4, maximum_nprobes=Some(4), deltas=1

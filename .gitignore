@@ -1,0 +1,12 @@
+node_modules/
+target/
+dist/
+.DS_Store
+*.invectus/
+models/
+.env
+
+.spike-data/
+.fastembed_cache/
+spikes/target/
+*.log

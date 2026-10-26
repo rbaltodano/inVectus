@@ -1,10 +1,17 @@
-//! Core boundary from SPEC §7.2. Implementation starts after P0.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+//! Data model, project store and schema contracts shared by every inVectus crate (SPEC §7.2).
+pub mod embedder;
+pub mod identity;
+pub mod item;
+pub mod job;
+pub mod net;
+pub mod project;
+pub mod store;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn scaffold_is_available() {
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
-    }
-}
+pub use embedder::{Embedding, TextEmbedder};
+pub use identity::{EmbeddingIdentity, InputKind, Normalization, Pooling};
+pub use item::{Item, Role};
+pub use job::{CancelToken, Progress};
+pub use project::Project;
+pub use store::Store;
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

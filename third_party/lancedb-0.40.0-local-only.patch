@@ -1,0 +1,52 @@
+--- src/job.rs	2006-07-23 21:21:28
++++ src/job.rs	2026-10-26 19:39:14
+@@ -99,21 +99,37 @@
+ 
+     fn decode<T: DeserializeOwned>(self) -> Result<T> {
+         let value = self.value.ok_or_else(|| match &self.request_id {
++            // invectus patch: `Error::Http` exists only with `remote`; a local-only build
++            // reports the same condition as a runtime error.
++            #[cfg(feature = "remote")]
+             Some(request_id) => Error::Http {
+                 source: "successful typed job response did not contain a result".into(),
+                 request_id: request_id.clone(),
+                 status_code: None,
++            },
++            #[cfg(not(feature = "remote"))]
++            Some(request_id) => Error::Runtime {
++                message: format!(
++                    "successful typed job response did not contain a result (request_id={request_id})"
++                ),
+             },
+             None => Error::Runtime {
+                 message: "successful typed job did not contain a result".to_string(),
+             },
+         })?;
+         serde_json::from_value(value).map_err(|error| match self.request_id {
++            #[cfg(feature = "remote")]
+             Some(request_id) => Error::Http {
+                 source: format!("failed to parse typed job result: {error}").into(),
+                 request_id,
+                 status_code: None,
+             },
++            #[cfg(not(feature = "remote"))]
++            Some(request_id) => Error::Runtime {
++                message: format!(
++                    "failed to parse typed job result: {error} (request_id={request_id})"
++                ),
++            },
+             None => Error::Runtime {
+                 message: format!("failed to parse typed job result: {error}"),
+             },
+--- src/lib.rs	2006-07-23 21:21:28
++++ src/lib.rs	2026-10-26 19:58:26
+@@ -172,6 +172,9 @@
+ // auto-traits (`Send`) through the Linux io_uring build's moka cache. Raise it.
+ #![recursion_limit = "256"]
+ 
++// invectus patch: code used only by the `remote` feature is dead in a local-only build.
++#![cfg_attr(not(feature = "remote"), allow(dead_code))]
++
+ pub mod arrow;
+ pub mod blob;
+ pub mod catalog;

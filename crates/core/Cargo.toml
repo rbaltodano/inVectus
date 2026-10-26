@@ -3,3 +3,14 @@ name = "invectus-core"
 version.workspace = true
 edition.workspace = true
 publish = false
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+duckdb.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

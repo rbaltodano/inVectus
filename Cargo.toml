@@ -1,11 +1,46 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "src-tauri"]
+exclude = ["third_party", "spikes"]
 default-members = ["crates/cli"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+
+[workspace.dependencies]
+invectus-core = { path = "crates/core" }
+invectus-ingest = { path = "crates/ingest" }
+invectus-embed = { path = "crates/embed" }
+invectus-index = { path = "crates/index" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+dirs = "6"
+tempfile = "3"
+clap = { version = "4", features = ["derive", "env"] }
+ctrlc = "3"
+# Project store and CSV/Parquet reader. Bundled: no system DuckDB; extensions are statically
+# linked and auto-install is disabled at connect time (no hidden network).
+duckdb = { version = "=1.20000.0", features = ["bundled", "parquet", "json"] }
+# Local-only: no `remote` feature. See third_party/README.md for the build patch.
+lancedb = { version = "=0.40.0", default-features = false }
+arrow-array = "58"
+arrow-schema = "58"
+futures = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+# ONNX Runtime prebuilt binaries are fetched at *build* time only; inference never downloads.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-rustls", "api-31"] }
+# No `http` feature: the tokenizer can only be loaded from a local file.
+tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[patch.crates-io]
+lancedb = { path = "third_party/lancedb-0.40.0" }
 
 [profile.dev]
 debug = 0

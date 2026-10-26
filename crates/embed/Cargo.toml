@@ -3,3 +3,18 @@ name = "invectus-embed"
 version.workspace = true
 edition.workspace = true
 publish = false
+
+[dependencies]
+invectus-core.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+dirs.workspace = true
+ort.workspace = true
+tokenizers.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

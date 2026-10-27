@@ -2,7 +2,7 @@
 //! measure their stability across seeds and lay them out on a 2-D map (SPEC §6.4–6.5).
 
 use crate::hierarchy::ward;
-use crate::knn::{Matrix, dot, knn};
+use crate::knn::{Matrix, dot, knn, knn_ivf, recall};
 use crate::labels::{ctfidf, label};
 use crate::layout::{layout, trustworthiness};
 use crate::leiden::{Graph, LeidenOptions, leiden};
@@ -34,6 +34,8 @@ pub struct RegionOptions {
     pub min_size: usize,
     /// Broad regions (default: √fine regions).
     pub broad: Option<usize>,
+    /// Above this many items the kNN graph is approximate (inverted file, measured recall).
+    pub exact_knn_max: usize,
 }
 
 impl Default for RegionOptions {
@@ -45,6 +47,7 @@ impl Default for RegionOptions {
             seeds: 5,
             min_size: 10,
             broad: None,
+            exact_knn_max: 40_000,
         }
     }
 }
@@ -56,6 +59,10 @@ pub struct RegionReport {
     pub space_id: String,
     pub items: usize,
     pub edges: usize,
+    /// `exact` or `ivf (lists L, probes P)`.
+    pub knn: String,
+    /// Recall@k of the approximate graph against exact neighbours on 200 sampled items.
+    pub knn_recall: Option<f64>,
     pub fine: usize,
     pub broad: usize,
     pub noise: usize,
@@ -152,6 +159,8 @@ fn run_inner(
         space_id: table.space_id.clone(),
         items: n,
         edges: 0,
+        knn: String::new(),
+        knn_recall: None,
         fine: 0,
         broad: 0,
         noise: 0,
@@ -171,7 +180,14 @@ fn run_inner(
 
     // kNN graph: symmetric union, weight = cosine similarity (non-positive dropped).
     let t = Instant::now();
-    let nn = knn(&m, opts.k);
+    let (nn, knn_method, knn_recall) = if n <= opts.exact_knn_max {
+        (knn(&m, opts.k), "exact".to_string(), None)
+    } else {
+        let lists = ((n as f64).sqrt().round() as usize).max(16);
+        let nn = knn_ivf(&m, opts.k, lists, 8);
+        let r = recall(&m, &nn, opts.k, 200);
+        (nn, format!("ivf (lists {lists}, probes 8)"), Some(r))
+    };
     let mut edges: HashMap<(u32, u32), f64> = HashMap::new();
     for (i, row) in nn.iter().enumerate() {
         for &(j, s) in row {
@@ -379,6 +395,8 @@ fn run_inner(
         space_id: table.space_id.clone(),
         items: n,
         edges: edge_count,
+        knn: knn_method,
+        knn_recall,
         fine,
         broad: n_broad,
         noise,

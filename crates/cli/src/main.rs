@@ -557,6 +557,14 @@ fn run() -> Result<()> {
                     );
                 }
             }
+            for (name, m) in &r.mean_terms {
+                println!(
+                    "mean term alone ({name}): p@10 {} p@25 {} AUC {}",
+                    f(m.precision_at_10),
+                    f(m.precision_at_25),
+                    f(m.auc)
+                );
+            }
             for n in &r.notes {
                 println!("note: {n}");
             }
@@ -1170,6 +1178,7 @@ fn cmd_regions(c: RegionsCommand) -> Result<()> {
                     seeds,
                     min_size,
                     broad,
+                    ..Default::default()
                 },
                 &cancel,
                 &mut |p| {
@@ -1210,8 +1219,15 @@ fn cmd_regions(c: RegionsCommand) -> Result<()> {
                 r.trustworthiness_at_15
             );
             println!(
-                "kNN {:.1}s ({} edges), clustering {:.1}s, total {:.1}s",
-                r.seconds_knn, r.edges, r.seconds_cluster, r.seconds_total
+                "kNN {} {:.1}s ({} edges{}), clustering {:.1}s, total {:.1}s",
+                r.knn,
+                r.seconds_knn,
+                r.edges,
+                r.knn_recall
+                    .map(|x| format!(", recall@k {x:.3}"))
+                    .unwrap_or_default(),
+                r.seconds_cluster,
+                r.seconds_total
             );
             print_regions(&r.regions);
         }

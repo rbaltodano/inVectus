@@ -52,6 +52,9 @@ pub struct CutoffResult {
     pub density: RankScore,
     pub bridges: usize,
     pub bridges_filled: usize,
+    /// Each score term used alone as a ranking (coverage gaps only; the ablation that shows
+    /// which terms help).
+    pub terms: Vec<(String, RankScore)>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -62,6 +65,7 @@ pub struct BacktestReport {
     pub mean_model: Option<RankScore>,
     pub mean_raw_count: Option<RankScore>,
     pub mean_density: Option<RankScore>,
+    pub mean_terms: Vec<(String, RankScore)>,
     pub notes: Vec<String>,
 }
 
@@ -283,6 +287,31 @@ pub fn backtest(
                 })
             })
             .count();
+        let coverage_gaps: Vec<(usize, _)> = region_gaps
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| g.kind == GapKind::Coverage)
+            .collect();
+        let term_names: Vec<String> = coverage_gaps
+            .first()
+            .map(|(_, g)| g.terms.iter().map(|t| t.name.clone()).collect())
+            .unwrap_or_default();
+        let cov_labels: Vec<bool> = coverage_gaps.iter().map(|(i, _)| labels[*i]).collect();
+        let terms: Vec<(String, RankScore)> = term_names
+            .iter()
+            .map(|name| {
+                let values: Vec<f64> = coverage_gaps
+                    .iter()
+                    .map(|(_, g)| {
+                        g.terms
+                            .iter()
+                            .find(|t| &t.name == name)
+                            .map_or(f64::NEG_INFINITY, |t| t.value)
+                    })
+                    .collect();
+                (name.clone(), rank_score(&values, &cov_labels))
+            })
+            .collect();
         cutoffs.push(CutoffResult {
             cutoff: cutoff.clone(),
             horizon_end,
@@ -312,6 +341,7 @@ pub fn backtest(
             ),
             bridges: bridges.len(),
             bridges_filled,
+            terms,
         });
     }
     let informative: Vec<&CutoffResult> = cutoffs
@@ -334,6 +364,21 @@ pub fn backtest(
         mean_model: mean(&informative.iter().map(|c| &c.model).collect::<Vec<_>>()),
         mean_raw_count: mean(&informative.iter().map(|c| &c.raw_count).collect::<Vec<_>>()),
         mean_density: mean(&informative.iter().map(|c| &c.density).collect::<Vec<_>>()),
+        mean_terms: informative
+            .first()
+            .map(|c| {
+                c.terms
+                    .iter()
+                    .map(|(name, _)| {
+                        let scores: Vec<&RankScore> = informative
+                            .iter()
+                            .filter_map(|x| x.terms.iter().find(|t| &t.0 == name).map(|t| &t.1))
+                            .collect();
+                        (name.clone(), mean(&scores).expect("non-empty"))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         cutoffs,
         notes,
     })

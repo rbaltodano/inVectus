@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail};
 use invectus_core::store::{GapRecord, VectorTableRecord};
 use invectus_core::{Project, Role};
 use invectus_index::VectorStore;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -51,7 +52,8 @@ pub struct ScanOptions {
     /// Coverage newer than this many months before the latest date down-weights a gap.
     pub saturation_months: i32,
     /// Coverage gap when a region has no coverage or at least this many demand items per
-    /// coverage item; otherwise a stale gap when this share of demand is newer than the coverage.
+    /// coverage item (raised to twice the collection's own ratio); otherwise a stale gap when
+    /// this share of demand is newer than the coverage.
     pub coverage_ratio_at: f64,
     pub stale_share_at: f64,
     /// Bridge candidates: each region's nearest regions by centroid.
@@ -338,26 +340,23 @@ pub fn scan(
         v.sort_by(f32::total_cmp);
         stats[r].p25 = v.get(v.len() / 4).copied().unwrap_or(1.0);
     }
-    let demand_count: Vec<usize> = (0..fine.len())
-        .map(|r| {
-            members
-                .iter()
-                .filter(|m| {
-                    !m.noise
-                        && index.get(&m.fine_id) == Some(&r)
-                        && items
-                            .get(&m.item_id)
-                            .is_some_and(|i| i.role == Role::Demand)
-                })
-                .count()
-        })
-        .collect();
+    let mut demand_count = vec![0usize; fine.len()];
+    for m in members.iter().filter(|m| !m.noise) {
+        if let Some(&r) = index.get(&m.fine_id)
+            && items
+                .get(&m.item_id)
+                .is_some_and(|i| i.role == Role::Demand)
+        {
+            demand_count[r] += 1;
+        }
+    }
 
     // Item similarity to every fine centroid (for coverage reach and bridges).
     let (vids, matrix) = vectors.parent_matrix(table)?;
     let dim = table.identity.dimensions;
     let row = |i: usize| &matrix[i * dim..(i + 1) * dim];
     let centroid_sims: Vec<Vec<f32>> = (0..vids.len())
+        .into_par_iter()
         .map(|i| stats.iter().map(|s| dot(row(i), &s.centroid)).collect())
         .collect();
     // A coverage item covers its two nearest regions where it is at least as central as the
@@ -375,6 +374,12 @@ pub fn scan(
         }
     }
 
+    // "Few coverage" is relative to the field: at least twice the collection's own demand per
+    // coverage item (and never below `coverage_ratio_at`).
+    let demand_total = items.values().filter(|i| i.role == Role::Demand).count();
+    let coverage_total = items.values().filter(|i| i.role == Role::Coverage).count();
+    let collection_ratio = demand_total as f64 / (1.0 + coverage_total as f64);
+    let coverage_gap_at = opts.coverage_ratio_at.max(2.0 * collection_ratio);
     let mut gaps: Vec<Gap> = Vec::new();
     let mut unstable = 0;
     let saturation_from = latest
@@ -452,7 +457,7 @@ pub fn scan(
         } else {
             String::new()
         };
-        if coverage == 0 || ratio >= opts.coverage_ratio_at {
+        if coverage == 0 || ratio >= coverage_gap_at {
             let what = if coverage == 0 {
                 "no coverage item reaches this region".to_string()
             } else {

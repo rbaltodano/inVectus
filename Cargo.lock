@@ -3651,6 +3651,7 @@ dependencies = [
  "invectus-core",
  "invectus-index",
  "invectus-regions",
+ "rayon",
  "serde",
  "serde_json",
  "sha2 0.10.9",

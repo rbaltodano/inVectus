@@ -86,8 +86,9 @@ started. Nothing pushed.
   job with progress events and cancel, search). Engine work runs on OS threads; each project is
   used by one process. The React page is a functional, unstyled flow.
 - **Naming (owner direction, mid-session):** "unSearch" is retired because the name is taken. SPEC.md,
-  README and UI text now say "inVectus search". The crate is still `invectus-unsearch`, pending a
-  rename decision.
+  README and UI text now say "inVectus search". The crate stays `invectus-unsearch` (owner
+  decision: internal names are fine as long as nothing user-facing says "unSearch"; checked the
+  CLI/app binaries, UI and docs).
 - Scripts: `scripts/sample_p1.py` (5,000-paper hash-ordered sample, read-only) and
   `scripts/p1_search_eval.py` (ANN vs exhaustive).
 
@@ -157,4 +158,3 @@ started. Nothing pushed.
    now available), and add token-aware chunking.
 2. Calibration and verdicts (§6.1–6.2, spec-recommendations 2), on top of the exhaustive route.
 3. Run the three-OS CI when a push is authorized; add Windows/Linux inference smoke fixtures.
-4. Rename the `invectus-unsearch` crate once a name is chosen.

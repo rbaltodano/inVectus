@@ -14,7 +14,7 @@ use invectus_core::{CancelToken, Project, Role};
 use invectus_gaps::{GapKind, ScanOptions, scan};
 use invectus_index::{VectorRow, VectorStore};
 use invectus_regions::{RegionOptions, run_regions};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -28,14 +28,14 @@ pub struct BacktestOptions {
 }
 
 /// Precision at 10 and 25 and ROC-AUC of one ranking.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RankScore {
     pub precision_at_10: f64,
     pub precision_at_25: f64,
     pub auc: f64,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CutoffResult {
     pub cutoff: String,
     pub horizon_end: String,
@@ -55,9 +55,23 @@ pub struct CutoffResult {
     /// Each score term used alone as a ranking (coverage gaps only; the ablation that shows
     /// which terms help).
     pub terms: Vec<(String, RankScore)>,
+    /// Every coverage and stale gap with its score terms and outcome, so weights can be tuned
+    /// without rerunning the pipeline (`invectus eval tune`).
+    #[serde(default)]
+    pub scored: Vec<ScoredGap>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+/// One ranked gap of a cutoff, as needed to re-score it with other weights.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScoredGap {
+    pub kind: String,
+    pub demand: usize,
+    pub region_size: i64,
+    pub filled: bool,
+    pub terms: Vec<invectus_gaps::scan::Term>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BacktestReport {
     pub collection: String,
     pub cutoffs: Vec<CutoffResult>,
@@ -93,7 +107,7 @@ fn auc(scores: &[f64], labels: &[bool]) -> f64 {
 }
 
 /// Score a ranking given by `scores` (higher first; ties broken by input order).
-fn rank_score(scores: &[f64], labels: &[bool]) -> RankScore {
+pub fn rank_score(scores: &[f64], labels: &[bool]) -> RankScore {
     let mut order: Vec<usize> = (0..scores.len()).collect();
     order.sort_by(|&a, &b| scores[b].total_cmp(&scores[a]).then(a.cmp(&b)));
     let at = |k: usize| {
@@ -342,6 +356,17 @@ pub fn backtest(
             bridges: bridges.len(),
             bridges_filled,
             terms,
+            scored: region_gaps
+                .iter()
+                .zip(&labels)
+                .map(|(g, &filled)| ScoredGap {
+                    kind: g.kind.as_str().into(),
+                    demand: g.demand,
+                    region_size: size_of.get(&g.region_a).copied().unwrap_or(0),
+                    filled,
+                    terms: g.terms.clone(),
+                })
+                .collect(),
         });
     }
     let informative: Vec<&CutoffResult> = cutoffs

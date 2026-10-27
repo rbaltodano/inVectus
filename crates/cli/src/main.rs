@@ -372,6 +372,14 @@ enum GapsCommand {
 
 #[derive(Subcommand)]
 enum EvalCommand {
+    /// Choose gap-score weights from a saved `eval backtest --json` file, leave-one-cutoff-out.
+    Tune {
+        /// Output of `invectus eval backtest --json`.
+        #[arg(long)]
+        from: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
     /// Freeze the collection at each cutoff, rank gaps, and check which were filled later.
     Backtest {
         #[command(flatten)]
@@ -486,6 +494,44 @@ fn run() -> Result<()> {
         Command::Check(a) => cmd_check(a, &cli.models_dir)?,
         Command::Regions { command } => cmd_regions(command)?,
         Command::Gaps { command } => cmd_gaps(command)?,
+        Command::Eval {
+            command: EvalCommand::Tune { from, json },
+        } => {
+            let report: invectus_eval::BacktestReport = serde_json::from_slice(
+                &std::fs::read(&from).with_context(|| format!("reading {}", from.display()))?,
+            )?;
+            let t = invectus_eval::tune(&report)?;
+            if json {
+                return print_json(&t);
+            }
+            let f = |r: &invectus_eval::RankScore| {
+                format!(
+                    "p@10 {:.3} p@25 {:.3} AUC {:.3}",
+                    r.precision_at_10, r.precision_at_25, r.auc
+                )
+            };
+            for fold in &t.folds {
+                println!(
+                    "held out {}: tuned {} | default {} | raw-count {} | train AUC {:.3} | weights {:?}",
+                    fold.cutoff,
+                    f(&fold.held_out),
+                    f(&fold.default),
+                    f(&fold.raw_count),
+                    fold.train_auc,
+                    fold.weights
+                );
+            }
+            println!("mean held-out tuned:   {}", f(&t.mean_tuned));
+            println!("mean held-out default: {}", f(&t.mean_default));
+            println!("mean held-out raw:     {}", f(&t.mean_raw_count));
+            println!(
+                "weights on all cutoffs (not validated): {:?}",
+                t.all_cutoffs_weights
+            );
+            for n in &t.notes {
+                println!("note: {n}");
+            }
+        }
         Command::Eval {
             command:
                 EvalCommand::Backtest {

@@ -31,6 +31,22 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS calibrations (
   collection_id TEXT, space_id TEXT, method TEXT, sample INTEGER, vectors INTEGER,
   curve JSON, metrics JSON, created_at TIMESTAMP);
+CREATE TABLE IF NOT EXISTS region_runs (
+  run_id TEXT PRIMARY KEY, collection_id TEXT, space_id TEXT, params JSON, stats JSON,
+  created_at TIMESTAMP);
+CREATE TABLE IF NOT EXISTS regions (
+  run_id TEXT, region_id INTEGER, level TEXT, parent_id INTEGER, label TEXT, terms JSON,
+  size INTEGER, stability DOUBLE, centroid BLOB, x DOUBLE, y DOUBLE, radius DOUBLE);
+CREATE TABLE IF NOT EXISTS region_members (
+  run_id TEXT, item_id BIGINT, fine_id INTEGER, broad_id INTEGER, noise BOOLEAN,
+  centroid_sim REAL, x REAL, y REAL);
+CREATE TABLE IF NOT EXISTS gap_scans (
+  run_id TEXT PRIMARY KEY, params JSON, stats JSON, created_at TIMESTAMP);
+CREATE TABLE IF NOT EXISTS gaps (
+  run_id TEXT, gap_id INTEGER, kind TEXT, score DOUBLE, data JSON);
+CREATE TABLE IF NOT EXISTS gap_verdicts (
+  collection_id TEXT, space_id TEXT, kind TEXT, core JSON, verdict TEXT, note TEXT,
+  updated_at TIMESTAMP);
 "#;
 
 /// Settings applied to every DuckDB connection: never fetch extensions from the network.
@@ -129,6 +145,97 @@ pub struct CalibrationRecord {
     /// Set by the store when read back.
     #[serde(default)]
     pub created_at: Option<String>,
+}
+
+/// One clustering of a collection's vector space (SPEC §6.4). Only the latest run per collection
+/// and space keeps its regions and members; earlier run records stay as history.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegionRun {
+    pub run_id: String,
+    pub collection_id: String,
+    pub space_id: String,
+    pub params: serde_json::Value,
+    pub stats: serde_json::Value,
+    #[serde(default)]
+    pub created_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegionRecord {
+    pub region_id: i32,
+    /// `fine` or `broad`.
+    pub level: String,
+    /// Broad region of a fine region.
+    pub parent_id: Option<i32>,
+    pub label: String,
+    pub terms: Vec<String>,
+    pub size: i64,
+    /// Mean best-Jaccard match across seeds (fine regions); `None` for broad regions.
+    pub stability: Option<f64>,
+    /// Unit centroid vector.
+    #[serde(skip)]
+    pub centroid: Vec<f32>,
+    /// Map position and radius (display only).
+    pub x: f64,
+    pub y: f64,
+    pub radius: f64,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct MemberRecord {
+    pub item_id: i64,
+    pub fine_id: i32,
+    pub broad_id: i32,
+    /// In a community too small to be a region; attached to the nearest region.
+    pub noise: bool,
+    /// Cosine similarity to the fine region's centroid.
+    pub centroid_sim: f32,
+    pub x: f32,
+    pub y: f32,
+}
+
+/// One scored gap of a scan; `data` holds the full gap (terms, explanation, timeline).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GapRecord {
+    pub gap_id: i32,
+    pub kind: String,
+    pub score: f64,
+    pub data: serde_json::Value,
+}
+
+/// A human decision on a gap (SPEC §3). Matched to gaps of later scans by their core items, so
+/// verdicts survive re-runs.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GapVerdictRecord {
+    pub collection_id: String,
+    pub space_id: String,
+    pub kind: String,
+    pub core: Vec<i64>,
+    /// open, confirmed_gap, already_exists, not_viable or selected.
+    pub verdict: String,
+    pub note: String,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+pub const GAP_VERDICTS: &[&str] = &[
+    "open",
+    "confirmed_gap",
+    "already_exists",
+    "not_viable",
+    "selected",
+];
+
+fn f32s_to_blob(v: &[f32]) -> Vec<u8> {
+    v.iter().flat_map(|x| x.to_le_bytes()).collect()
+}
+
+fn blob_to_f32s(b: &[u8]) -> Vec<f32> {
+    b.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
+        .collect()
 }
 
 /// Row needed to embed an item.
@@ -596,6 +703,306 @@ impl Store {
                 },
             )
             .transpose()
+    }
+
+    // ---- regions ------------------------------------------------------------------------
+
+    /// Save a run and replace the regions and members of earlier runs of the same collection
+    /// and space, in one transaction.
+    pub fn save_region_run(
+        &mut self,
+        run: &RegionRun,
+        regions: &[RegionRecord],
+        members: &[MemberRecord],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM region_members WHERE run_id IN (SELECT run_id FROM region_runs
+               WHERE collection_id = ? AND space_id = ?)",
+            params![run.collection_id, run.space_id],
+        )?;
+        tx.execute(
+            "DELETE FROM regions WHERE run_id IN (SELECT run_id FROM region_runs
+               WHERE collection_id = ? AND space_id = ?)",
+            params![run.collection_id, run.space_id],
+        )?;
+        tx.execute(
+            "INSERT INTO region_runs VALUES (?, ?, ?, ?, ?, now())",
+            params![
+                run.run_id,
+                run.collection_id,
+                run.space_id,
+                run.params.to_string(),
+                run.stats.to_string()
+            ],
+        )?;
+        {
+            let mut ins = tx.prepare(
+                "INSERT INTO regions VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?, ?, ?)",
+            )?;
+            for r in regions {
+                ins.execute(params![
+                    run.run_id,
+                    r.region_id,
+                    r.level,
+                    r.parent_id,
+                    r.label,
+                    serde_json::to_string(&r.terms)?,
+                    r.size,
+                    r.stability,
+                    f32s_to_blob(&r.centroid),
+                    r.x,
+                    r.y,
+                    r.radius
+                ])?;
+            }
+            let mut app = tx.appender("region_members")?;
+            for m in members {
+                app.append_row(params![
+                    run.run_id,
+                    m.item_id,
+                    m.fine_id,
+                    m.broad_id,
+                    m.noise,
+                    m.centroid_sim,
+                    m.x,
+                    m.y
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The latest region run of a collection's vector space.
+    pub fn latest_region_run(
+        &self,
+        collection_id: &str,
+        space_id: &str,
+    ) -> Result<Option<RegionRun>> {
+        self.conn
+            .query_row(
+                "SELECT run_id, collection_id, space_id, params::VARCHAR, stats::VARCHAR,
+                        CAST(created_at AS VARCHAR)
+                 FROM region_runs WHERE collection_id = ? AND space_id = ?
+                 ORDER BY created_at DESC LIMIT 1",
+                [collection_id, space_id],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
+                        r.get::<_, String>(5)?,
+                    ))
+                },
+            )
+            .optional()?
+            .map(|(run_id, collection_id, space_id, p, s, at)| {
+                Ok(RegionRun {
+                    run_id,
+                    collection_id,
+                    space_id,
+                    params: serde_json::from_str(&p)?,
+                    stats: serde_json::from_str(&s)?,
+                    created_at: Some(at),
+                })
+            })
+            .transpose()
+    }
+
+    pub fn regions(&self, run_id: &str) -> Result<Vec<RegionRecord>> {
+        let mut st = self.conn.prepare(
+            "SELECT region_id, level, parent_id, label, terms::VARCHAR, size, stability, centroid,
+                    x, y, radius
+             FROM regions WHERE run_id = ? ORDER BY level DESC, region_id",
+        )?;
+        let rows = st.query_map([run_id], |r| {
+            Ok((
+                RegionRecord {
+                    region_id: r.get(0)?,
+                    level: r.get(1)?,
+                    parent_id: r.get(2)?,
+                    label: r.get(3)?,
+                    terms: Vec::new(),
+                    size: r.get(5)?,
+                    stability: r.get(6)?,
+                    centroid: blob_to_f32s(&r.get::<_, Vec<u8>>(7)?),
+                    x: r.get(8)?,
+                    y: r.get(9)?,
+                    radius: r.get(10)?,
+                },
+                r.get::<_, String>(4)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (mut rec, terms) = row?;
+            rec.terms = serde_json::from_str(&terms)?;
+            Ok(rec)
+        })
+        .collect()
+    }
+
+    pub fn region_members(&self, run_id: &str) -> Result<Vec<MemberRecord>> {
+        let mut st = self.conn.prepare(
+            "SELECT item_id, fine_id, broad_id, noise, centroid_sim, x, y
+             FROM region_members WHERE run_id = ? ORDER BY item_id",
+        )?;
+        let rows = st
+            .query_map([run_id], |r| {
+                Ok(MemberRecord {
+                    item_id: r.get(0)?,
+                    fine_id: r.get(1)?,
+                    broad_id: r.get(2)?,
+                    noise: r.get(3)?,
+                    centroid_sim: r.get(4)?,
+                    x: r.get(5)?,
+                    y: r.get(6)?,
+                })
+            })?
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(rows)
+    }
+
+    // ---- gaps ---------------------------------------------------------------------------
+
+    /// Replace the gap scan of a region run.
+    pub fn save_gaps(
+        &mut self,
+        run_id: &str,
+        params: &serde_json::Value,
+        stats: &serde_json::Value,
+        gaps: &[GapRecord],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM gaps WHERE run_id = ?", [run_id])?;
+        tx.execute("DELETE FROM gap_scans WHERE run_id = ?", [run_id])?;
+        tx.execute(
+            "INSERT INTO gap_scans VALUES (?, ?, ?, now())",
+            params![run_id, params.to_string(), stats.to_string()],
+        )?;
+        {
+            let mut ins = tx.prepare("INSERT INTO gaps VALUES (?, ?, ?, ?, CAST(? AS JSON))")?;
+            for g in gaps {
+                ins.execute(params![
+                    run_id,
+                    g.gap_id,
+                    g.kind,
+                    g.score,
+                    g.data.to_string()
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Gaps of a region run's scan, by id (rank), with the scan's stats; `None` if not scanned.
+    pub fn gaps(&self, run_id: &str) -> Result<Option<(serde_json::Value, Vec<GapRecord>)>> {
+        let stats: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT stats::VARCHAR FROM gap_scans WHERE run_id = ?",
+                [run_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(stats) = stats else {
+            return Ok(None);
+        };
+        let mut st = self.conn.prepare(
+            "SELECT gap_id, kind, score, data::VARCHAR FROM gaps WHERE run_id = ? ORDER BY gap_id",
+        )?;
+        let rows = st.query_map([run_id], |r| {
+            Ok((
+                r.get::<_, i32>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, f64>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })?;
+        let gaps = rows
+            .map(|row| {
+                let (gap_id, kind, score, data) = row?;
+                Ok(GapRecord {
+                    gap_id,
+                    kind,
+                    score,
+                    data: serde_json::from_str(&data)?,
+                })
+            })
+            .collect::<Result<_>>()?;
+        Ok(Some((serde_json::from_str(&stats)?, gaps)))
+    }
+
+    pub fn save_gap_verdict(&self, v: &GapVerdictRecord) -> Result<()> {
+        if !GAP_VERDICTS.contains(&v.verdict.as_str()) {
+            bail!(
+                "unknown verdict {:?} (one of: {})",
+                v.verdict,
+                GAP_VERDICTS.join(", ")
+            );
+        }
+        self.conn.execute(
+            "INSERT INTO gap_verdicts VALUES (?, ?, ?, CAST(? AS JSON), ?, ?, now())",
+            params![
+                v.collection_id,
+                v.space_id,
+                v.kind,
+                serde_json::to_string(&v.core)?,
+                v.verdict,
+                v.note
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Every verdict of a collection's space, newest first.
+    pub fn gap_verdicts(
+        &self,
+        collection_id: &str,
+        space_id: &str,
+    ) -> Result<Vec<GapVerdictRecord>> {
+        let mut st = self.conn.prepare(
+            "SELECT kind, core::VARCHAR, verdict, note, CAST(updated_at AS VARCHAR)
+             FROM gap_verdicts WHERE collection_id = ? AND space_id = ?
+             ORDER BY updated_at DESC",
+        )?;
+        let rows = st.query_map([collection_id, space_id], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (kind, core, verdict, note, at) = row?;
+            Ok(GapVerdictRecord {
+                collection_id: collection_id.into(),
+                space_id: space_id.into(),
+                kind,
+                core: serde_json::from_str(&core)?,
+                verdict,
+                note,
+                updated_at: Some(at),
+            })
+        })
+        .collect()
+    }
+
+    /// Top-level items (no chunks) of a collection with their title and text.
+    pub fn parent_texts(&self, collection_id: &str) -> Result<HashMap<i64, (String, String)>> {
+        let mut st = self.conn.prepare(
+            "SELECT item_id, coalesce(title, ''), text FROM items
+             WHERE collection_id = ? AND parent_id IS NULL",
+        )?;
+        let m = st
+            .query_map([collection_id], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))?
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(m)
     }
 
     /// Top-level items with a non-empty title and at least `min_text_chars` of text, ordered by

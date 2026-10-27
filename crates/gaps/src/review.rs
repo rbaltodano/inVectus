@@ -1,0 +1,165 @@
+//! Reading gaps with their human verdicts. A verdict attaches to the gap it was given on and,
+//! after re-runs, to any gap of the same type whose core items overlap it by Jaccard ≥ 0.5, so
+//! decisions survive re-clustering (SPEC §3).
+
+use crate::scan::Gap;
+use anyhow::{Context, Result, bail};
+use invectus_core::Project;
+use invectus_core::store::{GapVerdictRecord, VectorTableRecord};
+use serde::Serialize;
+use std::collections::HashSet;
+
+/// Core-item overlap needed to carry a verdict over to a re-run's gap.
+pub const CARRY_OVER_AT: f64 = 0.5;
+
+#[derive(Clone, Debug, Serialize)]
+pub struct GapView {
+    #[serde(flatten)]
+    pub gap: Gap,
+    pub verdict: Option<GapVerdictRecord>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ItemSummary {
+    pub item_id: i64,
+    pub title: Option<String>,
+    pub date: Option<String>,
+    pub role: String,
+    pub url: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct GapDetail {
+    #[serde(flatten)]
+    pub view: GapView,
+    /// Items nearest the region centre(s): the evidence a person reads.
+    pub core_items: Vec<ItemSummary>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct GapList {
+    pub run_id: String,
+    pub stats: serde_json::Value,
+    pub gaps: Vec<GapView>,
+}
+
+fn jaccard(a: &[i64], b: &[i64]) -> f64 {
+    let a: HashSet<_> = a.iter().collect();
+    let b: HashSet<_> = b.iter().collect();
+    let union = a.union(&b).count();
+    if union == 0 {
+        return 0.0;
+    }
+    a.intersection(&b).count() as f64 / union as f64
+}
+
+/// The newest verdict of the same type whose core overlaps the gap's enough.
+fn matching(gap: &Gap, verdicts: &[GapVerdictRecord]) -> Option<GapVerdictRecord> {
+    verdicts
+        .iter()
+        .find(|v| v.kind == gap.kind.as_str() && jaccard(&v.core, &gap.core) >= CARRY_OVER_AT)
+        .cloned()
+}
+
+/// Gaps of the latest scan with their verdicts.
+pub fn list(project: &Project, table: &VectorTableRecord) -> Result<GapList> {
+    let run = project
+        .store
+        .latest_region_run(&table.collection_id, &table.space_id)?
+        .with_context(|| {
+            format!(
+                "collection {:?} has no regions; run `invectus regions run` and `invectus gaps \
+                 scan` first",
+                table.collection_id
+            )
+        })?;
+    let (stats, records) = project.store.gaps(&run.run_id)?.with_context(|| {
+        format!(
+            "the latest regions of {:?} have not been scanned; run `invectus gaps scan -c {}`",
+            table.collection_id, table.collection_id
+        )
+    })?;
+    let verdicts = project
+        .store
+        .gap_verdicts(&table.collection_id, &table.space_id)?;
+    let gaps = records
+        .into_iter()
+        .map(|r| {
+            let gap: Gap = serde_json::from_value(r.data)?;
+            Ok(GapView {
+                verdict: matching(&gap, &verdicts),
+                gap,
+            })
+        })
+        .collect::<Result<_>>()?;
+    Ok(GapList {
+        run_id: run.run_id,
+        stats,
+        gaps,
+    })
+}
+
+pub fn detail(project: &Project, table: &VectorTableRecord, gap_id: i32) -> Result<GapDetail> {
+    let view = list(project, table)?
+        .gaps
+        .into_iter()
+        .find(|g| g.gap.gap_id == gap_id)
+        .with_context(|| format!("no gap {gap_id} in the latest scan"))?;
+    let items = project.store.items_by_ids(&view.gap.core)?;
+    let core_items = view
+        .gap
+        .core
+        .iter()
+        .filter_map(|id| items.get(id))
+        .map(|i| ItemSummary {
+            item_id: i.item_id,
+            title: i.title.clone(),
+            date: i.date.clone(),
+            role: i.role.as_str().into(),
+            url: i.url.clone(),
+        })
+        .collect();
+    Ok(GapDetail { view, core_items })
+}
+
+/// Record a verdict on a gap of the latest scan.
+pub fn set_verdict(
+    project: &Project,
+    table: &VectorTableRecord,
+    gap_id: i32,
+    verdict: &str,
+    note: &str,
+) -> Result<GapView> {
+    let mut view = list(project, table)?
+        .gaps
+        .into_iter()
+        .find(|g| g.gap.gap_id == gap_id)
+        .with_context(|| format!("no gap {gap_id} in the latest scan"))?;
+    if view.gap.core.is_empty() {
+        bail!("gap {gap_id} has no core items to remember the verdict by");
+    }
+    let rec = GapVerdictRecord {
+        collection_id: table.collection_id.clone(),
+        space_id: table.space_id.clone(),
+        kind: view.gap.kind.as_str().into(),
+        core: view.gap.core.clone(),
+        verdict: verdict.into(),
+        note: note.into(),
+        updated_at: None,
+    };
+    project.store.save_gap_verdict(&rec)?;
+    view.verdict = Some(rec);
+    Ok(view)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn jaccard_overlap() {
+        assert_eq!(jaccard(&[1, 2, 3, 4], &[3, 4, 5, 6]), 2.0 / 6.0);
+        assert_eq!(jaccard(&[1, 2], &[1, 2]), 1.0);
+        assert_eq!(jaccard(&[], &[]), 0.0);
+    }
+}

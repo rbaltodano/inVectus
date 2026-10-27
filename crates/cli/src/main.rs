@@ -2,9 +2,14 @@
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
+use invectus_core::store::RegionRecord;
 use invectus_core::{CancelToken, Project, Role, TextEmbedder};
 use invectus_embed::{
     EmbedOptions, ModelStore, ModelTokenizer, OnnxEmbedder, query_encoder, registry,
+};
+use invectus_gaps::{
+    GapKind, ScanOptions, detail as gap_detail, list as gap_list, scan,
+    set_verdict as set_gap_verdict,
 };
 use invectus_index::parity::run_parity;
 use invectus_index::{
@@ -15,6 +20,7 @@ use invectus_ingest::{
     ChunkPolicy, ImportRequest, Mapping, MetaMapping, RoleMapping, Source, TokenChunking,
     import_with, preview,
 };
+use invectus_regions::{RegionOptions, STABLE_AT, map_data, run_regions};
 use invectus_unsearch::{CalibrateOptions, CheckOptions, check, run_calibration};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -66,6 +72,16 @@ enum Command {
     Calibrate(CalibrateArgs),
     /// Does an idea already exist in a collection? Calibrated verdict: exists, near or open.
     Check(CheckArgs),
+    /// Regions (clusters of related items) and the 2-D map of a collection.
+    Regions {
+        #[command(subcommand)]
+        command: RegionsCommand,
+    },
+    /// Gaps: coverage gaps, stale coverage and bridges between regions, with verdicts.
+    Gaps {
+        #[command(subcommand)]
+        command: GapsCommand,
+    },
     /// Check that the local encoder reproduces a collection's imported vectors.
     Parity(ParityArgs),
     /// Manage embedding models.
@@ -232,6 +248,110 @@ struct CheckArgs {
 }
 
 #[derive(Args)]
+struct TableArgs {
+    #[command(flatten)]
+    p: ProjectArg,
+    #[arg(short, long)]
+    collection: String,
+    /// Vector space (id prefix or model key) when the collection has several.
+    #[arg(long)]
+    space: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum RegionsCommand {
+    /// Cluster the collection (replaces its previous regions and map).
+    Run {
+        #[command(flatten)]
+        t: TableArgs,
+        /// Neighbours per item in the similarity graph.
+        #[arg(long, default_value_t = RegionOptions::default().k)]
+        k: usize,
+        /// Leiden resolution; higher gives more, smaller regions (default: automatic).
+        #[arg(long, conflicts_with = "target_regions")]
+        resolution: Option<f64>,
+        /// Fine regions to aim for when the resolution is automatic (default: square root of
+        /// the item count).
+        #[arg(long)]
+        target_regions: Option<usize>,
+        /// Clustering runs with different seeds; regions are scored by how often they recur.
+        #[arg(long, default_value_t = RegionOptions::default().seeds)]
+        seeds: usize,
+        /// Smaller communities become noise, attached to the nearest region.
+        #[arg(long, default_value_t = RegionOptions::default().min_size)]
+        min_size: usize,
+        /// Number of broad regions (default: square root of the fine regions).
+        #[arg(long)]
+        broad: Option<usize>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// The latest regions with labels, sizes and stability.
+    List {
+        #[command(flatten)]
+        t: TableArgs,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Write map data (regions and one point per item) as JSON.
+    Map {
+        #[command(flatten)]
+        t: TableArgs,
+        #[arg(long)]
+        out: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum GapsCommand {
+    /// Score gaps over the latest regions (replaces the previous scan; verdicts are kept).
+    Scan {
+        #[command(flatten)]
+        t: TableArgs,
+        /// Regions need at least this many demand items to be a coverage or stale gap.
+        #[arg(long, default_value_t = ScanOptions::default().min_demand)]
+        min_demand: usize,
+        /// Bridges with more items between the two regions than this ratio are not gaps.
+        #[arg(long, default_value_t = ScanOptions::default().max_bridge_ratio)]
+        max_bridge_ratio: f64,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Ranked gaps with their verdicts.
+    List {
+        #[command(flatten)]
+        t: TableArgs,
+        /// coverage, stale or bridge.
+        #[arg(long)]
+        kind: Option<GapKind>,
+        /// Only gaps with this verdict ("none" for undecided).
+        #[arg(long)]
+        verdict: Option<String>,
+        #[arg(long, default_value_t = 30)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// One gap: explanation, score terms, timeline and the items at its centre.
+    Show {
+        #[command(flatten)]
+        t: TableArgs,
+        id: i32,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Record a decision: open, confirmed_gap, already_exists, not_viable or selected.
+    Verdict {
+        #[command(flatten)]
+        t: TableArgs,
+        id: i32,
+        verdict: String,
+        #[arg(long, default_value = "")]
+        note: String,
+    },
+}
+
+#[derive(Args)]
 struct ParityArgs {
     #[command(flatten)]
     p: ProjectArg,
@@ -328,6 +448,8 @@ fn run() -> Result<()> {
         Command::Search(a) => cmd_search(a, &cli.models_dir)?,
         Command::Calibrate(a) => cmd_calibrate(a, &cli.models_dir)?,
         Command::Check(a) => cmd_check(a, &cli.models_dir)?,
+        Command::Regions { command } => cmd_regions(command)?,
+        Command::Gaps { command } => cmd_gaps(command)?,
         Command::Parity(a) => cmd_parity(a, &cli.models_dir)?,
         Command::Models { command } => cmd_models(command, &cli.models_dir)?,
         Command::Gapmap {
@@ -847,6 +969,9 @@ fn cmd_check(a: CheckArgs, models_dir: &Option<PathBuf>) -> Result<()> {
         &r.search.space_id[..12]
     );
     println!("{}", r.summary);
+    if let Some(p) = &r.position {
+        println!("{p}");
+    }
     println!("next: {}", r.next_step);
     let f = |x: Option<f32>| x.map_or("-".into(), |x| format!("{x:.3}"));
     println!(
@@ -877,6 +1002,277 @@ fn cmd_check(a: CheckArgs, models_dir: &Option<PathBuf>) -> Result<()> {
     }
     for n in &r.notes {
         println!("note: {n}");
+    }
+    Ok(())
+}
+
+fn print_regions(regions: &[RegionRecord]) {
+    println!(
+        "{:>5}  {:>6}  {:>9}  {:>5}  label",
+        "fine", "items", "stability", "broad"
+    );
+    for r in regions.iter().filter(|r| r.level == "fine") {
+        println!(
+            "{:>5}  {:>6}  {:>9}  {:>5}  {}",
+            r.region_id,
+            r.size,
+            r.stability.map_or("-".into(), |s| format!("{s:.2}")),
+            r.parent_id.map_or("-".into(), |b| b.to_string()),
+            r.label
+        );
+    }
+    for r in regions.iter().filter(|r| r.level == "broad") {
+        println!("broad {} ({} items): {}", r.region_id, r.size, r.label);
+    }
+}
+
+fn cmd_regions(c: RegionsCommand) -> Result<()> {
+    match c {
+        RegionsCommand::Run {
+            t,
+            k,
+            resolution,
+            target_regions,
+            seeds,
+            min_size,
+            broad,
+            json,
+        } => {
+            let mut project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let vectors = VectorStore::open(&project)?;
+            let cancel = CancelToken::default();
+            let c2 = cancel.clone();
+            ctrlc::set_handler(move || {
+                eprintln!("\ncancelling (previous regions are kept)…");
+                c2.cancel();
+            })
+            .context("installing Ctrl-C handler")?;
+            let r = run_regions(
+                &mut project,
+                &vectors,
+                &table,
+                &RegionOptions {
+                    k,
+                    resolution,
+                    target_regions,
+                    seeds,
+                    min_size,
+                    broad,
+                },
+                &cancel,
+                &mut |p| {
+                    if !json {
+                        eprintln!("  {} ({}/{})", p.phase, p.done, p.total);
+                    }
+                },
+            )?;
+            if json {
+                return print_json(&r);
+            }
+            if r.cancelled {
+                println!("cancelled; previous regions are kept");
+                return Ok(());
+            }
+            println!(
+                "{}: {} items → {} fine regions in {} broad, {} noise items ({:.1}%) · sizes min/median/max {}/{}/{}",
+                r.collection,
+                r.items,
+                r.fine,
+                r.broad,
+                r.noise,
+                100.0 * r.noise as f64 / r.items as f64,
+                r.sizes_min_median_max.0,
+                r.sizes_min_median_max.1,
+                r.sizes_min_median_max.2
+            );
+            println!(
+                "resolution {:.2}{} · modularity {:.3} · stable regions (≥ {STABLE_AT}) {}/{} · mean stability {:.3} · map trustworthiness@15 {:.3}",
+                r.resolution,
+                r.target_regions
+                    .map(|t| format!(" (automatic, target {t} regions)"))
+                    .unwrap_or_default(),
+                r.modularity,
+                r.stable,
+                r.fine,
+                r.mean_stability,
+                r.trustworthiness_at_15
+            );
+            println!(
+                "kNN {:.1}s ({} edges), clustering {:.1}s, total {:.1}s",
+                r.seconds_knn, r.edges, r.seconds_cluster, r.seconds_total
+            );
+            print_regions(&r.regions);
+        }
+        RegionsCommand::List { t, json } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let data = map_data(&project, &table)?;
+            if json {
+                return print_json(&serde_json::json!({"run": data.run, "regions": data.regions}));
+            }
+            println!(
+                "regions run {} ({})",
+                data.run.run_id,
+                data.run.created_at.as_deref().unwrap_or("")
+            );
+            print_regions(&data.regions);
+        }
+        RegionsCommand::Map { t, out } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let data = map_data(&project, &table)?;
+            std::fs::write(&out, serde_json::to_vec(&data)?)
+                .with_context(|| format!("writing {}", out.display()))?;
+            println!(
+                "wrote {} regions and {} points to {}",
+                data.regions.len(),
+                data.points.len(),
+                out.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn print_gap(g: &invectus_gaps::GapView) {
+    println!(
+        "{:>3}. {:>6.2}  {:<8} {}  [{}]",
+        g.gap.gap_id,
+        g.gap.score,
+        g.gap.kind.as_str(),
+        g.gap.label,
+        g.verdict
+            .as_ref()
+            .map_or("undecided", |v| v.verdict.as_str())
+    );
+    println!("       {}", g.gap.explanation);
+}
+
+fn cmd_gaps(c: GapsCommand) -> Result<()> {
+    match c {
+        GapsCommand::Scan {
+            t,
+            min_demand,
+            max_bridge_ratio,
+            json,
+        } => {
+            let mut project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let vectors = VectorStore::open(&project)?;
+            let r = scan(
+                &mut project,
+                &vectors,
+                &table,
+                &ScanOptions {
+                    min_demand,
+                    max_bridge_ratio,
+                    ..Default::default()
+                },
+            )?;
+            if json {
+                return print_json(&r);
+            }
+            println!(
+                "{}: {} coverage gaps, {} stale, {} bridges · {} unstable regions skipped · latest date {}",
+                r.collection,
+                r.coverage,
+                r.stale,
+                r.bridge,
+                r.unstable_regions,
+                r.latest_date.as_deref().unwrap_or("-")
+            );
+            for n in &r.notes {
+                println!("note: {n}");
+            }
+            let l = gap_list(&project, &table)?;
+            for g in l.gaps.iter().take(15) {
+                print_gap(g);
+            }
+        }
+        GapsCommand::List {
+            t,
+            kind,
+            verdict,
+            limit,
+            json,
+        } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let mut l = gap_list(&project, &table)?;
+            l.gaps.retain(|g| {
+                kind.is_none_or(|k| g.gap.kind == k)
+                    && verdict.as_deref().is_none_or(|v| {
+                        g.verdict.as_ref().map_or("none", |x| x.verdict.as_str()) == v
+                    })
+            });
+            l.gaps.truncate(limit);
+            if json {
+                return print_json(&l);
+            }
+            for g in &l.gaps {
+                print_gap(g);
+            }
+        }
+        GapsCommand::Show { t, id, json } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let d = gap_detail(&project, &table, id)?;
+            if json {
+                return print_json(&d);
+            }
+            print_gap(&d.view);
+            for term in &d.view.gap.terms {
+                println!(
+                    "       {:<45} value {:>8.3}  z {:>6.2}  × {:>5.2} = {:>6.2}",
+                    term.name, term.value, term.z, term.weight, term.contribution
+                );
+            }
+            if !d.view.gap.timeline.is_empty() {
+                let years: Vec<String> = d
+                    .view
+                    .gap
+                    .timeline
+                    .iter()
+                    .map(|y| format!("{} {}/{}", y.year, y.demand, y.coverage))
+                    .collect();
+                println!("       per year (demand/coverage): {}", years.join(", "));
+            }
+            if let Some(v) = &d.view.verdict {
+                println!(
+                    "       verdict {} ({}): {}",
+                    v.verdict,
+                    v.updated_at.as_deref().unwrap_or(""),
+                    v.note
+                );
+            }
+            println!("       items at the centre:");
+            for i in &d.core_items {
+                println!(
+                    "         [{}] {}{}",
+                    i.role,
+                    i.title.as_deref().unwrap_or("(untitled)"),
+                    i.date
+                        .as_deref()
+                        .map(|x| format!(" ({x})"))
+                        .unwrap_or_default()
+                );
+            }
+        }
+        GapsCommand::Verdict {
+            t,
+            id,
+            verdict,
+            note,
+        } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let g = set_gap_verdict(&project, &table, id, &verdict, &note)?;
+            println!(
+                "gap {id}: {verdict} (kept across re-runs while its core items stay together)"
+            );
+            print_gap(&g);
+        }
     }
     Ok(())
 }

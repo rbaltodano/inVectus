@@ -362,6 +362,37 @@ impl VectorStore {
         Ok(())
     }
 
+    /// Every top-level item vector (chunks excluded): ids, sorted, and a row-major matrix.
+    pub fn parent_matrix(&self, rec: &VectorTableRecord) -> Result<(Vec<i64>, Vec<f32>)> {
+        let t = self.open_table(&rec.table_name)?;
+        let mut stream = self.rt.block_on(
+            t.query()
+                .only_if("parent_id IS NULL")
+                .select(Select::columns(&["item_id", "vector"]))
+                .execute(),
+        )?;
+        let dim = rec.identity.dimensions;
+        let mut rows: Vec<(i64, Vec<f32>)> = Vec::new();
+        while let Some(b) = self.rt.block_on(stream.try_next())? {
+            let ids = col::<Int64Array>(&b, "item_id")?;
+            let vecs = col::<FixedSizeListArray>(&b, "vector")?;
+            let values = vecs
+                .values()
+                .as_any()
+                .downcast_ref::<Float32Array>()
+                .context("vector values are not f32")?
+                .values();
+            for i in 0..b.num_rows() {
+                let start = vecs.value_offset(i) as usize;
+                rows.push((ids.value(i), values[start..start + dim].to_vec()));
+            }
+        }
+        rows.sort_by_key(|r| r.0);
+        let ids = rows.iter().map(|r| r.0).collect();
+        let matrix = rows.into_iter().flat_map(|r| r.1).collect();
+        Ok((ids, matrix))
+    }
+
     /// Stored vectors for specific ids.
     pub fn vectors_for(
         &self,

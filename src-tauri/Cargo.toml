@@ -28,6 +28,8 @@ invectus-ingest.workspace = true
 invectus-embed.workspace = true
 invectus-index.workspace = true
 invectus-unsearch.workspace = true
+invectus-regions.workspace = true
+invectus-gaps.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

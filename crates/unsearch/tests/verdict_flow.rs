@@ -180,6 +180,8 @@ fn calibrated_verdicts_separate_existing_from_new_ideas() {
     assert!(c.p_exists >= 0.7);
     assert!(c.calibration.quality.contains("without a language model"));
     assert!(!c.calibration.stale);
+    assert!(c.between.is_empty() && c.position.is_none());
+    assert!(c.notes.iter().any(|n| n.contains("invectus regions")));
     assert_eq!(c.local_density.is_some(), c.drop_to_10th.is_some());
 
     // Words no item uses (chosen so their hash buckets collide with no item word): open.

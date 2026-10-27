@@ -3566,8 +3566,10 @@ dependencies = [
  "futures",
  "invectus-core",
  "invectus-embed",
+ "invectus-gaps",
  "invectus-index",
  "invectus-ingest",
+ "invectus-regions",
  "invectus-unsearch",
  "serde",
  "serde_json",
@@ -3585,8 +3587,10 @@ dependencies = [
  "ctrlc",
  "invectus-core",
  "invectus-embed",
+ "invectus-gaps",
  "invectus-index",
  "invectus-ingest",
+ "invectus-regions",
  "invectus-unsearch",
  "serde",
  "serde_json",
@@ -3630,6 +3634,16 @@ version = "0.1.0"
 [[package]]
 name = "invectus-gaps"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "invectus-core",
+ "invectus-index",
+ "invectus-regions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
 
 [[package]]
 name = "invectus-index"
@@ -3676,6 +3690,16 @@ version = "0.1.0"
 [[package]]
 name = "invectus-regions"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "invectus-core",
+ "invectus-index",
+ "rayon",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
 
 [[package]]
 name = "invectus-unsearch"
@@ -3684,6 +3708,7 @@ dependencies = [
  "anyhow",
  "invectus-core",
  "invectus-index",
+ "invectus-regions",
  "serde",
  "serde_json",
  "sha2 0.10.9",

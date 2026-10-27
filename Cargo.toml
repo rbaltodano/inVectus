@@ -14,6 +14,8 @@ invectus-ingest = { path = "crates/ingest" }
 invectus-embed = { path = "crates/embed" }
 invectus-index = { path = "crates/index" }
 invectus-unsearch = { path = "crates/unsearch" }
+invectus-regions = { path = "crates/regions" }
+invectus-gaps = { path = "crates/gaps" }
 
 anyhow = "1"
 thiserror = "2"
@@ -33,6 +35,8 @@ lancedb = { version = "=0.40.0", default-features = false }
 arrow-array = "58"
 arrow-schema = "58"
 futures = "0.3"
+# Already in the lockfile through LanceDB; used for the exact kNN graph.
+rayon = "1.12"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 # ONNX Runtime prebuilt binaries are fetched at *build* time only; inference never downloads.
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-rustls", "api-31"] }

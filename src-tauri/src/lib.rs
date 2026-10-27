@@ -3,6 +3,7 @@
 use invectus_core::store::{CollectionSummary, VectorTableRecord};
 use invectus_core::{CancelToken, Project, Role};
 use invectus_embed::{EmbedOptions, ModelStore, OnnxEmbedder, query_encoder, registry};
+use invectus_gaps::{GapDetail, GapList, GapView, ScanOptions, ScanReport};
 use invectus_index::{
     EmbedJobOptions, EmbedReport, SearchMode, SearchOptions, SearchResult, VectorStore, run_embed,
     search as engine_search, select_table,
@@ -10,6 +11,7 @@ use invectus_index::{
 use invectus_ingest::{
     ChunkPolicy, ImportReport, ImportRequest, Mapping, MetaMapping, Preview, RoleMapping, Source,
 };
+use invectus_regions::{MapData, RegionOptions, RegionReport, map_data, run_regions};
 use invectus_unsearch::{
     CalibrateOptions, CalibrationReport, CheckOptions, CheckResult, check, run_calibration,
 };
@@ -512,6 +514,165 @@ async fn check_idea(state: State<'_, AppState>, form: CheckForm) -> CmdResult<Ch
     .await
 }
 
+#[derive(Clone, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum RegionsEvent {
+    Progress {
+        phase: String,
+        done: usize,
+        total: usize,
+    },
+    Finished {
+        report: Box<RegionReport>,
+    },
+    Failed {
+        error: String,
+    },
+}
+
+/// Find regions and lay out the map on a worker thread; progress arrives as `regions-event`
+/// events and `cancel_job` stops it (the previous regions are kept when cancelled).
+#[tauri::command]
+fn start_regions(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    collection: String,
+    space: Option<String>,
+) -> CmdResult<()> {
+    let session = state.session.clone();
+    if session
+        .try_lock()
+        .map_err(|_| "busy: a job is running")?
+        .is_none()
+    {
+        return Err("no project is open".into());
+    }
+    let cancel = CancelToken::default();
+    *state.cancel.lock().unwrap() = Some(cancel.clone());
+    std::thread::spawn(move || {
+        let result = (|| -> anyhow::Result<RegionReport> {
+            let mut guard = session.lock().unwrap();
+            let s = guard
+                .as_mut()
+                .ok_or_else(|| anyhow::anyhow!("no project is open"))?;
+            let table = select_table(&s.project, &collection, space.as_deref())?;
+            let app2 = app.clone();
+            run_regions(
+                &mut s.project,
+                &s.vectors,
+                &table,
+                &RegionOptions::default(),
+                &cancel,
+                &mut |p| {
+                    let _ = app2.emit(
+                        "regions-event",
+                        RegionsEvent::Progress {
+                            phase: p.phase.clone(),
+                            done: p.done,
+                            total: p.total,
+                        },
+                    );
+                },
+            )
+        })();
+        let event = match result {
+            Ok(report) => RegionsEvent::Finished {
+                report: Box::new(report),
+            },
+            Err(e) => RegionsEvent::Failed {
+                error: format!("{e:#}"),
+            },
+        };
+        let _ = app.emit("regions-event", event);
+    });
+    Ok(())
+}
+
+/// Regions and one point per item for the map view.
+#[tauri::command]
+async fn region_map(
+    state: State<'_, AppState>,
+    collection: String,
+    space: Option<String>,
+) -> CmdResult<MapData> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &collection, space.as_deref())?;
+            map_data(&s.project, &table)
+        })
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+struct TableForm {
+    collection: String,
+    space: Option<String>,
+}
+
+/// Score gaps over the latest regions (verdicts are kept).
+#[tauri::command]
+async fn scan_gaps(state: State<'_, AppState>, form: TableForm) -> CmdResult<ScanReport> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::scan(&mut s.project, &s.vectors, &table, &ScanOptions::default())
+        })
+    })
+    .await
+}
+
+/// Ranked gaps of the latest scan with their verdicts.
+#[tauri::command]
+async fn list_gaps(state: State<'_, AppState>, form: TableForm) -> CmdResult<GapList> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::list(&s.project, &table)
+        })
+    })
+    .await
+}
+
+/// One gap with its score terms, timeline, central items and verdict.
+#[tauri::command]
+async fn gap_detail(
+    state: State<'_, AppState>,
+    form: TableForm,
+    gap_id: i32,
+) -> CmdResult<GapDetail> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::detail(&s.project, &table, gap_id)
+        })
+    })
+    .await
+}
+
+/// Record a verdict (open, confirmed_gap, already_exists, not_viable, selected) and a note.
+#[tauri::command]
+async fn set_gap_verdict(
+    state: State<'_, AppState>,
+    form: TableForm,
+    gap_id: i32,
+    verdict: String,
+    note: String,
+) -> CmdResult<GapView> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::set_verdict(&s.project, &table, gap_id, &verdict, &note)
+        })
+    })
+    .await
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -527,7 +688,13 @@ pub fn run() {
             cancel_job,
             search,
             start_calibration,
-            check_idea
+            check_idea,
+            start_regions,
+            region_map,
+            scan_gaps,
+            list_gaps,
+            gap_detail,
+            set_gap_verdict
         ])
         .run(tauri::generate_context!())
         .expect("failed to run inVectus");

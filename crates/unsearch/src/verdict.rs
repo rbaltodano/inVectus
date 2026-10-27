@@ -2,14 +2,15 @@
 //!
 //! The query is embedded with the collection's model, compared exactly against every stored
 //! vector by default (an absence claim must not rest on approximate retrieval), and the nearest
-//! similarity is mapped to P(exists) with the collection's query-level calibration curve.
-//! Regions ("sits between A and B") arrive with clustering in P3.
+//! similarity is mapped to P(exists) with the collection's query-level calibration curve. When
+//! the collection has regions, the two nearest fine regions say where the idea sits.
 
 use crate::curve::Curve;
 use anyhow::{Context, Result};
 use invectus_core::store::{CalibrationRecord, VectorTableRecord};
 use invectus_core::{Project, Role, TextEmbedder};
 use invectus_index::{SearchMode, SearchOptions, SearchResult, VectorStore, search};
+use invectus_regions::{NearRegion, nearest_regions};
 use serde::Serialize;
 
 /// P(exists) at or above this is `exists`.
@@ -92,6 +93,10 @@ pub struct CheckResult {
     pub drop_to_10th: Option<f32>,
     /// Mean similarity of the 10 nearest items.
     pub local_density: Option<f32>,
+    /// The two fine regions whose centroids are closest to the idea (needs `invectus regions`).
+    pub between: Vec<NearRegion>,
+    /// "Your idea sits between …" when regions exist.
+    pub position: Option<String>,
     pub calibration: CalibrationInfo,
     pub search: SearchResult,
     pub notes: Vec<String>,
@@ -193,7 +198,29 @@ pub fn check(
                 .into(),
         );
     }
-    notes.push("regions (\"sits between A and B\") are not available until clustering (P3)".into());
+    let between = match project
+        .store
+        .latest_region_run(&table.collection_id, &table.space_id)?
+    {
+        Some(run) => nearest_regions(
+            &project.store.regions(&run.run_id)?,
+            &search.query_vector,
+            "fine",
+            2,
+        ),
+        None => {
+            notes.push("run `invectus regions` to see which regions the idea sits between".into());
+            Vec::new()
+        }
+    };
+    let position = match between.as_slice() {
+        [a, b] => Some(format!(
+            "Your idea sits between \"{}\" and \"{}\".",
+            a.label, b.label
+        )),
+        [a] => Some(format!("Your idea sits in \"{}\".", a.label)),
+        _ => None,
+    };
     let holdout_auc = cal.metrics["holdout"]["auc"].as_f64();
     let quality = if cal.method.contains("no LLM") {
         format!(
@@ -215,6 +242,8 @@ pub fn check(
         nearest_similarity: sims.first().copied(),
         drop_to_10th: (top10.len() == 10).then(|| top10[0] - top10[9]),
         local_density: (!top10.is_empty()).then(|| top10.iter().sum::<f32>() / top10.len() as f32),
+        between,
+        position,
         calibration: CalibrationInfo {
             method: cal.method,
             sample: cal.sample,

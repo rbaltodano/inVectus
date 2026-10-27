@@ -65,6 +65,9 @@ pub struct SearchResult {
     pub notes: Vec<String>,
     pub embed_ms: f64,
     pub retrieve_ms: f64,
+    /// The embedded query (for region lookups); not serialized.
+    #[serde(skip)]
+    pub query_vector: Vec<f32>,
 }
 
 /// Refuse to compare a query from `encoder` with `table` unless both share a space, or a parity
@@ -246,6 +249,7 @@ pub fn search(
         notes,
         embed_ms,
         retrieve_ms,
+        query_vector: q,
     })
 }
 

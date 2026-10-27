@@ -1,0 +1,52 @@
+name: Multimodal runtime evidence (explicit downloads)
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Pinned CPU checkpoint to test; downloads about 1.5 GB per OS'
+        required: true
+        default: siglip-onnx
+        type: choice
+        options: [siglip-onnx, gemma]
+jobs:
+  cpu-probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r docs/multimodal/requirements.txt
+      - run: python -m unittest discover -s scripts/multimodal -p "test_*.py" -v
+      - name: Explicit fixture download with source checksums
+        run: python scripts/multimodal/fixtures.py --root .spike-data/multimodal-fixtures --download
+      - name: Explicit pinned model download and verification
+        run: python scripts/multimodal/artifacts.py download --model ${{ inputs.model }} --root .spike-data/multimodal-model
+      - run: python -m pip freeze > .spike-data/runtime-packages.txt
+      - name: Offline CPU retrieval diagnostics
+        env:
+          INVECTUS_OFFLINE: '1'
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: python scripts/multimodal/evaluate.py --model ${{ inputs.model }} --model-dir .spike-data/multimodal-model --fixtures .spike-data/multimodal-fixtures --out .spike-data/multimodal-result.json
+      - uses: dtolnay/rust-toolchain@master
+        if: inputs.model == 'siglip-onnx'
+        with:
+          toolchain: 1.99.1
+      - name: Native preflight inputs
+        if: inputs.model == 'siglip-onnx'
+        run: python scripts/multimodal/native_inputs.py --model-dir .spike-data/multimodal-model --fixtures .spike-data/multimodal-fixtures --out .spike-data/native-inputs.json
+      - name: Native Rust CPU preflight
+        if: inputs.model == 'siglip-onnx'
+        run: cargo run --locked -p invectus-embed --example multimodal_probe -- .spike-data/multimodal-model .spike-data/native-inputs.json .spike-data/native-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multimodal-${{ inputs.model }}-${{ matrix.os }}
+          path: |
+            .spike-data/*result.json
+            .spike-data/runtime-packages.txt

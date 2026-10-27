@@ -1,0 +1,210 @@
+{
+  "status": "wheel metadata only; macOS arm64 executed separately; Windows/Linux unexecuted",
+  "python": "CPython 3.12",
+  "packages": {
+    "torch": {
+      "version": "2.14.1",
+      "requires_python": ">=3.10",
+      "platforms": {
+        "macos-arm64": [
+          {
+            "filename": "torch-2.14.1-cp312-cp312-macosx_14_0_arm64.whl",
+            "sha256": "420dbf314c180ee4b86e9bc00aee5746a7d6e5bacdd7df925af671ed393f0b2e",
+            "bytes": 127307099
+          }
+        ],
+        "windows-x86_64": [
+          {
+            "filename": "torch-2.14.1-cp312-cp312-win_amd64.whl",
+            "sha256": "38bee9f2a2ccfc6898172a5075e4ba52522fbe143eeb099674fc67ab390e858d",
+            "bytes": 124113906
+          }
+        ],
+        "linux-x86_64": [
+          {
+            "filename": "torch-2.14.1-cp312-cp312-manylinux_2_28_x86_64.whl",
+            "sha256": "23011fe29a99b591eabb3a31a25080c62e2c2f0690a3c798744e5489dae50451",
+            "bytes": 554618695
+          }
+        ]
+      }
+    },
+    "transformers": {
+      "version": "5.21.0",
+      "requires_python": ">=3.11.0",
+      "platforms": {
+        "macos-arm64": [
+          {
+            "filename": "transformers-5.21.0-py3-none-any.whl",
+            "sha256": "8803a8712932aa3441c1e8bb340e66d5e3eca079fe65d9b717ede2f3ead01c79",
+            "bytes": 12978463
+          }
+        ],
+        "windows-x86_64": [
+          {
+            "filename": "transformers-5.21.0-py3-none-any.whl",
+            "sha256": "8803a8712932aa3441c1e8bb340e66d5e3eca079fe65d9b717ede2f3ead01c79",
+            "bytes": 12978463
+          }
+        ],
+        "linux-x86_64": [
+          {
+            "filename": "transformers-5.21.0-py3-none-any.whl",
+            "sha256": "8803a8712932aa3441c1e8bb340e66d5e3eca079fe65d9b717ede2f3ead01c79",
+            "bytes": 12978463
+          }
+        ]
+      }
+    },
+    "sentence-transformers": {
+      "version": "6.2.0",
+      "requires_python": ">=3.10",
+      "platforms": {
+        "macos-arm64": [
+          {
+            "filename": "sentence_transformers-6.2.0-py3-none-any.whl",
+            "sha256": "ffb51ccfef65427cfa61776d0eeeb257600b0099cf0c7533ae9a6856d31e4665",
+            "bytes": 760709
+          }
+        ],
+        "windows-x86_64": [
+          {
+            "filename": "sentence_transformers-6.2.0-py3-none-any.whl",
+            "sha256": "ffb51ccfef65427cfa61776d0eeeb257600b0099cf0c7533ae9a6856d31e4665",
+            "bytes": 760709
+          }
+        ],
+        "linux-x86_64": [
+          {
+            "filename": "sentence_transformers-6.2.0-py3-none-any.whl",
+            "sha256": "ffb51ccfef65427cfa61776d0eeeb257600b0099cf0c7533ae9a6856d31e4665",
+            "bytes": 760709
+          }
+        ]
+      }
+    },
+    "onnxruntime": {
+      "version": "1.31.1",
+      "requires_python": ">=3.11",
+      "platforms": {
+        "macos-arm64": [
+          {
+            "filename": "onnxruntime-1.31.1-cp312-cp312-macosx_14_0_arm64.whl",
+            "sha256": "96dd2564b10ea7153ad9c207e7cd8e5917cb3ba521e0e0a62ac03486fdc8d56c",
+            "bytes": 20882125
+          }
+        ],
+        "windows-x86_64": [
+          {
+            "filename": "onnxruntime-1.31.1-cp312-cp312-win_amd64.whl",
+            "sha256": "ae8a9a351efda685cc59a66226cdefaa37a126c1d66872ca23a2de9425326130",
+            "bytes": 14888466
+          }
+        ],
+        "linux-x86_64": [
+          {
+            "filename": "onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_x86_64.whl",
+            "sha256": "1f3dea47f2f0e5117c2404cea7d21fd253ae7836a3bf167a501cdfbb2600d536",
+            "bytes": 23760988
+          }
+        ]
+      }
+    },
+    "pillow": {
+      "version": "13.0.0",
+      "requires_python": ">=3.11",
+      "platforms": {
+        "macos-arm64": [
+          {
+            "filename": "pillow-13.0.0-cp312-cp312-macosx_11_0_arm64.whl",
+            "sha256": "fc481f742ccda20e9ed760b8f978dff50f2a4e9bc253ac167fb0a05b0783ef52",
+            "bytes": 4852329
+          }
+        ],
+        "windows-x86_64": [
+          {
+            "filename": "pillow-13.0.0-cp312-cp312-win_amd64.whl",
+            "sha256": "ff3fe9eb621fbb9db4c4be33ab946f6bac5f98ab50ca8d3260503653656c961b",
+            "bytes": 7272166
+          }
+        ],
+        "linux-x86_64": [
+          {
+            "filename": "pillow-13.0.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+            "sha256": "42d63be3af4f9b951b199b0a9d23365d37ab14687e6d77b74940432c8515c4ca",
+            "bytes": 7144542
+          }
+        ]
+      }
+    },
+    "torchvision": {
+      "version": "0.29.1",
+      "requires_python": "!=3.14.1,>=3.10",
+      "platforms": {
+        "macos-arm64": [
+          {
+            "filename": "torchvision-0.29.1-cp312-cp312-macosx_14_0_arm64.whl",
+            "sha256": "3b6eb9d2f8fe9b93d9d37637749df361efeed133d96ddd503184a1b5b12bb27f",
+            "bytes": 1813847
+          }
+        ],
+        "windows-x86_64": [
+          {
+            "filename": "torchvision-0.29.1-cp312-cp312-win_amd64.whl",
+            "sha256": "551c567fd39581570bf553c8df58895d567258b9997760179719f205ec5cd859",
+            "bytes": 1376794
+          }
+        ],
+        "linux-x86_64": [
+          {
+            "filename": "torchvision-0.29.1-cp312-cp312-manylinux_2_28_x86_64.whl",
+            "sha256": "6c717bd68dddaebbd9525377a17a84e38a291a33a218f59fdb76e8bb41e61c99",
+            "bytes": 7430669
+          }
+        ]
+      }
+    },
+    "soundfile": {
+      "version": "0.14.0",
+      "requires_python": ">=3.10",
+      "platforms": {
+        "macos-arm64": [
+          {
+            "filename": "soundfile-0.14.0-py2.py3-none-any.whl",
+            "sha256": "8ba81ae3a89fd5ab3bef8a8eb481fbbe794e806309675a89b4df48b8d31908a8",
+            "bytes": 26799
+          },
+          {
+            "filename": "soundfile-0.14.0-py2.py3-none-macosx_11_0_arm64.whl",
+            "sha256": "d828d35a059626da52f1415b5faee610aeab393319cb3fc4a9aef47b619fc14c",
+            "bytes": 1103726
+          }
+        ],
+        "windows-x86_64": [
+          {
+            "filename": "soundfile-0.14.0-py2.py3-none-any.whl",
+            "sha256": "8ba81ae3a89fd5ab3bef8a8eb481fbbe794e806309675a89b4df48b8d31908a8",
+            "bytes": 26799
+          },
+          {
+            "filename": "soundfile-0.14.0-py2.py3-none-win_amd64.whl",
+            "sha256": "299491d3499460fb1b74bb4bd78b57ffc2d243a5fafa7b6ec1b264875c78453e",
+            "bytes": 1021480
+          }
+        ],
+        "linux-x86_64": [
+          {
+            "filename": "soundfile-0.14.0-py2.py3-none-any.whl",
+            "sha256": "8ba81ae3a89fd5ab3bef8a8eb481fbbe794e806309675a89b4df48b8d31908a8",
+            "bytes": 26799
+          },
+          {
+            "filename": "soundfile-0.14.0-py2.py3-none-manylinux_2_28_x86_64.whl",
+            "sha256": "1e38bac1853412871318e82a1ba69a8be677619b56025bbfcccdb41b6cafe82d",
+            "bytes": 1315963
+          }
+        ]
+      }
+    }
+  }
+}

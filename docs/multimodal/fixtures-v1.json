@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "purpose": "diagnostic smoke set; not calibration or release validation",
+  "judgments": {
+    "status": "proposed; not human adjudicated",
+    "author": "Codex",
+    "rule": "same source group is relevant; color and shape must both match for diagrams",
+    "limitations": [
+      "No reviewed semantic-versus-visual labels",
+      "Tiny set, likely pretraining exposure",
+      "Source captions and group identity are weak labels",
+      "Holdout source groups never used for calibration; transformations share the source split"
+    ]
+  },
+  "assets": [
+    {
+      "id": "astronaut",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/astronaut.png",
+      "source_sha256": "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5",
+      "license": "public-domain",
+      "creator": "NASA",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "An astronaut wearing a spacesuit.",
+      "query": "a person ready for space travel",
+      "split": "dev",
+      "document": {
+        "path": "images/astronaut-document.png",
+        "sha256": "74d3ec6cca600b36965c09e909769cea633b52668a183f36ad32f45187784441"
+      },
+      "near_duplicate": {
+        "path": "images/astronaut-near_duplicate.png",
+        "sha256": "12414a98b9a9fcae8bb96b99faa1576c8881cea720649ce6b14f116ff67579b8"
+      },
+      "image_query": {
+        "path": "images/astronaut-image_query.png",
+        "sha256": "99cbe1340eed71e60658c90c6e30459a4db1ed090da57b62c828d7df9dc0cdc7"
+      }
+    },
+    {
+      "id": "camera",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/camera.png",
+      "source_sha256": "b0793d2adda0fa6ae899c03989482bff9a42d3d5690fc7e3648f2795d730c23a",
+      "license": "CC0-1.0",
+      "creator": "Lav Varshney",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "A person operating a camera on a tripod.",
+      "query": "a photographer working outdoors",
+      "split": "dev",
+      "document": {
+        "path": "images/camera-document.png",
+        "sha256": "fe10d880ba2653ffab56ce84355c6161a98deb9bda56417f60eb1879ac6f6753"
+      },
+      "near_duplicate": {
+        "path": "images/camera-near_duplicate.png",
+        "sha256": "e4797a6765002fe4b116268f57250295c7d671a022aa39c0607870ebb817e095"
+      },
+      "image_query": {
+        "path": "images/camera-image_query.png",
+        "sha256": "8e276436377eaf0cff3331e71b696f2a4347a4f1c4bc6e4d557b779348e78457"
+      }
+    },
+    {
+      "id": "cat",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/chelsea.png",
+      "source_sha256": "596aa1e7cb875eb79f437e310381d26b338a81c2da23439704a73c4651e8c4bb",
+      "license": "CC0-1.0",
+      "creator": "Stefan van der Walt",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "A close photograph of a tabby cat.",
+      "query": "a furry domestic feline",
+      "split": "dev",
+      "document": {
+        "path": "images/cat-document.png",
+        "sha256": "617403922b8bfe24d06d800cd9da0ea73363b22577bdcf04aa465087caf39d07"
+      },
+      "near_duplicate": {
+        "path": "images/cat-near_duplicate.png",
+        "sha256": "b1459018912dd8e1258a7649556c2a011c99e39b12382c329e7d24c34b387d1f"
+      },
+      "image_query": {
+        "path": "images/cat-image_query.png",
+        "sha256": "13be991967b6f398e49ae838991a82eb757922eda722f7d21a86ae0218c73c28"
+      }
+    },
+    {
+      "id": "coffee",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/coffee.png",
+      "source_sha256": "cc02f8ca188b167c775a7101b5d767d1e71792cf762c33d6fa15a4599b5a8de7",
+      "license": "CC0-1.0",
+      "creator": "Rachel Michetti",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "A cup of coffee on a table.",
+      "query": "a hot caffeinated drink in a cup",
+      "split": "dev",
+      "document": {
+        "path": "images/coffee-document.png",
+        "sha256": "bc7c679e93a04b35aef5c5d644f0293d6aac8df7ccbba06f1d5bdddc0285050b"
+      },
+      "near_duplicate": {
+        "path": "images/coffee-near_duplicate.png",
+        "sha256": "ecf7d36997889b652458ff37dc625dd4fc56875362b1f0201d8e1dadcb96aa64"
+      },
+      "image_query": {
+        "path": "images/coffee-image_query.png",
+        "sha256": "f57ce567cb6ddb1496a955998b48d829fef4a49d34abc9c00c8452c1369af808"
+      }
+    },
+    {
+      "id": "rocket",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/rocket.jpg",
+      "source_sha256": "c2dd0de7c538df8d111e479619b129464d0269d0ae5fd18ca91d33a7fdfea95c",
+      "license": "public-domain",
+      "creator": "SpaceX",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "A rocket launching into the sky.",
+      "query": "a spacecraft lifting off at night",
+      "split": "dev",
+      "document": {
+        "path": "images/rocket-document.png",
+        "sha256": "bff8e5689368fe318bd12f4c38fff5c07ac55ecbcf7099f73b95653c2a5b441f"
+      },
+      "near_duplicate": {
+        "path": "images/rocket-near_duplicate.png",
+        "sha256": "3c9e166bd8bcec52e753aefc9e5186b4101c93ac8d7ad0e2575a4ff97ffa6b12"
+      },
+      "image_query": {
+        "path": "images/rocket-image_query.png",
+        "sha256": "2b1dec02852cca248269b4d5df0393da9ce5e83aa79a78692e0bc7f9456666c4"
+      }
+    },
+    {
+      "id": "horse",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/horse.png",
+      "source_sha256": "c7fb60789fe394c485f842291ea3b21e50d140f39d6dcb5fb9917cc178225455",
+      "license": "CC0-1.0",
+      "creator": "Andreas Preuss",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "A black and white silhouette of a horse.",
+      "query": "the outline of an equine animal",
+      "split": "dev",
+      "document": {
+        "path": "images/horse-document.png",
+        "sha256": "dcfde38641a9439cbcf4c269b4660dd26f712da0c23b539cb16896dc82e457ad"
+      },
+      "near_duplicate": {
+        "path": "images/horse-near_duplicate.png",
+        "sha256": "f92ae723b40faff1b09ad03393c252a508cfbbca5eb68fabb9789e57e250eab3"
+      },
+      "image_query": {
+        "path": "images/horse-image_query.png",
+        "sha256": "be51afee19d41f225c8484127a171341df4b7e7a9652b6b4a725995ba311cba2"
+      }
+    },
+    {
+      "id": "retina",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/retina.jpg",
+      "source_sha256": "38a07f36f27f095e818aea7b96d34202c05176d30253c66733f2e00379e9e0e6",
+      "license": "CC0-1.0",
+      "creator": "Mikael Häggström",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "A medical photograph of the retina of an eye.",
+      "query": "a view of the back of a human eye",
+      "split": "holdout",
+      "document": {
+        "path": "images/retina-document.png",
+        "sha256": "c5555f021767b3cec302507d8697a7697d4c78dadb2a58134b3618d5884690b0"
+      },
+      "near_duplicate": {
+        "path": "images/retina-near_duplicate.png",
+        "sha256": "d101e6ebe7888d22d9737f417282c03ead9e8bbd7bb49ccfe90269550cf4b05b"
+      },
+      "image_query": {
+        "path": "images/retina-image_query.png",
+        "sha256": "f466f13da4d7f27889236016d1108cccfa6f61431798118b78d690e40920e0de"
+      }
+    },
+    {
+      "id": "galaxies",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/hubble_deep_field.jpg",
+      "source_sha256": "3a19c5dd8a927a9334bb1229a6d63711b1c0c767fb27e2286e7c84a3e2c2f5f4",
+      "license": "public-domain",
+      "creator": "NASA",
+      "license_evidence": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "caption": "Distant galaxies and stars in deep space.",
+      "query": "a telescope view of many distant galaxies",
+      "split": "holdout",
+      "document": {
+        "path": "images/galaxies-document.png",
+        "sha256": "be8a5a068af70be01c753e23c0733d306ab9024d84b638c0af1a04a0d9b85daa"
+      },
+      "near_duplicate": {
+        "path": "images/galaxies-near_duplicate.png",
+        "sha256": "dd45afa9314804fd1b04af94e1d3073048169fc25bb21645ae594384f8daa67f"
+      },
+      "image_query": {
+        "path": "images/galaxies-image_query.png",
+        "sha256": "7663e59f3e62b873790f83ed2e749381e92ac84e88d4a2e9803d21318e090f6a"
+      }
+    },
+    {
+      "id": "red-circle",
+      "source": "generated:fixtures.py/v1",
+      "source_sha256": null,
+      "license": "CC0-1.0",
+      "creator": "inVectus fixture contributors",
+      "license_evidence": "docs/multimodal/README.md",
+      "caption": "A red circle on white.",
+      "query": "a circle colored red",
+      "split": "dev",
+      "document": {
+        "path": "images/red-circle-document.png",
+        "sha256": "3258a12d375db31a181f69824ce2f7e3fbd90e7c3c4d5e46f38b26b8d6004a79"
+      },
+      "near_duplicate": {
+        "path": "images/red-circle-near_duplicate.png",
+        "sha256": "43bb378093ee54432f63708265f2e044e2263afe80da85fa7134e80226dff43c"
+      },
+      "image_query": {
+        "path": "images/red-circle-image_query.png",
+        "sha256": "8478fafa6165aad474d354e4dd95381099a1200dad1bc91abaf7ad37a0d36877"
+      }
+    },
+    {
+      "id": "red-square",
+      "source": "generated:fixtures.py/v1",
+      "source_sha256": null,
+      "license": "CC0-1.0",
+      "creator": "inVectus fixture contributors",
+      "license_evidence": "docs/multimodal/README.md",
+      "caption": "A red square on white.",
+      "query": "a square colored red",
+      "split": "dev",
+      "document": {
+        "path": "images/red-square-document.png",
+        "sha256": "15d4018d795740107372a9e53d16ebc9f01faff97633f32e36b5abb0ebc00973"
+      },
+      "near_duplicate": {
+        "path": "images/red-square-near_duplicate.png",
+        "sha256": "60e6b27ce8880297a7f39bcfbba029aef718065fb1a629d1e0f1c566dfc16bab"
+      },
+      "image_query": {
+        "path": "images/red-square-image_query.png",
+        "sha256": "e79729a56218654e6f6a25591d9e0c4e6e3547d72349fcf27e3f68ac6a68ca26"
+      }
+    },
+    {
+      "id": "blue-circle",
+      "source": "generated:fixtures.py/v1",
+      "source_sha256": null,
+      "license": "CC0-1.0",
+      "creator": "inVectus fixture contributors",
+      "license_evidence": "docs/multimodal/README.md",
+      "caption": "A blue circle on white.",
+      "query": "a circle colored blue",
+      "split": "holdout",
+      "document": {
+        "path": "images/blue-circle-document.png",
+        "sha256": "41177663ed10d580201f1ec21ca57f8a6f737798bc81f8fe0b0dea00fc2533cf"
+      },
+      "near_duplicate": {
+        "path": "images/blue-circle-near_duplicate.png",
+        "sha256": "86e5369e4a77b097aaf3b2d1ce2ed080bb7140d24056662dd2cf02bd071609fa"
+      },
+      "image_query": {
+        "path": "images/blue-circle-image_query.png",
+        "sha256": "ba4aef9466a99e38ef0942c388624d9843d9a4e576e3019a0feec229eb698e9e"
+      }
+    },
+    {
+      "id": "blue-square",
+      "source": "generated:fixtures.py/v1",
+      "source_sha256": null,
+      "license": "CC0-1.0",
+      "creator": "inVectus fixture contributors",
+      "license_evidence": "docs/multimodal/README.md",
+      "caption": "A blue square on white.",
+      "query": "a square colored blue",
+      "split": "holdout",
+      "document": {
+        "path": "images/blue-square-document.png",
+        "sha256": "848dfbbbc2f7d0c3a165f7fa727ffcc15950b15bab7b7ee112bb2f2f1f8da095"
+      },
+      "near_duplicate": {
+        "path": "images/blue-square-near_duplicate.png",
+        "sha256": "79534da0b902818d3bc9a9ce690c94574518510c5e3e0d860e9e71b6c14408c6"
+      },
+      "image_query": {
+        "path": "images/blue-square-image_query.png",
+        "sha256": "3d21a62e292e2aa89d9e69276b4bad195e8b0e2e5368b77a93c9d8f3f1843189"
+      }
+    }
+  ]
+}

@@ -423,12 +423,125 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.
-2. **Backtest on a real benchmark** (done above). The gapmap optometry set (591k papers with
-   primary/synthesis roles) is the SPEC §9.2 benchmark, but development copies are limited to
-   10k items. Running it needs the owner's approval to use more of it, read-only. Then compare
-   per-term ablations before tuning weights.
+2. **Full benchmark and term ablation are complete** (owner-approved read-only copy; results
+   above). The model still loses to the baselines. Future tuning needs cached cutoff terms and
+   a held-out-cutoff protocol; multimodal work must not rerun or re-embed this benchmark.
 3. LLM-dependent work (calibration paraphrases, midpoint descriptions P5, LLM region labels)
    waits for a provider decision. Verification connectors (P6) need network approval for live
    tests.
 4. Adjudicate a sample of verdicts and gaps before trusting thresholds and weights.
 5. Run the three-OS CI when a push is authorized.
+
+
+## 2026-10-27 — Multimodal baseline, runtime evidence and preparatory contracts
+
+Scope: review and execute `docs/multimodal-implementation-plan.md` through feasible evidence
+work. **Image retrieval is not implemented in the product.** The human-judgment, platform and
+packaging gates are still open. Details, reproducible commands and limitations:
+[`docs/multimodal/README.md`](docs/multimodal/README.md).
+
+### Baseline and preservation
+- Read this ledger, SPEC, parent repository instructions and relevant engine/UI/CI code. There
+  is no local AGENTS/CLAUDE file. Started at `b5f6d71`; only the supplied plan was untracked.
+  No overlapping benchmark/ablation processes were running. Full benchmark and ablation are
+  complete and recorded; their gate failure is unchanged. Corrected the obsolete Next item.
+- Unchanged workspace baseline: **75 tests passed**, including actual BGE and CLI checks.
+  No full-benchmark query, clustering, backtest or re-embedding was performed.
+- Captured a metadata guard of benchmark projects/results, existing text models and reference
+  DB/vectors. Repeated checks match. This is path/size/mtime evidence, not a resolution of the
+  older unexplained reference fingerprint. Existing data/index/calibration files were not written.
+- BGE default, Nomic availability, all legacy identity serialization/IDs, text encoder/search,
+  DuckDB schema, Lance metadata and calibration behavior remain unchanged.
+
+### Phase 0/1 evidence
+- Added a frozen, reproducible 12-source-group CC0/public-domain diagnostic set, with source
+  commit, license evidence, checksums, captions/proposed relevance, near duplicates and resized
+  image queries. Development/holdout split is by source group (8/4), with all groups serving as
+  distractors. **Expectations are agent-authored and not human adjudicated.** An independent,
+  harder human-reviewed retrieval set and untouched calibration split are still required.
+  Also inspected official Winoground (gated; unauthenticated parquet request HTTP 401;
+  research-only access agreement not accepted) and MMEB-eval (ungated labels, separate 7.13 GB
+  image ZIP; no bulk download on this low-headroom host). The latter is a route for a bounded
+  subset after checking constituent source terms; this is not a claim that no public labels exist.
+- Verified actual model repository file lists, configs, revisions, small-file Git blob hashes
+  and weights SHA-256. All spike downloads were explicit, task-local and isolated from the
+  installed text model store. Inference used verified local paths and offline library flags.
+- **EmbeddingGemma 2**: released `google/embeddinggemma-2@914f7f89…`, ungated Apache-2.0 card,
+  safetensors and multimodal processor exist; **no ONNX artifact in that revision**. Actual
+  text/image inference ran with torch 2.14.1 / transformers 5.21.0 / sentence-transformers 6.2.0,
+  CPU FP32, audio encoder omitted. The processor also required torchvision 0.29.1; installed
+  it and soundfile 0.14.0 in the isolated venv. No BF16/FP16/accelerator measurements. Model
+  docs reject FP16. Video/audio only inspected, not executed or evaluated.
+- **Alternative: SigLIP 2 base patch16 224**. Official checkpoint `75de2d55…` (Apache-2.0) ran
+  through PyTorch; export `onnx-community/…@ba1f3b08…` has verified FP32/INT8 text and vision
+  ONNX artifacts, both executed via ORT 1.31.1 CPU. Export card lacks its own license field/file;
+  distribution must preserve upstream terms/notices and verify export provenance.
+- The same short-text diagnostics also ran existing BGE and Nomic (12 documents each; no
+  benchmark re-embedding). All six configurations had hit@1/recall@5/MRR 1.0 on applicable
+  diagnostic tasks in both source splits. These ceiling results **do not choose a model**.
+- M4 Pro, 24 GiB, macOS 27.0.1 arm64, 8 CPU threads, batch 1, warm query median of 5 repeats:
+
+  | configuration | text query ms | image query ms | artifacts MB | peak process RSS MB |
+  |---|---:|---:|---:|---:|
+  | BGE ORT FP32 | 1.98 | — | 133.8 | 429.8 |
+  | Nomic ORT FP32 | 4.90 | — | 548.0 | 1369.1 |
+  | EmbeddingGemma 2 PyTorch FP32 | 27.61 | 694.85 | 1525.8 | 4571.7 |
+  | SigLIP 2 PyTorch FP32 | 17.17 | 32.82 | 1539.5 | 2492.2 |
+  | SigLIP 2 ORT FP32 | 8.16 | 33.19 | 1539.9 | 4536.5 |
+  | SigLIP 2 ORT INT8 | 7.28 | 19.60 | 416.6 | 1910.6 |
+
+  Inputs were decoded before timing; preprocessing/encoding included. RSS includes frameworks
+  full-file checksum verification and load peak, not just weights. Separate downloads could overlap disk/network I/O; no other
+  benchmark/compiler competed with the timed models. These are tiny smoke measurements, not
+  a 100k benchmark, p95 latency or long-text performance comparison. Python adds ~1 GB here.
+- FP32 export parity vs PyTorch on 12 original images/queries: min cosine 1.000000 at report
+  precision, maximum cross-modal score delta 3.19e-7, text→image top-1 agreement 1.0. INT8:
+  min cosine **0.99556 text / 0.96141 image**, score delta 0.01406; top-1 unchanged only on
+  these easy cases. INT8 cannot reuse FP32 vectors or calibration.
+- Native Rust `ort 2.0.0-rc.15` CPU preflight executed both SigLIP towers on a verified fixture
+  and matched Python ORT (cosine ≥ 0.999999). Actual outputs are `last_hidden_state` and
+  `pooler_output`; use the projected pooled output, not the existing text pooling path. This
+  is a one-source native preflight with Python preprocessing, not native preprocessing or
+  complete image retrieval. Raw JSON and example code are retained.
+- Verified actual CPython 3.12 direct-dependency wheel filenames/hashes for macOS arm64,
+  Windows x86_64 and Linux x86_64. **Only macOS executed**. Added a manual three-OS CPU/native
+  probe workflow; nothing pushed or dispatched. Other architectures, accelerators and
+  multimodal installers remain unverified.
+
+### Independent foundation work (phase 2 preparation only)
+- Added typed text/local-media inputs, explicit supported modalities, a multimodal interface
+  and a legacy `TextAdapter`. The adapter forwards text/prefix mode unchanged and rejects an
+  entire mixed media batch before inference. No existing command uses a new model by default.
+- Added a separate versioned media identity envelope: pinned artifact manifest, processor/
+  modality policy, legacy text policy, dimensions/precision/runtime. Sorted maps make hashes
+  deterministic; byte-content hashes and query/document mode govern per-input invalidation.
+  It deliberately cannot be registered in the current legacy text tables/calibration APIs.
+- Added four meaningful compatibility/contract tests, including exact BGE/Nomic/imported-Nomic
+  IDs read from the old small projects, serialization and temporary-project reopening, policy/
+  artifact/runtime hash changes and unsupported-media rejection before model work.
+- No persisted media schema or source-copy policy implementation, safe image decoder,
+  thumbnail pipeline, resumable media job, native preprocessor or desktop/CLI image feature
+  was added. Those remain gated implementation work, not silently claimed complete.
+
+### Decisions, checks and next steps
+- Updated the plan with the completed benchmark baseline, verified artifact/runtime corrections,
+  phase statuses and material decisions. SigLIP's direct native path and speed justify further
+  evaluation; EmbeddingGemma's broader advertised capabilities do not justify a default swap.
+  There is **no production model winner** on these unreviewed ceiling-level quality results.
+- **79 workspace tests passed**, including real-model/CLI checks; 5 model-free Python evaluation/
+  installer/offline tests passed. Rust fmt, clippy across all workspace targets, Python Ruff
+  lint/format and frontend build passed. macOS `tauri build --no-bundle --ci` passed (7m14s
+  initial rebuild); final incremental rebuild also passed. The known upstream Apple
+  linker `__eh_frame` size warning remains. No Windows/Linux build or execution was claimed.
+- Next: human-adjudicate realistic semantic/visual retrieval and hard negatives; run the three-OS
+  probes; choose runtime/precision with that evidence; resolve native preprocessing and license/
+  notice packaging. Then add versioned media storage, bounded import/EXIF/alpha handling,
+  resumable isolated indexing and CLI+desktop image retrieval with original inspection.
+- **Phases 3–5 stay gated.** No image absence verdict or multimodal calibration/gaps enabled.
+  The existing text calibration key lacks modality pairs; any media calibration needs an
+  explicit collection/space/modality-pair/preprocessing scope and separate held-out validation.
+  Video/audio need actual decoding and labeled temporal/audio evaluation before implementation.
+
+- Fixture regeneration with network disabled and cached originals reproduced every frozen
+  checksum/expectation. The task's Python bytecode caches are ignored locally. Benchmark,
+  reference and text-model metadata guards continue to match after all tests/builds.

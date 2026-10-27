@@ -1,0 +1,33 @@
+{
+  "arch": "aarch64",
+  "os": "macos",
+  "results": {
+    "image": {
+      "cosine_with_python_ort": 0.999999463558197,
+      "dimensions": 768,
+      "forward_ms": 28.1835,
+      "input_names": [
+        "pixel_values"
+      ],
+      "output_names": [
+        "last_hidden_state",
+        "pooler_output"
+      ]
+    },
+    "text": {
+      "cosine_with_python_ort": 1.000000238418579,
+      "dimensions": 768,
+      "forward_ms": 14.836875,
+      "input_names": [
+        "input_ids"
+      ],
+      "output_names": [
+        "last_hidden_state",
+        "pooler_output"
+      ]
+    }
+  },
+  "runtime": "ort 2.0.0-rc.15, PreferCPU, 8 intra threads",
+  "scope": "single-source CPU preflight, not retrieval quality or cross-platform parity",
+  "source_id": "astronaut"
+}

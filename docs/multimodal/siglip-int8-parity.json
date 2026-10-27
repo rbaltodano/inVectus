@@ -1,0 +1,52 @@
+{
+  "reference_revision": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
+  "candidate_revision": "ba1f3b0843f24bc5417d38e19c37b287d719b2f4",
+  "candidate": "siglip-int8",
+  "platform": "macOS arm64 CPU",
+  "fixture_sha256": "d5d4dd535b0c62441211594228fc707f49b3d7916fa5f6c07445d3705ea1cd28",
+  "status": "diagnostic parity only; no production table or calibration modified",
+  "modalities": {
+    "text": {
+      "sample": 12,
+      "min_cosine": 0.9955560564994812,
+      "mean_cosine": 0.9975139498710632,
+      "max_absolute_error": 0.020844340324401855,
+      "per_source_cosine": {
+        "astronaut": 0.997631311416626,
+        "camera": 0.9986318349838257,
+        "cat": 0.9972058534622192,
+        "coffee": 0.9969280958175659,
+        "rocket": 0.9965620040893555,
+        "horse": 0.9973393678665161,
+        "retina": 0.9955560564994812,
+        "galaxies": 0.9979599714279175,
+        "red-circle": 0.9981094002723694,
+        "red-square": 0.9985443949699402,
+        "blue-circle": 0.9972541928291321,
+        "blue-square": 0.9984447956085205
+      }
+    },
+    "image": {
+      "sample": 12,
+      "min_cosine": 0.9614092111587524,
+      "mean_cosine": 0.9857869744300842,
+      "max_absolute_error": 0.037904903292655945,
+      "per_source_cosine": {
+        "astronaut": 0.993148684501648,
+        "camera": 0.9838947057723999,
+        "cat": 0.9966092109680176,
+        "coffee": 0.9928295612335205,
+        "rocket": 0.9935195446014404,
+        "horse": 0.9725567102432251,
+        "retina": 0.9965003728866577,
+        "galaxies": 0.9971715807914734,
+        "red-circle": 0.9740918874740601,
+        "red-square": 0.9614092111587524,
+        "blue-circle": 0.9895274639129639,
+        "blue-square": 0.9781850576400757
+      }
+    }
+  },
+  "text_to_image_top1_agreement": 1.0,
+  "max_cross_modal_similarity_delta": 0.014055428095161915
+}

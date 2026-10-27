@@ -3,6 +3,7 @@ pub mod embedder;
 pub mod identity;
 pub mod item;
 pub mod job;
+pub mod multimodal;
 pub mod net;
 pub mod project;
 pub mod store;

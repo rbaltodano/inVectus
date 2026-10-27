@@ -1,0 +1,65 @@
+[
+  {
+    "space_id": "0b35fad4e4ecc4e06a425c6f35bd0d67cc495d2e59079090ca2bf9a18592de4c",
+    "identity": {
+      "model_key": "bge-small-en-v1.5",
+      "repo": "Xenova/bge-small-en-v1.5",
+      "revision": "ea104dacec62c0de699686887e3f920caeb4f3e3",
+      "weights_sha256": "828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35",
+      "tokenizer_sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+      "document_prefix": "",
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "text_template": "{title}. {text}",
+      "pooling": "cls",
+      "normalization": "l2",
+      "max_tokens": 512,
+      "truncation": "head",
+      "dimensions": 384,
+      "compute_precision": "fp32",
+      "storage_precision": "f32",
+      "runtime": "onnxruntime-cpu (ort 2.0.0-rc.15, AutoDevicePolicy::PreferCPU, graph opt level3)"
+    }
+  },
+  {
+    "space_id": "c00d168b3a6654992511d818f51ffa63e244395b4a0cc1fa246833272e8739a9",
+    "identity": {
+      "model_key": "nomic-embed-text-v1.5",
+      "repo": "nomic-ai/nomic-embed-text-v1.5",
+      "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+      "weights_sha256": "147d5aa88c2101237358e17796cf3a227cead1ec304ec34b465bb08e9d952965",
+      "tokenizer_sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+      "document_prefix": "search_document: ",
+      "query_prefix": "search_query: ",
+      "text_template": "{title}. {text}",
+      "pooling": "mean",
+      "normalization": "l2",
+      "max_tokens": 512,
+      "truncation": "head",
+      "dimensions": 768,
+      "compute_precision": "fp32",
+      "storage_precision": "f32",
+      "runtime": "onnxruntime-cpu (ort 2.0.0-rc.15, AutoDevicePolicy::PreferCPU, graph opt level3)"
+    }
+  },
+  {
+    "space_id": "b0618842e4f178842585b0a7e97758339a0aef8fca14452ca56e00dba63bbb08",
+    "identity": {
+      "model_key": "nomic-embed-text-v1.5",
+      "repo": "nomic-ai/nomic-embed-text-v1.5",
+      "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+      "weights_sha256": "unrecorded:sentence-transformers@e9b6763023c676ca8431644204f50c2b100d9aab",
+      "tokenizer_sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+      "document_prefix": "clustering: ",
+      "query_prefix": "clustering: ",
+      "text_template": "{title}. {text}",
+      "pooling": "mean",
+      "normalization": "l2",
+      "max_tokens": 512,
+      "truncation": "head",
+      "dimensions": 768,
+      "compute_precision": "fp16",
+      "storage_precision": "f32",
+      "runtime": "sentence-transformers (gapmap, MPS fp16)"
+    }
+  }
+]

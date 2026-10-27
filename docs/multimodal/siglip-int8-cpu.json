@@ -1,0 +1,1693 @@
+{
+  "schema_version": 1,
+  "model": "siglip-int8",
+  "revision": "ba1f3b0843f24bc5417d38e19c37b287d719b2f4",
+  "runtime": "onnxruntime CPU INT8",
+  "status": "diagnostic only; proposed labels, not human reviewed; no calibration",
+  "fixture_sha256": "d5d4dd535b0c62441211594228fc707f49b3d7916fa5f6c07445d3705ea1cd28",
+  "platform": "macOS-27.0.1-arm64-arm-64bit",
+  "machine": "arm64",
+  "threads": 8,
+  "packages": {
+    "torch": "2.14.1",
+    "transformers": "5.21.0",
+    "sentence-transformers": "6.2.0",
+    "pillow": "13.0.0",
+    "numpy": "2.5.4",
+    "onnxruntime": "1.31.1"
+  },
+  "model_bytes": 416644665,
+  "load_seconds": 2.4029302920680493,
+  "peak_rss_bytes": 1910603776,
+  "timings": {
+    "text-document": {
+      "count": 12,
+      "seconds": 0.09637070796452463
+    },
+    "text-query": {
+      "count": 12,
+      "seconds": 0.08850070810876787
+    },
+    "image-document": {
+      "count": 24,
+      "seconds": 0.48457000008784235
+    },
+    "image-query": {
+      "count": 12,
+      "seconds": 0.23147862497717142
+    }
+  },
+  "query_latency": {
+    "text": {
+      "samples_ms": [
+        11.134166968986392,
+        7.280666846781969,
+        7.1617909707129,
+        7.27520789951086,
+        7.325000129640102
+      ],
+      "median_ms": 7.280666846781969
+    },
+    "image": {
+      "samples_ms": [
+        24.711541831493378,
+        19.80704185552895,
+        19.083457998931408,
+        19.597291015088558,
+        19.578624982386827
+      ],
+      "median_ms": 19.597291015088558
+    }
+  },
+  "tasks": {
+    "dev": {
+      "text_to_text": {
+        "queries": 8,
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "astronaut",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "astronaut",
+                "similarity": 0.8957178592681885
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.7935625910758972
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.7875730395317078
+              },
+              {
+                "id": "camera",
+                "similarity": 0.7629766464233398
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.7383295893669128
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "camera",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "camera",
+                "similarity": 0.8608865141868591
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7812418937683105
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.7521759867668152
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.7416785359382629
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.7197745442390442
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "cat",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "cat",
+                "similarity": 0.8606856465339661
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7998401522636414
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.7929090261459351
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.7797434329986572
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.7618652582168579
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "coffee",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "coffee",
+                "similarity": 0.8998391032218933
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7658847570419312
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.7563195824623108
+              },
+              {
+                "id": "cat",
+                "similarity": 0.7448398470878601
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.7392177581787109
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "rocket",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "rocket",
+                "similarity": 0.762825071811676
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.6837641000747681
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.6759709715843201
+              },
+              {
+                "id": "camera",
+                "similarity": 0.6404900550842285
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.6195828914642334
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "horse",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "horse",
+                "similarity": 0.8502713441848755
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7885121703147888
+              },
+              {
+                "id": "cat",
+                "similarity": 0.7629590630531311
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.759702205657959
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.7570624947547913
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-circle",
+                "similarity": 0.887842059135437
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.7845183610916138
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.7807557582855225
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7637501955032349
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.761925995349884
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-square",
+                "similarity": 0.8857421278953552
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.7807716727256775
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.7773467302322388
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7452389001846313
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.7419120073318481
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      },
+      "text_to_image": {
+        "queries": 8,
+        "recall_at_1": 0.5,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "astronaut",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "astronaut",
+                "similarity": 0.11496248096227646
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.11447004228830338
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.0840422585606575
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.08338393270969391
+              },
+              {
+                "id": "camera",
+                "similarity": 0.07437285035848618
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "camera",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "camera",
+                "similarity": 0.11498899757862091
+              },
+              {
+                "id": "camera",
+                "similarity": 0.11249402910470963
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.004645570646971464
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.0035672157537192106
+              },
+              {
+                "id": "red-square",
+                "similarity": -0.0031762272119522095
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "cat",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "cat",
+                "similarity": 0.12307949364185333
+              },
+              {
+                "id": "cat",
+                "similarity": 0.12138055264949799
+              },
+              {
+                "id": "horse",
+                "similarity": 0.035795290023088455
+              },
+              {
+                "id": "horse",
+                "similarity": 0.032709211111068726
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.02482340857386589
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "coffee",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "coffee",
+                "similarity": 0.13048595190048218
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.12838736176490784
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.03306423872709274
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.031740497797727585
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.029779018834233284
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "rocket",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "rocket",
+                "similarity": 0.1473574936389923
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.14394398033618927
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.044036317616701126
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.0409843772649765
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.012403477914631367
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "horse",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "horse",
+                "similarity": 0.15732142329216003
+              },
+              {
+                "id": "horse",
+                "similarity": 0.15503884851932526
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.03994038701057434
+              },
+              {
+                "id": "cat",
+                "similarity": 0.03621602803468704
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.03595852851867676
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-circle",
+                "similarity": 0.1824059784412384
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.17983001470565796
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.14122401177883148
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.13707219064235687
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.1321578025817871
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-square",
+                "similarity": 0.17591992020606995
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.17541012167930603
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.13779841363430023
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.13730664551258087
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.13178391754627228
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      },
+      "image_to_image": {
+        "queries": 8,
+        "recall_at_1": 0.5,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "astronaut",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "astronaut",
+                "similarity": 0.9929991364479065
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.9922702312469482
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.6734613180160522
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.6727150082588196
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.6090325713157654
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "camera",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "camera",
+                "similarity": 0.983580470085144
+              },
+              {
+                "id": "camera",
+                "similarity": 0.9807886481285095
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.58030766248703
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.5788619518280029
+              },
+              {
+                "id": "cat",
+                "similarity": 0.5739727020263672
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "cat",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "cat",
+                "similarity": 0.9880650043487549
+              },
+              {
+                "id": "cat",
+                "similarity": 0.9852311611175537
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.6797509789466858
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.6650907397270203
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.6492549180984497
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "coffee",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "coffee",
+                "similarity": 0.988623321056366
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.9853078722953796
+              },
+              {
+                "id": "cat",
+                "similarity": 0.659942626953125
+              },
+              {
+                "id": "cat",
+                "similarity": 0.655087411403656
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.6071592569351196
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "rocket",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "rocket",
+                "similarity": 0.9917190074920654
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.9911102652549744
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.6757064461708069
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.6721889972686768
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.6693865656852722
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "horse",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "horse",
+                "similarity": 0.9840712547302246
+              },
+              {
+                "id": "horse",
+                "similarity": 0.9613679647445679
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.6955239176750183
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.6783475875854492
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.6754823923110962
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-circle",
+                "similarity": 0.9818242788314819
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.9620803594589233
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.9141270518302917
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.8978373408317566
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.8821267485618591
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-square",
+                "similarity": 0.9681525826454163
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.942693829536438
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.9190000295639038
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.8993538022041321
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.8864805102348328
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      },
+      "image_to_text": {
+        "queries": 8,
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "astronaut",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "astronaut",
+                "similarity": 0.12001296877861023
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.05446556210517883
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.04890145733952522
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.046270620077848434
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.04211689159274101
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "camera",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "camera",
+                "similarity": 0.15794046223163605
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.0616033710539341
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.06003344804048538
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.054898686707019806
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.052072834223508835
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "cat",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "cat",
+                "similarity": 0.17108264565467834
+              },
+              {
+                "id": "retina",
+                "similarity": 0.05073642358183861
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.04741792753338814
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.047303665429353714
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.03789856657385826
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "coffee",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "coffee",
+                "similarity": 0.13729572296142578
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.03554658591747284
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.024451863020658493
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.00828799232840538
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.00403197156265378
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "rocket",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "rocket",
+                "similarity": 0.14155711233615875
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.06444951891899109
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.04433418810367584
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.03969745710492134
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.029388364404439926
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "horse",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "horse",
+                "similarity": 0.16924694180488586
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.04495365172624588
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.041064053773880005
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.036195166409015656
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.02769295871257782
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-circle",
+                "similarity": 0.17953087389469147
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.13366642594337463
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.11292236298322678
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.07091210037469864
+              },
+              {
+                "id": "retina",
+                "similarity": 0.04401011019945145
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "red-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "red-square",
+                "similarity": 0.17201931774616241
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.11644765734672546
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.10011628270149231
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.043126944452524185
+              },
+              {
+                "id": "retina",
+                "similarity": 0.0332002155482769
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      }
+    },
+    "holdout": {
+      "text_to_text": {
+        "queries": 4,
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "retina",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "retina",
+                "similarity": 0.7757207751274109
+              },
+              {
+                "id": "camera",
+                "similarity": 0.7157901525497437
+              },
+              {
+                "id": "cat",
+                "similarity": 0.7001789808273315
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.6830210089683533
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.6772383451461792
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "galaxies",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "galaxies",
+                "similarity": 0.8631796836853027
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7203769087791443
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.7095558047294617
+              },
+              {
+                "id": "cat",
+                "similarity": 0.6902207732200623
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.686119794845581
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-circle",
+                "similarity": 0.8813640475273132
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.8003049492835999
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.7874386310577393
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7634193301200867
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.7556701898574829
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-square",
+                "similarity": 0.8822418451309204
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.7846084237098694
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.7682632207870483
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.7479060292243958
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.7359249591827393
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      },
+      "text_to_image": {
+        "queries": 4,
+        "recall_at_1": 0.5,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "retina",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "retina",
+                "similarity": 0.13440318405628204
+              },
+              {
+                "id": "retina",
+                "similarity": 0.13182944059371948
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.04039810225367546
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.038606829941272736
+              },
+              {
+                "id": "cat",
+                "similarity": 0.037540435791015625
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "galaxies",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "galaxies",
+                "similarity": 0.17387543618679047
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.17277486622333527
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.040756817907094955
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.04011231288313866
+              },
+              {
+                "id": "camera",
+                "similarity": 0.03428830951452255
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-circle",
+                "similarity": 0.1819278448820114
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.17904314398765564
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.1315239816904068
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.12803494930267334
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.12494777888059616
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-square",
+                "similarity": 0.18522441387176514
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.18520793318748474
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.13890409469604492
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.13701067864894867
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.11670379340648651
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      },
+      "image_to_image": {
+        "queries": 4,
+        "recall_at_1": 0.5,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "retina",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "retina",
+                "similarity": 0.9989919066429138
+              },
+              {
+                "id": "retina",
+                "similarity": 0.9974890947341919
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.6639620065689087
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.6571534276008606
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.6552888751029968
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "galaxies",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "galaxies",
+                "similarity": 0.9971014261245728
+              },
+              {
+                "id": "galaxies",
+                "similarity": 0.9967674612998962
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.6588078141212463
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.6583049893379211
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.6532636284828186
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-circle",
+                "similarity": 0.9741278886795044
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.9573555588722229
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.9126559495925903
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.911625325679779
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.9011178612709045
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 0.5,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-square",
+                "similarity": 0.9770618677139282
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.9607980251312256
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.9162804484367371
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.910643994808197
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.9002724885940552
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      },
+      "image_to_text": {
+        "queries": 4,
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "reciprocal_rank": 1.0,
+        "per_query": [
+          {
+            "query": "retina",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "retina",
+                "similarity": 0.17845943570137024
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.0974273756146431
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.08092935383319855
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.055123571306467056
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.04015025869011879
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "galaxies",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "galaxies",
+                "similarity": 0.14404945075511932
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.053008291870355606
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.04670805111527443
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.03770671412348747
+              },
+              {
+                "id": "astronaut",
+                "similarity": 0.031818877905607224
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-circle",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-circle",
+                "similarity": 0.16694755852222443
+              },
+              {
+                "id": "blue-square",
+                "similarity": 0.12881460785865784
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.11616922914981842
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.06842389702796936
+              },
+              {
+                "id": "rocket",
+                "similarity": 0.042752236127853394
+              }
+            ],
+            "missed_at_5": []
+          },
+          {
+            "query": "blue-square",
+            "first_relevant_rank": 1,
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "hit_at_1": 1.0,
+            "hit_at_5": 1.0,
+            "reciprocal_rank": 1.0,
+            "top_5": [
+              {
+                "id": "blue-square",
+                "similarity": 0.1687808483839035
+              },
+              {
+                "id": "red-square",
+                "similarity": 0.11311538517475128
+              },
+              {
+                "id": "blue-circle",
+                "similarity": 0.10976649075746536
+              },
+              {
+                "id": "red-circle",
+                "similarity": 0.061765700578689575
+              },
+              {
+                "id": "coffee",
+                "similarity": 0.029126472771167755
+              }
+            ],
+            "missed_at_5": []
+          }
+        ]
+      }
+    }
+  },
+  "preprocessing": "Pillow RGB; pinned AutoProcessor; SigLIP fixed 224 bilinear, rescale and normalize 0.5, text 64 max padding; Gemma pinned processor with default 280 vision tokens, SearchQuery/Document text prompts; L2",
+  "providers": {
+    "text": [
+      "CPUExecutionProvider"
+    ],
+    "image": [
+      "CPUExecutionProvider"
+    ]
+  }
+}

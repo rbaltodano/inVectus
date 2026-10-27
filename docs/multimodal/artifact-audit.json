@@ -1,0 +1,942 @@
+[
+  {
+    "id": "google/embeddinggemma-2",
+    "sha": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "gated": false,
+    "cardData": {
+      "license": "apache-2.0",
+      "pipeline_tag": "feature-extraction",
+      "tags": [
+        "embedding",
+        "feature-extraction",
+        "sentence-transformers",
+        "multimodal-embedding",
+        "multimodal",
+        "vision",
+        "audio",
+        "video",
+        "image-feature-extraction",
+        "audio-feature-extraction",
+        "video-feature-extraction",
+        "sentence-similarity"
+      ],
+      "language": [
+        "multilingual"
+      ],
+      "library_name": "transformers"
+    },
+    "siblings": [
+      {
+        "rfilename": ".gitattributes",
+        "blobId": "341d702660437460ba92cd99ce60f4d66545521b",
+        "size": 1301
+      },
+      {
+        "rfilename": "1_Pooling/config.json",
+        "blobId": "2730fc1de168630e474c4066987f46d091de2189",
+        "size": 90
+      },
+      {
+        "rfilename": "2_Normalize/config.json",
+        "blobId": "8babba92405167e8718211dc51f44fb117e423e4",
+        "size": 97
+      },
+      {
+        "rfilename": "README.md",
+        "blobId": "960d956ce1d9664b1f67d814bfbbc7160a66c8d1",
+        "size": 21730
+      },
+      {
+        "rfilename": "chat_template.jinja",
+        "blobId": "8df4ab8961aa08b66b470c5adbdc51374aabb63b",
+        "size": 1016
+      },
+      {
+        "rfilename": "config.json",
+        "blobId": "dc524b2cbef566d66d8533c67dc68a6a8f5d340a",
+        "size": 4455
+      },
+      {
+        "rfilename": "config_sentence_transformers.json",
+        "blobId": "ba7dd4d5481cbaf271d5e8d1ad4271c5a45d2fd7",
+        "size": 1565
+      },
+      {
+        "rfilename": "model.safetensors",
+        "blobId": "95b4ef9f6465d3665486f6b374593a8d7d6ae003",
+        "size": 1488915288,
+        "lfs": {
+          "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+          "size": 1488915288,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "modules.json",
+        "blobId": "1ab20c8ab29b8338488b415e5c09af14b742fe3d",
+        "size": 413
+      },
+      {
+        "rfilename": "preprocessor_config.json",
+        "blobId": "4adff307a29874c969eda7edb5d3f07faaef879d",
+        "size": 511
+      },
+      {
+        "rfilename": "processor_config.json",
+        "blobId": "63043a5a2fd2e25a2fc5336fcdaf24e515d12289",
+        "size": 1788
+      },
+      {
+        "rfilename": "sentence_bert_config.json",
+        "blobId": "b3b98f8308641875fca1e4ddbfae5f38996bb54f",
+        "size": 747
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "8562f6c9ab4b722ecf89bf869e734560e54d3b85",
+        "size": 32170510,
+        "lfs": {
+          "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
+          "size": 32170510,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer.model",
+        "blobId": "734e2919dcbd7fc5758b79817d3225134ffc9124",
+        "size": 4689013,
+        "lfs": {
+          "sha256": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03",
+          "size": 4689013,
+          "pointerSize": 132
+        }
+      },
+      {
+        "rfilename": "tokenizer_config.json",
+        "blobId": "a9afd12fb3ca2c418fd405320ace85ad46748d03",
+        "size": 1599
+      }
+    ],
+    "configs": {
+      "config.json": {
+        "architectures": [
+          "EmbeddingGemma2Model"
+        ],
+        "audio_config": {
+          "_name_or_path": "",
+          "architectures": null,
+          "attention_chunk_size": 12,
+          "attention_context_left": 13,
+          "attention_context_right": 0,
+          "attention_invalid_logits_value": -1000000000.0,
+          "attention_logit_cap": 50.0,
+          "chunk_size_feed_forward": 0,
+          "conv_kernel_size": 5,
+          "dtype": "bfloat16",
+          "gradient_clipping": 10000000000.0,
+          "hidden_act": "silu",
+          "hidden_size": 1024,
+          "id2label": {
+            "0": "LABEL_0",
+            "1": "LABEL_1"
+          },
+          "initializer_range": 0.02,
+          "is_encoder_decoder": false,
+          "label2id": {
+            "LABEL_0": 0,
+            "LABEL_1": 1
+          },
+          "model_type": "gemma4_audio",
+          "num_attention_heads": 8,
+          "num_hidden_layers": 12,
+          "output_attentions": false,
+          "output_hidden_states": false,
+          "output_proj_dims": 1536,
+          "problem_type": null,
+          "residual_weight": 0.5,
+          "return_dict": true,
+          "rms_norm_eps": 1e-06,
+          "subsampling_conv_channels": [
+            128,
+            32
+          ],
+          "use_clipped_linears": true
+        },
+        "audio_token_id": 258881,
+        "boa_token_id": 256000,
+        "boi_token_id": 255999,
+        "dtype": "bfloat16",
+        "eoa_token_index": 258883,
+        "eoi_token_id": 258882,
+        "image_token_id": 258880,
+        "initializer_range": 0.02,
+        "model_type": "embedding_gemma2",
+        "text_config": {
+          "attention_bias": false,
+          "attention_dropout": 0.0,
+          "bos_token_id": 2,
+          "dtype": "bfloat16",
+          "embedding_dim": 768,
+          "eos_token_id": 1,
+          "head_dim": 256,
+          "hidden_activation": "gelu_pytorch_tanh",
+          "hidden_size": 512,
+          "hidden_size_per_layer_input": 512,
+          "initializer_range": 0.02,
+          "intermediate_size": 2048,
+          "layer_types": [
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "full_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "full_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "full_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "sliding_attention",
+            "full_attention"
+          ],
+          "max_position_embeddings": 262144,
+          "model_type": "embedding_gemma2_text",
+          "num_attention_heads": 4,
+          "num_hidden_layers": 24,
+          "num_key_value_heads": 2,
+          "pad_token_id": 0,
+          "per_layer_config": {
+            "05": {
+              "head_dim": 512,
+              "num_key_value_heads": 1
+            },
+            "11": {
+              "head_dim": 512,
+              "num_key_value_heads": 1
+            },
+            "17": {
+              "head_dim": 512,
+              "num_key_value_heads": 1
+            },
+            "23": {
+              "head_dim": 512,
+              "num_key_value_heads": 1
+            }
+          },
+          "rms_norm_eps": 1e-06,
+          "rope_parameters": {
+            "full_attention": {
+              "rope_theta": 1000000.0,
+              "rope_type": "default"
+            },
+            "sliding_attention": {
+              "rope_theta": 10000.0,
+              "rope_type": "default"
+            }
+          },
+          "sliding_window": 512,
+          "vocab_size": 262144
+        },
+        "transformers_version": "5.18.0.dev0",
+        "video_token_id": 258884,
+        "vision_config": {
+          "_name_or_path": "",
+          "architectures": null,
+          "attention_bias": false,
+          "attention_dropout": 0.0,
+          "chunk_size_feed_forward": 0,
+          "default_output_length": 280,
+          "dtype": "bfloat16",
+          "global_head_dim": 64,
+          "head_dim": 64,
+          "hidden_activation": "gelu_pytorch_tanh",
+          "hidden_size": 768,
+          "id2label": {
+            "0": "LABEL_0",
+            "1": "LABEL_1"
+          },
+          "initializer_range": 0.02,
+          "intermediate_size": 3072,
+          "is_encoder_decoder": false,
+          "label2id": {
+            "LABEL_0": 0,
+            "LABEL_1": 1
+          },
+          "max_position_embeddings": 131072,
+          "model_type": "gemma4_vision",
+          "num_attention_heads": 12,
+          "num_hidden_layers": 16,
+          "num_key_value_heads": 12,
+          "output_attentions": false,
+          "output_hidden_states": false,
+          "patch_size": 16,
+          "pooling_kernel_size": 3,
+          "position_embedding_size": 10240,
+          "problem_type": null,
+          "return_dict": true,
+          "rms_norm_eps": 1e-06,
+          "rope_parameters": {
+            "rope_theta": 100.0,
+            "rope_type": "axial"
+          },
+          "standardize": false,
+          "use_clipped_linears": false
+        },
+        "vision_soft_tokens_per_image": 280
+      },
+      "preprocessor_config.json": {
+        "dither": 0.0,
+        "feature_extractor_type": "Gemma4AudioFeatureExtractor",
+        "feature_size": 128,
+        "fft_length": 512,
+        "fft_overdrive": false,
+        "frame_length": 320,
+        "hop_length": 160,
+        "input_scale_factor": 1.0,
+        "max_frequency": 8000.0,
+        "mel_floor": 0.001,
+        "min_frequency": 0.0,
+        "padding_side": "right",
+        "padding_value": 0.0,
+        "per_bin_mean": null,
+        "per_bin_stddev": null,
+        "preemphasis": 0.0,
+        "preemphasis_htk_flavor": true,
+        "return_attention_mask": true,
+        "sampling_rate": 16000
+      },
+      "processor_config.json": {
+        "audio_ms_per_token": 40,
+        "audio_seq_length": 280,
+        "feature_extractor": {
+          "dither": 0.0,
+          "feature_extractor_type": "Gemma4AudioFeatureExtractor",
+          "feature_size": 128,
+          "fft_length": 512,
+          "fft_overdrive": false,
+          "frame_length": 320,
+          "hop_length": 160,
+          "input_scale_factor": 1.0,
+          "max_frequency": 8000.0,
+          "mel_floor": 0.001,
+          "min_frequency": 0.0,
+          "padding_side": "right",
+          "padding_value": 0.0,
+          "per_bin_mean": null,
+          "per_bin_stddev": null,
+          "preemphasis": 0.0,
+          "preemphasis_htk_flavor": true,
+          "return_attention_mask": true,
+          "sampling_rate": 16000
+        },
+        "image_processor": {
+          "do_convert_rgb": true,
+          "do_normalize": false,
+          "do_rescale": true,
+          "do_resize": true,
+          "image_mean": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "image_processor_type": "Gemma4ImageProcessor",
+          "image_seq_length": 280,
+          "image_std": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "max_soft_tokens": 280,
+          "patch_size": 16,
+          "pooling_kernel_size": 3,
+          "resample": 3,
+          "rescale_factor": 0.00392156862745098
+        },
+        "image_seq_length": 280,
+        "processor_class": "EmbeddingGemma2Processor",
+        "video_processor": {
+          "add_timestamps": false,
+          "do_convert_rgb": true,
+          "do_normalize": false,
+          "do_rescale": true,
+          "do_resize": true,
+          "do_sample_frames": true,
+          "fps": 1,
+          "image_mean": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "image_std": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "max_frames": 32,
+          "max_soft_tokens": 140,
+          "overflow_strategy": "uniform",
+          "patch_size": 16,
+          "pooling_kernel_size": 3,
+          "resample": 3,
+          "rescale_factor": 0.00392156862745098,
+          "return_metadata": false,
+          "video_processor_type": "EmbeddingGemma2VideoProcessor"
+        }
+      },
+      "config_sentence_transformers.json": {
+        "__version__": {
+          "pytorch": "2.14.0+cu130",
+          "sentence_transformers": "6.1.0",
+          "transformers": "5.18.0.dev0"
+        },
+        "default_prompt_name": null,
+        "model_type": "SentenceTransformer",
+        "prompts": {
+          "BitextMining": "task: search result | query: ",
+          "Classification": "task: classification | query: ",
+          "Clustering": "task: clustering | query: ",
+          "CodeRetrieval": "task: code retrieval | query: ",
+          "Document": "title: none | text: ",
+          "FactChecking": "task: fact checking | query: ",
+          "InstructionRetrieval": "task: code retrieval | query: ",
+          "MultilabelClassification": "task: classification | query: ",
+          "PairClassification": "task: sentence similarity | query: ",
+          "QuestionAnswering": "task: question answering | query: ",
+          "Reranking": "task: search result | query: ",
+          "Retrieval": "task: search result | query: ",
+          "Retrieval-document": "title: none | text: ",
+          "Retrieval-query": "task: search result | query: ",
+          "STS": "task: sentence similarity | query: ",
+          "SearchQuery": "task: search result | query: ",
+          "SentenceSimilarity": "task: sentence similarity | query: ",
+          "Summarization": "task: sentence similarity | query: ",
+          "document": "title: none | text: ",
+          "query": "task: search result | query: "
+        },
+        "requirements": {
+          "sentence-transformers": {
+            "reason": "Older versions ignore the order of multimodal dict inputs and cannot put several images or texts into a single embedding.",
+            "specifier": ">=6.1.0"
+          }
+        },
+        "similarity_fn_name": "cosine"
+      },
+      "README.md": {
+        "sha256": "b677a0ee2818c36f091b65fd3d9b4baea9f04d53b02b49cae916c74bf9682037",
+        "url": "https://huggingface.co/google/embeddinggemma-2/blob/914f7f89142e33e77833254d9c9b90c3cef7303b/README.md",
+        "license_frontmatter": "apache-2.0",
+        "base_model": null
+      }
+    },
+    "observed_date": "2026-10-27",
+    "pinned_api_url": "https://huggingface.co/api/models/google/embeddinggemma-2/revision/914f7f89142e33e77833254d9c9b90c3cef7303b?blobs=true"
+  },
+  {
+    "id": "google/siglip2-base-patch16-224",
+    "sha": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
+    "gated": false,
+    "cardData": {
+      "license": "apache-2.0",
+      "tags": [
+        "vision"
+      ],
+      "widget": [
+        {
+          "src": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+          "candidate_labels": "bee in the sky, bee on the flower",
+          "example_title": "Bee"
+        }
+      ],
+      "library_name": "transformers",
+      "pipeline_tag": "zero-shot-image-classification"
+    },
+    "siblings": [
+      {
+        "rfilename": ".gitattributes",
+        "blobId": "52373fe24473b1aa44333d318f578ae6bf04b49b",
+        "size": 1570
+      },
+      {
+        "rfilename": "README.md",
+        "blobId": "51f163598c3995137b033afdde373bd25b0c6821",
+        "size": 3375
+      },
+      {
+        "rfilename": "config.json",
+        "blobId": "c8cd2a20e58a738f44f267ae19f9568ff1095698",
+        "size": 253
+      },
+      {
+        "rfilename": "model.safetensors",
+        "blobId": "aff60bf4990ccd2fc9de54afb14d8bd3580cdf8a",
+        "size": 1500800904,
+        "lfs": {
+          "sha256": "612923381c76ec5a9bed335d1c48827e3f2e506ac31b044b63b2031fadee6a0b",
+          "size": 1500800904,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "preprocessor_config.json",
+        "blobId": "2e52d8e8492b5c496ae04c37bfa09760469fb18b",
+        "size": 394
+      },
+      {
+        "rfilename": "special_tokens_map.json",
+        "blobId": "8d6368f7e735fbe4781bf6e956b7c6ad0586df80",
+        "size": 636
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "16d02f7b98cf1fe1ee9bf04143543b2f188f2788",
+        "size": 34363039,
+        "lfs": {
+          "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322",
+          "size": 34363039,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer.model",
+        "blobId": "796efe9ab515c15e146ce7588e6d7b9b8134dbf8",
+        "size": 4241003,
+        "lfs": {
+          "sha256": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2",
+          "size": 4241003,
+          "pointerSize": 132
+        }
+      },
+      {
+        "rfilename": "tokenizer_config.json",
+        "blobId": "d97c5412159422c3b56fbc99076b1dcc25dd7856",
+        "size": 47164
+      }
+    ],
+    "configs": {
+      "config.json": {
+        "initializer_factor": 1.0,
+        "model_type": "siglip",
+        "text_config": {
+          "model_type": "siglip_text_model",
+          "vocab_size": 256000
+        },
+        "transformers_version": "4.49.0.dev0",
+        "vision_config": {
+          "model_type": "siglip_vision_model"
+        }
+      },
+      "preprocessor_config.json": {
+        "do_convert_rgb": null,
+        "do_normalize": true,
+        "do_rescale": true,
+        "do_resize": true,
+        "image_mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "image_processor_type": "SiglipImageProcessor",
+        "image_std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "processor_class": "SiglipProcessor",
+        "resample": 2,
+        "rescale_factor": 0.00392156862745098,
+        "size": {
+          "height": 224,
+          "width": 224
+        }
+      },
+      "processor_config.json": {
+        "error": "HTTP Error 404: Not Found"
+      },
+      "config_sentence_transformers.json": {
+        "error": "HTTP Error 404: Not Found"
+      },
+      "README.md": {
+        "sha256": "39ac3705d62af9ffa1a14675b8ccb220a75f2d81acd530e564a3b1e3dfe418d8",
+        "url": "https://huggingface.co/google/siglip2-base-patch16-224/blob/75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2/README.md",
+        "license_frontmatter": "apache-2.0",
+        "base_model": null
+      }
+    },
+    "observed_date": "2026-10-27",
+    "pinned_api_url": "https://huggingface.co/api/models/google/siglip2-base-patch16-224/revision/75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2?blobs=true"
+  },
+  {
+    "id": "onnx-community/siglip2-base-patch16-224-ONNX",
+    "sha": "ba1f3b0843f24bc5417d38e19c37b287d719b2f4",
+    "gated": false,
+    "cardData": {
+      "library_name": "transformers.js",
+      "base_model": "google/siglip2-base-patch16-224"
+    },
+    "siblings": [
+      {
+        "rfilename": ".gitattributes",
+        "blobId": "52373fe24473b1aa44333d318f578ae6bf04b49b",
+        "size": 1570
+      },
+      {
+        "rfilename": "README.md",
+        "blobId": "c8d44710563bfc0010ead644b015a57a381f8876",
+        "size": 555
+      },
+      {
+        "rfilename": "config.json",
+        "blobId": "ac5e7dec175d4aa9b1ddb03e344867300f6a6451",
+        "size": 435
+      },
+      {
+        "rfilename": "onnx/model.onnx",
+        "blobId": "bd1c1610259d157ed35339401b6846f87a3d5f9f",
+        "size": 1501285826,
+        "lfs": {
+          "sha256": "b91b79d085889267dfc7ab4e70b14eea972a8b863785265bf89a19515a7c6573",
+          "size": 1501285826,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "onnx/model_bnb4.onnx",
+        "blobId": "2ff2e512cf380bbfda2fefeb91ba1a6bbd2b2f97",
+        "size": 895080484,
+        "lfs": {
+          "sha256": "384eeb00e5ecfa593ce63c7f52f657a78c5239b163e1d609c2f66f1de4a92308",
+          "size": 895080484,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/model_fp16.onnx",
+        "blobId": "7cd37634b84fc11239fc87857419d25c44b77910",
+        "size": 750910198,
+        "lfs": {
+          "sha256": "f379068a8579f736904b91fd215e52e26c62ae4b25f2b8142f6593259411c0f9",
+          "size": 750910198,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/model_int8.onnx",
+        "blobId": "9b0717fa6ef5cc1d5cb4538011db2cbb428544f8",
+        "size": 378000135,
+        "lfs": {
+          "sha256": "bfe28fe2ccdb685874586648035ea349593e487ce33bd0939b28813681a8f167",
+          "size": 378000135,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/model_q4.onnx",
+        "blobId": "91d120a01be96012c13d1b5d7163d61b6aa65331",
+        "size": 906101733,
+        "lfs": {
+          "sha256": "85533965e4dacaa490e7614de951c2008e723a4ce62677781c01a7bb5a5af76f",
+          "size": 906101733,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/model_q4f16.onnx",
+        "blobId": "91e223f293fbf6e643fe3d877514596116cfd10a",
+        "size": 497418715,
+        "lfs": {
+          "sha256": "ef4b14e8f224b5f54e313e5942484af3adc13118442b9fa7fa9c9cc79759fae5",
+          "size": 497418715,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/model_quantized.onnx",
+        "blobId": "a403b093e5e4152a5357ca4a7c7cbab8b7848030",
+        "size": 378000135,
+        "lfs": {
+          "sha256": "87fb1dbb1c091ea083e71a6c6a92fb2a39dd360ef1415314d9d645ca2b22057d",
+          "size": 378000135,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/model_uint8.onnx",
+        "blobId": "a403b093e5e4152a5357ca4a7c7cbab8b7848030",
+        "size": 378000135,
+        "lfs": {
+          "sha256": "87fb1dbb1c091ea083e71a6c6a92fb2a39dd360ef1415314d9d645ca2b22057d",
+          "size": 378000135,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/text_model.onnx",
+        "blobId": "63cde4e49c2d5d19f5cd4fdc44cabd6161239720",
+        "size": 1129469657,
+        "lfs": {
+          "sha256": "baf12d941beabafafb14f7b4adb38dc15be18681b964a84410ec53d9d65e6293",
+          "size": 1129469657,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "onnx/text_model_bnb4.onnx",
+        "blobId": "ab739f6f72349ecd729816aaa8c532183c9f4ae2",
+        "size": 837517980,
+        "lfs": {
+          "sha256": "15b1faae004f2aa8e2e7237cb041c49bc105831a47a21dd0ac0c669363404dc0",
+          "size": 837517980,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/text_model_fp16.onnx",
+        "blobId": "c95fd2912ad5d5c6c5511a126f539f0246fab6b8",
+        "size": 564862230,
+        "lfs": {
+          "sha256": "711da56ada0a4aa11c7dd3320df741081a3cae4f0ae1b5e5c6d5b294738d0eb0",
+          "size": 564862230,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/text_model_int8.onnx",
+        "blobId": "8543a34e591c876efebbc513cac99e8ca0468ebd",
+        "size": 283438275,
+        "lfs": {
+          "sha256": "3a0603d3a00c05a80a6ded4743c16aaac7b1e62cdcc7e362e7ce418659b96400",
+          "size": 283438275,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/text_model_q4.onnx",
+        "blobId": "fb9bb9e1f4348669792f493436b7c297f0b99804",
+        "size": 842825868,
+        "lfs": {
+          "sha256": "debdfb569a650dccafa48592aae3c6b7614b2db29a428569e30ee97f1d5f39ed",
+          "size": 842825868,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/text_model_q4f16.onnx",
+        "blobId": "722ccdd9a07f958497ac6478e9e9912bde6fe834",
+        "size": 442779433,
+        "lfs": {
+          "sha256": "596e67924c3d4b15d30f7532d892da13cfe26fbc229b4442a911bfce16498154",
+          "size": 442779433,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/text_model_quantized.onnx",
+        "blobId": "8543a34e591c876efebbc513cac99e8ca0468ebd",
+        "size": 283438275,
+        "lfs": {
+          "sha256": "3a0603d3a00c05a80a6ded4743c16aaac7b1e62cdcc7e362e7ce418659b96400",
+          "size": 283438275,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/text_model_uint8.onnx",
+        "blobId": "3a478664e9380f1bb4e00a3609a44c0a4c08a179",
+        "size": 283438275,
+        "lfs": {
+          "sha256": "07c4ce795c05b533774a0ca2dc9b73771ecb835e85ffbc025066e3a851d9b242",
+          "size": 283438275,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model.onnx",
+        "blobId": "c7beba551513e2c8250249d14fe24f3ef3191edb",
+        "size": 371807752,
+        "lfs": {
+          "sha256": "c0573e3f4140c3a7c4e9cc5912bd6b26a033b46a6a8e8af26cbea262b163bcad",
+          "size": 371807752,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model_bnb4.onnx",
+        "blobId": "fe6fe40d3268216ef312cbd103b6684b0ca60efd",
+        "size": 57554105,
+        "lfs": {
+          "sha256": "dc9431e87f6c10055f1c15f2cf8b58498c43eef16632f95331a01b99877098fa",
+          "size": 57554105,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model_fp16.onnx",
+        "blobId": "ff3eec0e060dab1073b3df2e68c26ca6bd4a9c2c",
+        "size": 186039516,
+        "lfs": {
+          "sha256": "a1959f7bd3993a607e48839f6d01e25b876fe76afda301b028b78eef68aabd95",
+          "size": 186039516,
+          "pointerSize": 134
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model_int8.onnx",
+        "blobId": "13bfc1ca4152b8f18e0b5e0e44e2ea40dc64d4d6",
+        "size": 94553333,
+        "lfs": {
+          "sha256": "0dd31785a2713f1113ef2272472165c69d580473dae38d7b47568ac587795e70",
+          "size": 94553333,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model_q4.onnx",
+        "blobId": "136911afdf27d82d56cb099ac4d62847a0590c90",
+        "size": 63267466,
+        "lfs": {
+          "sha256": "03e61be280fb24114facd87a1e1e6b2b654aad49845686da2f930c72740914aa",
+          "size": 63267466,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model_q4f16.onnx",
+        "blobId": "8dd0c90bb1675d172980befb4acc970ff857c47d",
+        "size": 54630849,
+        "lfs": {
+          "sha256": "a0740d409b91ba59c273efa530b238efcf603fd968c7940bf313f071a5de27ed",
+          "size": 54630849,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model_quantized.onnx",
+        "blobId": "f1207413efac90bee5260ceaafa54bc4bfb29d70",
+        "size": 94553333,
+        "lfs": {
+          "sha256": "5f2b401c1a4fc095702a5d45348e17ad46c4f87064085365b43c6e8eaa5c0070",
+          "size": 94553333,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "onnx/vision_model_uint8.onnx",
+        "blobId": "f1207413efac90bee5260ceaafa54bc4bfb29d70",
+        "size": 94553333,
+        "lfs": {
+          "sha256": "5f2b401c1a4fc095702a5d45348e17ad46c4f87064085365b43c6e8eaa5c0070",
+          "size": 94553333,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "preprocessor_config.json",
+        "blobId": "2e52d8e8492b5c496ae04c37bfa09760469fb18b",
+        "size": 394
+      },
+      {
+        "rfilename": "quantize_config.json",
+        "blobId": "cc312cee238f28e3c023c713ac2b09f90cc03ace",
+        "size": 310
+      },
+      {
+        "rfilename": "special_tokens_map.json",
+        "blobId": "8d6368f7e735fbe4781bf6e956b7c6ad0586df80",
+        "size": 636
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "16d02f7b98cf1fe1ee9bf04143543b2f188f2788",
+        "size": 34363039,
+        "lfs": {
+          "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322",
+          "size": 34363039,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer.model",
+        "blobId": "796efe9ab515c15e146ce7588e6d7b9b8134dbf8",
+        "size": 4241003,
+        "lfs": {
+          "sha256": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2",
+          "size": 4241003,
+          "pointerSize": 132
+        }
+      },
+      {
+        "rfilename": "tokenizer_config.json",
+        "blobId": "13fe208e5d89fb8ffd88805e79b35fe37069108b",
+        "size": 47240
+      }
+    ],
+    "configs": {
+      "config.json": {
+        "_attn_implementation_autoset": true,
+        "_name_or_path": "google/siglip2-base-patch16-224",
+        "initializer_factor": 1.0,
+        "model_type": "siglip",
+        "text_config": {
+          "model_type": "siglip_text_model",
+          "torch_dtype": "float32",
+          "vocab_size": 256000
+        },
+        "torch_dtype": "float32",
+        "transformers_version": "4.50.0.dev0",
+        "vision_config": {
+          "model_type": "siglip_vision_model",
+          "torch_dtype": "float32"
+        }
+      },
+      "preprocessor_config.json": {
+        "do_convert_rgb": null,
+        "do_normalize": true,
+        "do_rescale": true,
+        "do_resize": true,
+        "image_mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "image_processor_type": "SiglipImageProcessor",
+        "image_std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "processor_class": "SiglipProcessor",
+        "resample": 2,
+        "rescale_factor": 0.00392156862745098,
+        "size": {
+          "height": 224,
+          "width": 224
+        }
+      },
+      "processor_config.json": {
+        "error": "HTTP Error 404: Not Found"
+      },
+      "config_sentence_transformers.json": {
+        "error": "HTTP Error 404: Not Found"
+      },
+      "README.md": {
+        "sha256": "399820e83f2cb2fbca17a6bc76949aacf9ee1caf99e55e6f7f744b24cd23764a",
+        "url": "https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX/blob/ba1f3b0843f24bc5417d38e19c37b287d719b2f4/README.md",
+        "license_frontmatter": null,
+        "base_model": "google/siglip2-base-patch16-224"
+      }
+    },
+    "observed_date": "2026-10-27",
+    "pinned_api_url": "https://huggingface.co/api/models/onnx-community/siglip2-base-patch16-224-ONNX/revision/ba1f3b0843f24bc5417d38e19c37b287d719b2f4?blobs=true"
+  }
+]

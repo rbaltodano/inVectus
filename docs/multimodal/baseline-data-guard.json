@@ -1,0 +1,36 @@
+{
+  "benchmark-projects": {
+    "exists": true,
+    "files": 1118,
+    "bytes": 2636559515,
+    "path_size_mtime_sha256": "2f561c9bd42cd748a37e060addb22bfee960e3700d543614294b6c85f436eca5"
+  },
+  "benchmark-results": {
+    "exists": true,
+    "files": 1132,
+    "bytes": 2648602712,
+    "path_size_mtime_sha256": "f1cc4b3d825273310a69c2632cc7815ee47a4443089d1b84a875476ac247f86f"
+  },
+  "text-models": {
+    "exists": true,
+    "files": 10,
+    "bytes": 681832155,
+    "path_size_mtime_sha256": "f6fa91caa5be26308248f43d87e7ac0fa0446c85bdc98b92b6861ce38a39a0b3"
+  },
+  "text-model-store": {
+    "exists": true,
+    "files": 8,
+    "bytes": 681831211,
+    "path_size_mtime_sha256": "f3a68dc209990142b995ec493cd9a5340206bfb2cfd90942cf36ba077c4b744d"
+  },
+  "reference-vectors": {
+    "exists": true,
+    "files": 232,
+    "bytes": 1890881003,
+    "path_size_mtime_sha256": "bcd8269b9290787751c114f75435d616c4d469d347161dec2c265d06819a7988"
+  },
+  "reference-database": {
+    "bytes": 942419968,
+    "mtime_ns": 1792915206775972658
+  }
+}

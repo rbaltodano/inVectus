@@ -1,0 +1,52 @@
+{
+  "reference_revision": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
+  "candidate_revision": "ba1f3b0843f24bc5417d38e19c37b287d719b2f4",
+  "candidate": "siglip-onnx",
+  "platform": "macOS arm64 CPU",
+  "fixture_sha256": "d5d4dd535b0c62441211594228fc707f49b3d7916fa5f6c07445d3705ea1cd28",
+  "status": "diagnostic parity only; no production table or calibration modified",
+  "modalities": {
+    "text": {
+      "sample": 12,
+      "min_cosine": 1.0,
+      "mean_cosine": 1.0,
+      "max_absolute_error": 3.5762786865234375e-07,
+      "per_source_cosine": {
+        "astronaut": 1.0,
+        "camera": 1.0,
+        "cat": 1.0,
+        "coffee": 1.0,
+        "rocket": 1.0,
+        "horse": 1.0,
+        "retina": 1.0,
+        "galaxies": 1.0,
+        "red-circle": 1.0,
+        "red-square": 1.0000001192092896,
+        "blue-circle": 1.0000001192092896,
+        "blue-square": 1.0
+      }
+    },
+    "image": {
+      "sample": 12,
+      "min_cosine": 1.0,
+      "mean_cosine": 1.0,
+      "max_absolute_error": 1.4603137969970703e-06,
+      "per_source_cosine": {
+        "astronaut": 1.0,
+        "camera": 1.0000001192092896,
+        "cat": 1.0,
+        "coffee": 1.0000001192092896,
+        "rocket": 1.0,
+        "horse": 1.0000001192092896,
+        "retina": 1.0000001192092896,
+        "galaxies": 1.0000001192092896,
+        "red-circle": 1.0000001192092896,
+        "red-square": 1.0000001192092896,
+        "blue-circle": 1.0000001192092896,
+        "blue-square": 1.0000001192092896
+      }
+    }
+  },
+  "text_to_image_top1_agreement": 1.0,
+  "max_cross_modal_similarity_delta": 3.1851232051849365e-07
+}

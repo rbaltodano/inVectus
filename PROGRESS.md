@@ -521,9 +521,17 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
     paper is a corneal-biomechanics study at similarity 0.877 that does not involve the choroid.
 - **Limitation found:** a single-vector novelty check cannot tell a new *combination* from
   papers on one of its halves, because a description of A×B sits close to strong A papers. The
-  calibration was fitted on title→own-text pairs, not on combinations. Options: require the
-  nearest match to also be near both centroids, check each half separately, or calibrate on
-  combination examples. Not done yet. Descriptions are not human-reviewed.
+  calibration was fitted on title→own-text pairs, not on combinations.
+- **Fixed (owner approved): combination rule for between-region targets.** Of the description's
+  20 nearest items, only those that reach **both** regions count. "Reach" is the scan's rule: at
+  least the region's 25th-percentile centroid similarity, measured on each item's stored vector.
+  P(exists) comes from the nearest such item through the collection's curve. The nearest
+  one-sided item is reported as "not counted". Region targets keep the single-item check
+  (coverage only). Rerun of 47 ↔ 62: the first attempt is **accepted** as `near`
+  (P(exists) 0.47; nearest two-sided item "Choroidal Thickness and Associated Factors among
+  Adult Myopia…" at 0.824). The corneal-only Corvis ST paper is set aside. Reusing the
+  single-item curve on a filtered set is approximate, as with role filters. Combination
+  verdicts are not human-reviewed. Tests: 85 passed.
 
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the

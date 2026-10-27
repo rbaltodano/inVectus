@@ -1529,6 +1529,9 @@ fn run_describe(
                 n.nearest_title.as_deref().unwrap_or("-"),
                 n.nearest_similarity.unwrap_or(f32::NAN)
             );
+            if let Some((t, sim)) = &n.one_sided_nearest {
+                println!("    not counted (reaches only one side): {t} {sim:.3}");
+            }
         }
         println!("    {:.1}s", a.seconds);
     }

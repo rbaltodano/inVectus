@@ -9,8 +9,9 @@
 //! - **In one region** (coverage and stale gaps): the missing coverage item for the region's
 //!   demand. The description is on target when its nearest fine region is that region.
 //!
-//! Either way it is *novel* when an inVectus check of it (calibrated, exhaustive) is not
-//! `exists`. Up to `tries` descriptions are generated: the first deterministic, later ones
+//! It is *novel* when an inVectus check of it (calibrated, exhaustive) is not `exists`. For a
+//! combination of two regions only an item that reaches **both** regions can count as the same
+//! thing: a description of A×B always sits close to strong papers about A alone. Up to `tries` descriptions are generated: the first deterministic, later ones
 //! sampled. The model sees titles and roles only, never full texts.
 
 use anyhow::{Context, Result, bail};
@@ -71,8 +72,71 @@ pub struct Novelty {
     pub passed: bool,
     pub verdict: String,
     pub p_exists: f64,
+    /// The nearest item that counts as the same thing (for a combination: one that reaches
+    /// both regions).
     pub nearest_title: Option<String>,
     pub nearest_similarity: Option<f32>,
+    /// `single` (nearest item) or `combination` (nearest item reaching both regions).
+    #[serde(default)]
+    pub rule: String,
+    /// For combinations: the nearest item overall when it reaches only one side, which the
+    /// single-item rule would have counted.
+    #[serde(default)]
+    pub one_sided_nearest: Option<(String, f32)>,
+}
+
+/// One retrieved item for the combination rule.
+#[derive(Clone, Debug)]
+pub struct Candidate {
+    pub title: String,
+    /// Similarity to the description.
+    pub similarity: f32,
+    /// Similarity to each region's centroid.
+    pub to_a: f32,
+    pub to_b: f32,
+}
+
+/// Novelty of a description of a *combination* of regions A and B: only an item that reaches
+/// both regions (at least as central as each region's 25th-percentile member, the scan's reach
+/// rule) can be the same thing. Strong items about one side alone are reported, not counted.
+/// `predict` maps a nearest similarity to P(exists) with the collection's calibration.
+pub fn combination_novelty(
+    candidates: &[Candidate],
+    reach_a: f32,
+    reach_b: f32,
+    predict: &dyn Fn(f32) -> f64,
+) -> Novelty {
+    let both = candidates
+        .iter()
+        .filter(|c| c.to_a >= reach_a && c.to_b >= reach_b)
+        .max_by(|x, y| x.similarity.total_cmp(&y.similarity));
+    let nearest = candidates
+        .iter()
+        .max_by(|x, y| x.similarity.total_cmp(&y.similarity));
+    let p = both.map_or(predict(-1.0), |c| predict(c.similarity));
+    let verdict = Verdict::from_p(p);
+    Novelty {
+        passed: verdict != Verdict::Exists,
+        verdict: verdict.as_str().into(),
+        p_exists: p,
+        nearest_title: both.map(|c| c.title.clone()),
+        nearest_similarity: both.map(|c| c.similarity),
+        rule: "combination".into(),
+        one_sided_nearest: nearest
+            .filter(|n| both.is_none_or(|b| !std::ptr::eq(*n, b)))
+            .map(|n| (n.title.clone(), n.similarity)),
+    }
+}
+
+/// The 25th-percentile centroid similarity of a region's core members.
+fn reach(members: &[invectus_core::store::MemberRecord], region: i32) -> f32 {
+    let mut v: Vec<f32> = members
+        .iter()
+        .filter(|m| m.fine_id == region && !m.noise)
+        .map(|m| m.centroid_sim)
+        .collect();
+    v.sort_by(f32::total_cmp);
+    v.get(v.len() / 4).copied().unwrap_or(f32::INFINITY)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -231,6 +295,13 @@ pub fn describe(
         .store
         .latest_calibration(&table.collection_id, &table.space_id)?
         .is_some();
+    let members = project.store.region_members(&run.run_id)?;
+    let curve: Option<invectus_unsearch::Curve> = if has_calibration {
+        let cal = invectus_unsearch::verdict::calibration_for(project, table)?;
+        Some(serde_json::from_value(cal.curve)?)
+    } else {
+        None
+    };
     if !has_calibration {
         notes
             .push("no calibration: novelty was not checked (run `invectus calibrate`)".to_string());
@@ -370,6 +441,7 @@ pub fn describe(
                 encoder,
                 &format!("{title}. {description}"),
                 &CheckOptions {
+                    k: 20,
                     role: match target {
                         Target::Region { .. } => Some(Role::Coverage),
                         Target::Between { .. } => None,
@@ -377,13 +449,42 @@ pub fn describe(
                     ..Default::default()
                 },
             )?;
-            Some(Novelty {
-                passed: c.verdict != Verdict::Exists,
-                verdict: c.verdict.as_str().into(),
-                p_exists: c.p_exists,
-                nearest_title: c.search.hits.first().and_then(|h| h.item.title.clone()),
-                nearest_similarity: c.nearest_similarity,
-            })
+            match (&ends, target) {
+                (Some((ca, cb)), Target::Between { a, b, .. }) => {
+                    let ids: Vec<i64> = c.search.hits.iter().map(|h| h.item.item_id).collect();
+                    let stored = vectors.vectors_for(table, &ids)?;
+                    let candidates: Vec<Candidate> = c
+                        .search
+                        .hits
+                        .iter()
+                        .filter_map(|h| {
+                            let v = stored.get(&h.item.item_id)?;
+                            Some(Candidate {
+                                title: h.item.title.clone().unwrap_or_default(),
+                                similarity: h.similarity,
+                                to_a: dot(v, ca),
+                                to_b: dot(v, cb),
+                            })
+                        })
+                        .collect();
+                    let curve = &curve;
+                    Some(combination_novelty(
+                        &candidates,
+                        reach(&members, *a),
+                        reach(&members, *b),
+                        &|s| curve.as_ref().map_or(0.0, |k| k.predict(s)),
+                    ))
+                }
+                _ => Some(Novelty {
+                    passed: c.verdict != Verdict::Exists,
+                    verdict: c.verdict.as_str().into(),
+                    p_exists: c.p_exists,
+                    nearest_title: c.search.hits.first().and_then(|h| h.item.title.clone()),
+                    nearest_similarity: c.nearest_similarity,
+                    rule: "single".into(),
+                    one_sided_nearest: None,
+                }),
+            }
         } else {
             None
         };
@@ -428,6 +529,42 @@ pub fn describe(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn combinations_need_an_item_on_both_sides() {
+        let c = |title: &str, similarity: f32, to_a: f32, to_b: f32| Candidate {
+            title: title.into(),
+            similarity,
+            to_a,
+            to_b,
+        };
+        // P(exists) rises with similarity: 0.9 → 0.95, 0.7 → 0.1.
+        let predict = |s: f32| {
+            if s >= 0.85 {
+                0.95
+            } else if s >= 0.75 {
+                0.5
+            } else {
+                0.1
+            }
+        };
+        // A strong paper on side A alone is not the combination.
+        let n = combination_novelty(
+            &[c("A only", 0.9, 0.9, 0.5), c("Both", 0.7, 0.8, 0.8)],
+            0.75,
+            0.75,
+            &predict,
+        );
+        assert!(n.passed && n.verdict == "open", "{n:?}");
+        assert_eq!(n.nearest_title.as_deref(), Some("Both"));
+        assert_eq!(n.one_sided_nearest, Some(("A only".into(), 0.9)));
+        // A close paper that reaches both sides is.
+        let n = combination_novelty(&[c("Both", 0.9, 0.8, 0.8)], 0.75, 0.75, &predict);
+        assert!(!n.passed && n.verdict == "exists" && n.one_sided_nearest.is_none());
+        // Nothing reaches both: the lowest P.
+        let n = combination_novelty(&[c("A only", 0.95, 0.9, 0.1)], 0.75, 0.75, &predict);
+        assert_eq!((n.p_exists, n.nearest_title), (0.1, None));
+    }
 
     #[test]
     fn slerp_stays_on_the_sphere_between_the_ends() {

@@ -1,9 +1,9 @@
-//! Search verdicts and calibration boundary from SPEC §7.2 (internal crate name only; user-facing text says "inVectus search"). Implementation starts after P0.
+//! inVectus search verdicts and their calibration (SPEC §6.1–6.2). `unsearch` is an internal crate
+//! name only; user-facing text says "inVectus search".
+pub mod calibrate;
+pub mod curve;
+pub mod verdict;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn scaffold_is_available() {
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
-    }
-}
+pub use calibrate::{CalibrateOptions, CalibrationReport, run_calibration};
+pub use curve::Curve;
+pub use verdict::{CheckOptions, CheckResult, Verdict, check};

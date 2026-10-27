@@ -74,7 +74,7 @@ fn setup() -> (tempfile::TempDir, PathBuf, String) {
 
 #[test]
 fn import_status_and_offline_guards_without_models() {
-    let (_dir, models, project) = setup();
+    let (dir, models, project) = setup();
     let status: serde_json::Value =
         serde_json::from_str(&ok(cli(&models, &["status", "-p", &project, "--json"]))).unwrap();
     let c = &status["collections"][0];
@@ -110,6 +110,36 @@ fn import_status_and_offline_guards_without_models() {
         &["--offline", "embed", "-p", &project, "-c", "nope"],
     ));
     assert!(e.contains("no collection"), "{e}");
+    let e = fail(cli(
+        &models,
+        &[
+            "--offline",
+            "check",
+            "-p",
+            &project,
+            "-c",
+            "items",
+            "myopia",
+        ],
+    ));
+    assert!(e.contains("no vectors"), "{e}");
+    let e = fail(cli(
+        &models,
+        &[
+            "--offline",
+            "import",
+            "-p",
+            &project,
+            dir.path().join("items.csv").to_str().unwrap(),
+            "-c",
+            "tok",
+            "--text",
+            "body",
+            "--chunk-tokenizer",
+            "bge-small-en-v1.5",
+        ],
+    ));
+    assert!(e.contains("not installed"), "{e}");
 }
 
 #[test]
@@ -124,7 +154,7 @@ fn embed_and_search_with_the_pinned_bge_model() {
         eprintln!("SKIP: no BGE model files at {}", src.display());
         return;
     }
-    let (_dir, models, project) = setup();
+    let (dir, models, project) = setup();
     ok(cli(
         &models,
         &[
@@ -204,4 +234,62 @@ fn embed_and_search_with_the_pinned_bge_model() {
         ],
     ));
     assert!(e.contains("no ANN index"), "{e}");
+
+    // A verdict needs a calibration, and three items are too few to fit one.
+    let e = fail(cli(
+        &models,
+        &[
+            "--offline",
+            "check",
+            "-p",
+            &project,
+            "-c",
+            "items",
+            "myopia",
+        ],
+    ));
+    assert!(e.contains("invectus calibrate"), "{e}");
+    let e = fail(cli(
+        &models,
+        &["--offline", "calibrate", "-p", &project, "-c", "items"],
+    ));
+    assert!(e.contains("30 or more"), "{e}");
+
+    // Token-sized chunks: every chunk fits the token budget, so nothing is truncated.
+    let long = dir.path().join("long.csv");
+    let body = "Orthokeratology lenses reshape the cornea overnight to slow axial elongation. "
+        .repeat(120);
+    std::fs::write(&long, format!("id,title,body\nL1,Long report,\"{body}\"\n")).unwrap();
+    let o = ok(cli(
+        &models,
+        &[
+            "--offline",
+            "import",
+            "-p",
+            &project,
+            long.to_str().unwrap(),
+            "-c",
+            "tok",
+            "--id",
+            "id",
+            "--title",
+            "title",
+            "--text",
+            "body",
+            "--chunk-tokenizer",
+            "bge-small-en-v1.5",
+            "--json",
+        ],
+    ));
+    let r: serde_json::Value = serde_json::from_str(&o).unwrap();
+    assert_eq!(r["items_chunked"], 1);
+    let chunks = r["chunks_written"].as_u64().unwrap();
+    assert!((3..=8).contains(&chunks), "{chunks}");
+    let r: serde_json::Value = serde_json::from_str(&ok(cli(
+        &models,
+        &["--offline", "embed", "-p", &project, "-c", "tok", "--json"],
+    )))
+    .unwrap();
+    // Only the parent (head-truncated whole text) exceeds the cap; no chunk does.
+    assert_eq!(r["truncated"], 1, "{r}");
 }

@@ -13,6 +13,7 @@ invectus-core = { path = "crates/core" }
 invectus-ingest = { path = "crates/ingest" }
 invectus-embed = { path = "crates/embed" }
 invectus-index = { path = "crates/index" }
+invectus-unsearch = { path = "crates/unsearch" }
 
 anyhow = "1"
 thiserror = "2"

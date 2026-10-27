@@ -7,7 +7,7 @@ pub mod net;
 pub mod project;
 pub mod store;
 
-pub use embedder::{Embedding, TextEmbedder};
+pub use embedder::{Embedding, TextEmbedder, TokenOffsets};
 pub use identity::{EmbeddingIdentity, InputKind, Normalization, Pooling};
 pub use item::{Item, Role};
 pub use job::{CancelToken, Progress};

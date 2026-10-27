@@ -3,15 +3,19 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use invectus_core::{CancelToken, Project, Role, TextEmbedder};
-use invectus_embed::{EmbedOptions, ModelStore, OnnxEmbedder, query_encoder, registry};
+use invectus_embed::{
+    EmbedOptions, ModelStore, ModelTokenizer, OnnxEmbedder, query_encoder, registry,
+};
 use invectus_index::parity::run_parity;
 use invectus_index::{
     EmbedJobOptions, SearchMode, SearchOptions, VectorStore, run_embed, search, select_table,
 };
 use invectus_ingest::gapmap::{GapmapPaths, import_gapmap, parse_models_yaml};
 use invectus_ingest::{
-    ChunkPolicy, ImportRequest, Mapping, MetaMapping, RoleMapping, Source, import, preview,
+    ChunkPolicy, ImportRequest, Mapping, MetaMapping, RoleMapping, Source, TokenChunking,
+    import_with, preview,
 };
+use invectus_unsearch::{CalibrateOptions, CheckOptions, check, run_calibration};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -41,6 +45,7 @@ struct ProjectArg {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)] // parsed once per run
 enum Command {
     /// Create a project folder.
     Init { path: PathBuf },
@@ -57,6 +62,10 @@ enum Command {
     Embed(EmbedArgs),
     /// Nearest items to a query in a collection (positive search, not an absence verdict).
     Search(SearchArgs),
+    /// Fit what similarity means "the same thing" for a collection (needed by `check`).
+    Calibrate(CalibrateArgs),
+    /// Does an idea already exist in a collection? Calibrated verdict: exists, near or open.
+    Check(CheckArgs),
     /// Check that the local encoder reproduces a collection's imported vectors.
     Parity(ParityArgs),
     /// Manage embedding models.
@@ -110,6 +119,16 @@ struct ImportArgs {
     chunk_chars: usize,
     #[arg(long, default_value_t = ChunkPolicy::default().overlap_chars)]
     chunk_overlap: usize,
+    /// Size chunks in this model's tokens instead of characters (its tokenizer must be
+    /// installed), e.g. bge-small-en-v1.5.
+    #[arg(long)]
+    chunk_tokenizer: Option<String>,
+    /// With --chunk-tokenizer: split texts longer than this many tokens.
+    #[arg(long, default_value_t = TokenChunking::DEFAULT_MAX_TOKENS)]
+    chunk_tokens: usize,
+    /// With --chunk-tokenizer: tokens repeated at the start of the next chunk.
+    #[arg(long, default_value_t = TokenChunking::DEFAULT_OVERLAP_TOKENS)]
+    chunk_token_overlap: usize,
     /// Read at most this many rows/files.
     #[arg(long)]
     limit: Option<usize>,
@@ -163,6 +182,49 @@ struct SearchArgs {
     /// Force ANN with this many IVF partitions probed.
     #[arg(long)]
     nprobes: Option<usize>,
+    #[arg(long, default_value_t = 4)]
+    threads: usize,
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct CalibrateArgs {
+    #[command(flatten)]
+    p: ProjectArg,
+    #[arg(short, long)]
+    collection: String,
+    /// Vector space (id prefix or model key) when the collection has several.
+    #[arg(long)]
+    space: Option<String>,
+    /// Items to sample (one same-thing pair and five related pairs each).
+    #[arg(long, default_value_t = CalibrateOptions::default().sample)]
+    sample: usize,
+    #[arg(long, default_value_t = EmbedOptions::default().threads)]
+    threads: usize,
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct CheckArgs {
+    #[command(flatten)]
+    p: ProjectArg,
+    #[arg(short, long)]
+    collection: String,
+    /// The idea, in a sentence or two.
+    query: String,
+    #[arg(long)]
+    space: Option<String>,
+    /// Nearest items to show (at least 10 are compared).
+    #[arg(short, default_value_t = 10)]
+    k: usize,
+    /// Compare only against items with this role (usually coverage).
+    #[arg(long)]
+    role: Option<Role>,
+    /// Use the ANN index when there is one (faster, can miss a closer item).
+    #[arg(long)]
+    fast: bool,
     #[arg(long, default_value_t = 4)]
     threads: usize,
     #[arg(long)]
@@ -261,9 +323,11 @@ fn run() -> Result<()> {
             }
         }
         Command::Status { p, json } => status(&open(&p)?, json)?,
-        Command::Import(a) => cmd_import(a)?,
+        Command::Import(a) => cmd_import(a, &cli.models_dir)?,
         Command::Embed(a) => cmd_embed(a, &cli.models_dir)?,
         Command::Search(a) => cmd_search(a, &cli.models_dir)?,
+        Command::Calibrate(a) => cmd_calibrate(a, &cli.models_dir)?,
+        Command::Check(a) => cmd_check(a, &cli.models_dir)?,
         Command::Parity(a) => cmd_parity(a, &cli.models_dir)?,
         Command::Models { command } => cmd_models(command, &cli.models_dir)?,
         Command::Gapmap {
@@ -379,8 +443,13 @@ fn status(p: &Project, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_import(a: ImportArgs) -> Result<()> {
+fn cmd_import(a: ImportArgs, models_dir: &Option<PathBuf>) -> Result<()> {
     let source = Source::detect(&a.source)?;
+    let tokenizer = a
+        .chunk_tokenizer
+        .as_deref()
+        .map(|key| ModelTokenizer::load(&models(models_dir)?, key))
+        .transpose()?;
     let role = match (&a.role, &a.role_column) {
         (Some(r), _) => RoleMapping::Constant { role: *r },
         (None, Some(col)) => RoleMapping::Column {
@@ -426,9 +495,13 @@ fn cmd_import(a: ImportArgs) -> Result<()> {
         collection: a.collection,
         source,
         mapping,
-        chunking: ChunkPolicy {
-            max_chars: a.chunk_chars,
-            overlap_chars: a.chunk_overlap,
+        chunking: match &tokenizer {
+            Some(t) => ChunkPolicy::tokens(t, a.chunk_tokens, a.chunk_token_overlap),
+            None => ChunkPolicy {
+                max_chars: a.chunk_chars,
+                overlap_chars: a.chunk_overlap,
+                tokens: None,
+            },
         },
         limit: a.limit,
     };
@@ -456,7 +529,13 @@ fn cmd_import(a: ImportArgs) -> Result<()> {
     }
     let mut project = open(&a.p)?;
     let t = Instant::now();
-    let r = import(&mut project, &req)?;
+    let r = import_with(
+        &mut project,
+        &req,
+        tokenizer
+            .as_ref()
+            .map(|t| t as &dyn invectus_core::TokenOffsets),
+    )?;
     if a.json {
         return print_json(&r);
     }
@@ -624,6 +703,172 @@ fn cmd_search(a: SearchArgs, models_dir: &Option<PathBuf>) -> Result<()> {
                 .unwrap_or_default(),
             h.via_chunk
                 .map(|c| format!(" · via chunk {c}"))
+                .unwrap_or_default()
+        );
+        if let Some(u) = &h.item.url {
+            println!("       {u}");
+        }
+    }
+    for n in &r.notes {
+        println!("note: {n}");
+    }
+    Ok(())
+}
+
+fn cmd_calibrate(a: CalibrateArgs, models_dir: &Option<PathBuf>) -> Result<()> {
+    let project = open(&a.p)?;
+    let table = select_table(&project, &a.collection, a.space.as_deref())?;
+    let store = models(models_dir)?;
+    let mut encoder = query_encoder(
+        &store,
+        &table.identity,
+        &EmbedOptions {
+            threads: a.threads,
+            ..Default::default()
+        },
+    )?;
+    let vectors = VectorStore::open(&project)?;
+    let cancel = CancelToken::default();
+    let c = cancel.clone();
+    ctrlc::set_handler(move || {
+        eprintln!("\ncancelling (nothing is saved until calibration finishes)…");
+        c.cancel();
+    })
+    .context("installing Ctrl-C handler")?;
+    let quiet = a.json;
+    let mut last = Instant::now();
+    let r = run_calibration(
+        &project,
+        &vectors,
+        &table,
+        &mut encoder,
+        &CalibrateOptions {
+            sample: a.sample,
+            ..Default::default()
+        },
+        &cancel,
+        &mut |p| {
+            if !quiet && (last.elapsed().as_secs_f64() > 2.0 || p.done == p.total) {
+                last = Instant::now();
+                eprintln!("  {}/{} steps", p.done, p.total);
+            }
+        },
+    )?;
+    if a.json {
+        return print_json(&r);
+    }
+    if r.cancelled {
+        println!("cancelled; nothing was saved");
+        return Ok(());
+    }
+    println!(
+        "calibrated {} · space {} ({}) · {}",
+        r.collection,
+        &r.space_id[..12],
+        r.model_key,
+        r.method
+    );
+    let spread = |s: &invectus_unsearch::calibrate::Spread| {
+        format!("{:.3}/{:.3}/{:.3}", s.p10, s.p50, s.p90)
+    };
+    println!(
+        "{} titles · similarity p10/p50/p90: own text {} · nearest other item {} · related items {}",
+        r.items,
+        spread(&r.own_text),
+        spread(&r.nearest_other),
+        spread(&r.related)
+    );
+    println!(
+        "held out ({} queries): AUC {:.3}, balanced Brier {:.3}, balanced accuracy {:.3} · pairwise AUC (own vs related) {:.3}",
+        r.holdout.items,
+        r.holdout.auc,
+        r.holdout.brier,
+        r.holdout.balanced_accuracy,
+        r.pairwise_auc
+    );
+    println!(
+        "title → own text among all {} vectors: recall@1 {:.3}, recall@10 {:.3}, MRR {:.3}",
+        r.vectors, r.known_item.recall_at_1, r.known_item.recall_at_10, r.known_item.mrr
+    );
+    let at = |s: Option<f32>| s.map_or("never".into(), |s| format!("{s:.3}"));
+    println!(
+        "P(exists) reaches 0.5 at nearest similarity {} and 0.7 at {} · embedding {:.1}s of {:.1}s",
+        at(r.similarity_at_p50),
+        at(r.similarity_at_p70),
+        r.embed_seconds,
+        r.seconds
+    );
+    for n in &r.notes {
+        println!("note: {n}");
+    }
+    Ok(())
+}
+
+fn cmd_check(a: CheckArgs, models_dir: &Option<PathBuf>) -> Result<()> {
+    let project = open(&a.p)?;
+    let table = select_table(&project, &a.collection, a.space.as_deref())?;
+    // Fail on a missing calibration before spending time loading the model.
+    invectus_unsearch::verdict::calibration_for(&project, &table)?;
+    let store = models(models_dir)?;
+    let mut encoder = query_encoder(
+        &store,
+        &table.identity,
+        &EmbedOptions {
+            threads: a.threads,
+            batch_size: 1,
+        },
+    )?;
+    let vectors = VectorStore::open(&project)?;
+    let r = check(
+        &project,
+        &vectors,
+        &table,
+        &mut encoder,
+        &a.query,
+        &CheckOptions {
+            k: a.k,
+            role: a.role,
+            mode: if a.fast {
+                SearchMode::Auto
+            } else {
+                SearchMode::Exhaustive
+            },
+        },
+    )?;
+    if a.json {
+        return print_json(&r);
+    }
+    println!(
+        "{} · P(exists) {:.2} · {} ({}, space {})",
+        r.verdict.as_str().to_uppercase(),
+        r.p_exists,
+        r.search.collection,
+        r.search.model_key,
+        &r.search.space_id[..12]
+    );
+    println!("{}", r.summary);
+    println!("next: {}", r.next_step);
+    let f = |x: Option<f32>| x.map_or("-".into(), |x| format!("{x:.3}"));
+    println!(
+        "nearest similarity {} · drop to 10th {} · local density {} · {} · {} vectors compared",
+        f(r.nearest_similarity),
+        f(r.drop_to_10th),
+        f(r.local_density),
+        r.search.mode,
+        r.search.vectors_compared
+    );
+    println!("calibration: {}", r.calibration.quality);
+    for h in r.search.hits.iter().take(a.k) {
+        println!(
+            "{:>3}. {:.4}  [{}] {}{}",
+            h.rank,
+            h.similarity,
+            h.item.role.as_str(),
+            h.item.title.as_deref().unwrap_or(&h.item.source_id),
+            h.item
+                .date
+                .as_deref()
+                .map(|d| format!(" ({d})"))
                 .unwrap_or_default()
         );
         if let Some(u) = &h.item.url {

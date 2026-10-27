@@ -7,7 +7,7 @@ use crate::source::{self, Source};
 use anyhow::{Result, bail};
 use invectus_core::item::{item_id, validate_collection_name};
 use invectus_core::store::{CollectionRecord, WriteCounts};
-use invectus_core::{Item, Project};
+use invectus_core::{Item, Project, TokenOffsets};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
@@ -71,8 +71,18 @@ pub fn preview(req: &ImportRequest, n: usize) -> Result<Preview> {
 }
 
 pub fn import(project: &mut Project, req: &ImportRequest) -> Result<ImportReport> {
+    import_with(project, req, None)
+}
+
+/// Import with the tokenizer a token-sized chunk policy needs (`None` for character chunks).
+pub fn import_with(
+    project: &mut Project,
+    req: &ImportRequest,
+    tokenizer: Option<&dyn TokenOffsets>,
+) -> Result<ImportReport> {
     validate_collection_name(&req.collection)?;
     req.chunking.validate()?;
+    req.chunking.check_tokenizer(tokenizer)?;
     if let Some(existing) = project.store.collection(&req.collection)? {
         let existing_policy: Option<ChunkPolicy> = serde_json::from_value(existing.chunking).ok();
         if existing_policy.is_some_and(|p| p != req.chunking) {
@@ -107,7 +117,7 @@ pub fn import(project: &mut Project, req: &ImportRequest) -> Result<ImportReport
         collection_id: req.collection.clone(),
         source: serde_json::to_value(&req.source)?,
         mapping: serde_json::to_value(&req.mapping)?,
-        chunking: serde_json::to_value(req.chunking)?,
+        chunking: serde_json::to_value(&req.chunking)?,
     })?;
     let existing: HashSet<i64> = project
         .store
@@ -131,7 +141,7 @@ pub fn import(project: &mut Project, req: &ImportRequest) -> Result<ImportReport
         if mapped.unparsed_date.is_some() {
             unparsed_dates += 1;
         }
-        let (item, chunks) = build_item(&req.collection, &req.chunking, mapped);
+        let (item, chunks) = build_item(&req.collection, &req.chunking, tokenizer, mapped)?;
         if !chunks.is_empty() {
             report.items_chunked += 1;
         }
@@ -169,7 +179,12 @@ fn add(t: &mut WriteCounts, c: WriteCounts) {
 
 /// Build the stored item and its chunks. The chunk policy is part of the parent's hash, so a
 /// policy change would rebuild chunks.
-pub fn build_item(collection: &str, policy: &ChunkPolicy, r: MappedRow) -> (Item, Vec<Item>) {
+pub fn build_item(
+    collection: &str,
+    policy: &ChunkPolicy,
+    tokenizer: Option<&dyn TokenOffsets>,
+    r: MappedRow,
+) -> Result<(Item, Vec<Item>)> {
     let id = item_id(collection, &r.source_id, None);
     let hash_meta = serde_json::json!({"meta": r.meta, "chunking": policy});
     let hash = Item::content_hash(
@@ -181,7 +196,7 @@ pub fn build_item(collection: &str, policy: &ChunkPolicy, r: MappedRow) -> (Item
         &hash_meta,
     );
     let chunks = policy
-        .split(&r.text)
+        .split(&r.text, tokenizer)?
         .into_iter()
         .enumerate()
         .map(|(i, text)| Item {
@@ -220,5 +235,5 @@ pub fn build_item(collection: &str, policy: &ChunkPolicy, r: MappedRow) -> (Item
         chunk_index: None,
         input_hash: hash,
     };
-    (item, chunks)
+    Ok((item, chunks))
 }

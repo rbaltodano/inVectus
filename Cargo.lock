@@ -3568,6 +3568,7 @@ dependencies = [
  "invectus-embed",
  "invectus-index",
  "invectus-ingest",
+ "invectus-unsearch",
  "serde",
  "serde_json",
  "tauri",
@@ -3586,6 +3587,7 @@ dependencies = [
  "invectus-embed",
  "invectus-index",
  "invectus-ingest",
+ "invectus-unsearch",
  "serde",
  "serde_json",
  "tempfile",
@@ -3678,6 +3680,15 @@ version = "0.1.0"
 [[package]]
 name = "invectus-unsearch"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "invectus-core",
+ "invectus-index",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
 
 [[package]]
 name = "invectus-verify"

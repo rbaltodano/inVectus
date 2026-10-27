@@ -13,6 +13,7 @@ invectus-core.workspace = true
 invectus-ingest.workspace = true
 invectus-embed.workspace = true
 invectus-index.workspace = true
+invectus-unsearch.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

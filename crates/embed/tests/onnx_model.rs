@@ -2,8 +2,8 @@
 //! `INVECTUS_TEST_MODEL_SRC` to a folder of model folders (default: `<repo>/.spike-data/models`).
 //! Without them the tests print a skip notice and pass.
 
-use invectus_core::{InputKind, TextEmbedder};
-use invectus_embed::{EmbedOptions, ModelStore, OnnxEmbedder, registry};
+use invectus_core::{InputKind, TextEmbedder, TokenOffsets};
+use invectus_embed::{EmbedOptions, ModelStore, ModelTokenizer, OnnxEmbedder, registry};
 use std::path::PathBuf;
 
 fn bge() -> Option<(tempfile::TempDir, OnnxEmbedder)> {
@@ -64,4 +64,29 @@ fn bge_embeds_unit_vectors_with_semantic_order_and_reports_truncation() {
     let t = e.embed(&long, InputKind::Document).unwrap();
     assert!(t[0].truncated);
     assert_eq!(t[0].tokens, 512);
+}
+
+#[test]
+fn bge_tokenizer_offsets_cover_the_text_and_match_the_embedder() {
+    let Some((root, mut e)) = bge() else { return };
+    let store = ModelStore::new(root.path());
+    let t = ModelTokenizer::load(&store, "bge-small-en-v1.5").unwrap();
+    assert_eq!(
+        t.tokenizer_sha256(),
+        registry::spec("bge-small-en-v1.5")
+            .unwrap()
+            .file("tokenizer.json")
+            .sha256
+    );
+    let text = "Kératocône: crosslinking slows ectasia.  Orthokeratology works.";
+    let offsets = t.offsets(text).unwrap();
+    // Byte ranges on char boundaries, in order, and every word is covered.
+    assert!(offsets.windows(2).all(|w| w[0].1 <= w[1].0));
+    let pieces: Vec<&str> = offsets.iter().map(|&(a, b)| &text[a..b]).collect();
+    assert!(pieces.contains(&":") && pieces.contains(&"."));
+    assert_eq!(pieces.concat().replace(' ', ""), text.replace(' ', ""));
+    // Same count the embedder sees, minus [CLS] and [SEP].
+    let v = e.embed(&[text.to_string()], InputKind::Document).unwrap();
+    assert_eq!(offsets.len() + 2, v[0].tokens);
+    assert_eq!(t.offsets(&"word ".repeat(2000)).unwrap().len(), 2000);
 }

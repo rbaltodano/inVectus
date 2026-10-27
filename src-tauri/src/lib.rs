@@ -1,6 +1,6 @@
 //! Desktop shell: Tauri commands over the same engine crates as the `invectus` CLI.
 
-use invectus_core::store::CollectionSummary;
+use invectus_core::store::{CollectionSummary, VectorTableRecord};
 use invectus_core::{CancelToken, Project, Role};
 use invectus_embed::{EmbedOptions, ModelStore, OnnxEmbedder, query_encoder, registry};
 use invectus_index::{
@@ -9,6 +9,9 @@ use invectus_index::{
 };
 use invectus_ingest::{
     ChunkPolicy, ImportReport, ImportRequest, Mapping, MetaMapping, Preview, RoleMapping, Source,
+};
+use invectus_unsearch::{
+    CalibrateOptions, CalibrationReport, CheckOptions, CheckResult, check, run_calibration,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -212,6 +215,7 @@ fn request(f: ImportForm) -> anyhow::Result<ImportRequest> {
         chunking: ChunkPolicy {
             max_chars: f.chunk_chars,
             overlap_chars: f.chunk_overlap,
+            tokens: None,
         },
         limit: f.limit,
     })
@@ -351,25 +355,34 @@ async fn search(state: State<'_, AppState>, form: SearchForm) -> CmdResult<Searc
     off_thread(move || search_blocking(&session, form)).await
 }
 
+/// The session's query encoder for `table`'s space, loaded on first use.
+fn encoder_for<'a>(
+    s: &'a mut Session,
+    table: &VectorTableRecord,
+) -> anyhow::Result<&'a mut OnnxEmbedder> {
+    if s.encoder
+        .as_ref()
+        .is_none_or(|(id, _)| *id != table.space_id)
+    {
+        let store = ModelStore::new(ModelStore::default_root()?);
+        let enc = query_encoder(
+            &store,
+            &table.identity,
+            &EmbedOptions {
+                threads: 4,
+                batch_size: 1,
+            },
+        )?;
+        s.encoder = Some((table.space_id.clone(), enc));
+    }
+    Ok(&mut s.encoder.as_mut().unwrap().1)
+}
+
 fn search_blocking(session: &Shared, form: SearchForm) -> CmdResult<SearchResult> {
     with_session(session, |s| {
         let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-        if s.encoder
-            .as_ref()
-            .is_none_or(|(id, _)| *id != table.space_id)
-        {
-            let store = ModelStore::new(ModelStore::default_root()?);
-            let enc = query_encoder(
-                &store,
-                &table.identity,
-                &EmbedOptions {
-                    threads: 4,
-                    batch_size: 1,
-                },
-            )?;
-            s.encoder = Some((table.space_id.clone(), enc));
-        }
-        let (_, encoder) = s.encoder.as_mut().unwrap();
+        encoder_for(s, &table)?;
+        let encoder = &mut s.encoder.as_mut().unwrap().1;
         engine_search(
             &s.project,
             &s.vectors,
@@ -389,6 +402,116 @@ fn search_blocking(session: &Shared, form: SearchForm) -> CmdResult<SearchResult
     })
 }
 
+#[derive(Clone, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum CalibrateEvent {
+    Progress { done: usize, total: usize },
+    Finished { report: Box<CalibrationReport> },
+    Failed { error: String },
+}
+
+/// Calibrate a collection's vector space on a worker thread; progress arrives as
+/// `calibrate-event` events and `cancel_job` stops it (nothing is saved when cancelled).
+#[tauri::command]
+fn start_calibration(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    collection: String,
+    space: Option<String>,
+) -> CmdResult<()> {
+    let session = state.session.clone();
+    if session
+        .try_lock()
+        .map_err(|_| "busy: a job is running")?
+        .is_none()
+    {
+        return Err("no project is open".into());
+    }
+    let cancel = CancelToken::default();
+    *state.cancel.lock().unwrap() = Some(cancel.clone());
+    std::thread::spawn(move || {
+        let result = (|| -> anyhow::Result<CalibrationReport> {
+            let mut guard = session.lock().unwrap();
+            let s = guard
+                .as_mut()
+                .ok_or_else(|| anyhow::anyhow!("no project is open"))?;
+            let table = select_table(&s.project, &collection, space.as_deref())?;
+            encoder_for(s, &table)?;
+            let encoder = &mut s.encoder.as_mut().unwrap().1;
+            let app2 = app.clone();
+            run_calibration(
+                &s.project,
+                &s.vectors,
+                &table,
+                encoder,
+                &CalibrateOptions::default(),
+                &cancel,
+                &mut |p| {
+                    let _ = app2.emit(
+                        "calibrate-event",
+                        CalibrateEvent::Progress {
+                            done: p.done,
+                            total: p.total,
+                        },
+                    );
+                },
+            )
+        })();
+        let event = match result {
+            Ok(report) => CalibrateEvent::Finished {
+                report: Box::new(report),
+            },
+            Err(e) => CalibrateEvent::Failed {
+                error: format!("{e:#}"),
+            },
+        };
+        let _ = app.emit("calibrate-event", event);
+    });
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct CheckForm {
+    collection: String,
+    query: String,
+    k: usize,
+    role: Option<Role>,
+    /// Use the ANN index when there is one; exhaustive otherwise.
+    fast: bool,
+    space: Option<String>,
+}
+
+/// inVectus search verdict: exists / near / open with P(exists) and the evidence.
+#[tauri::command]
+async fn check_idea(state: State<'_, AppState>, form: CheckForm) -> CmdResult<CheckResult> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_unsearch::verdict::calibration_for(&s.project, &table)?;
+            encoder_for(s, &table)?;
+            let encoder = &mut s.encoder.as_mut().unwrap().1;
+            check(
+                &s.project,
+                &s.vectors,
+                &table,
+                encoder,
+                &form.query,
+                &CheckOptions {
+                    k: form.k,
+                    role: form.role,
+                    mode: if form.fast {
+                        SearchMode::Auto
+                    } else {
+                        SearchMode::Exhaustive
+                    },
+                },
+            )
+        })
+    })
+    .await
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -402,7 +525,9 @@ pub fn run() {
             list_models,
             start_embed,
             cancel_job,
-            search
+            search,
+            start_calibration,
+            check_idea
         ])
         .run(tauri::generate_context!())
         .expect("failed to run inVectus");

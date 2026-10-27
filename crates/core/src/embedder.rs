@@ -14,6 +14,16 @@ pub struct Embedding {
     pub truncated: bool,
 }
 
+/// Token boundaries from a model's tokenizer, used to size chunks in tokens.
+pub trait TokenOffsets {
+    /// Registry key of the model whose tokenizer this is.
+    fn model_key(&self) -> &str;
+    /// SHA-256 of the tokenizer file; recorded in the chunk policy.
+    fn tokenizer_sha256(&self) -> &str;
+    /// Byte ranges of the tokens of `text` in order, without special tokens.
+    fn offsets(&self, text: &str) -> Result<Vec<(usize, usize)>>;
+}
+
 /// A loaded model that embeds text into exactly one vector space.
 pub trait TextEmbedder: Send {
     fn identity(&self) -> &EmbeddingIdentity;

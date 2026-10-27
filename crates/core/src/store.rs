@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS parity_checks (
 CREATE TABLE IF NOT EXISTS jobs (
   job_id TEXT PRIMARY KEY, kind TEXT, params JSON, state TEXT, progress REAL,
   checkpoint JSON, updated_at TIMESTAMP);
+CREATE TABLE IF NOT EXISTS calibrations (
+  collection_id TEXT, space_id TEXT, method TEXT, sample INTEGER, vectors INTEGER,
+  curve JSON, metrics JSON, created_at TIMESTAMP);
 "#;
 
 /// Settings applied to every DuckDB connection: never fetch extensions from the network.
@@ -108,6 +111,24 @@ pub struct JobRecord {
     pub state: String,
     pub progress: f64,
     pub checkpoint: serde_json::Value,
+}
+
+/// A fitted similarity → P(same thing) curve for one collection and vector space (SPEC §6.2).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CalibrationRecord {
+    pub collection_id: String,
+    pub space_id: String,
+    /// How positive and negative pairs were made, e.g. `title-vs-text (no LLM)`.
+    pub method: String,
+    /// Items sampled.
+    pub sample: i64,
+    /// Vectors in the table when fitted; a different count means the collection changed.
+    pub vectors: i64,
+    pub curve: serde_json::Value,
+    pub metrics: serde_json::Value,
+    /// Set by the store when read back.
+    #[serde(default)]
+    pub created_at: Option<String>,
 }
 
 /// Row needed to embed an item.
@@ -515,6 +536,98 @@ impl Store {
             .optional()?)
     }
 
+    // ---- calibration -------------------------------------------------------------------
+
+    pub fn save_calibration(&self, c: &CalibrationRecord) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO calibrations VALUES (?, ?, ?, ?, ?, ?, ?, now())",
+            params![
+                c.collection_id,
+                c.space_id,
+                c.method,
+                c.sample,
+                c.vectors,
+                c.curve.to_string(),
+                c.metrics.to_string()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Most recent calibration of a collection's vector space.
+    pub fn latest_calibration(
+        &self,
+        collection_id: &str,
+        space_id: &str,
+    ) -> Result<Option<CalibrationRecord>> {
+        self.conn
+            .query_row(
+                "SELECT collection_id, space_id, method, sample, vectors, curve::VARCHAR,
+                        metrics::VARCHAR, CAST(created_at AS VARCHAR)
+                 FROM calibrations WHERE collection_id = ? AND space_id = ?
+                 ORDER BY created_at DESC LIMIT 1",
+                [collection_id, space_id],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, i64>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, String>(5)?,
+                        r.get::<_, String>(6)?,
+                        r.get::<_, String>(7)?,
+                    ))
+                },
+            )
+            .optional()?
+            .map(
+                |(collection_id, space_id, method, sample, vectors, curve, metrics, at)| {
+                    Ok(CalibrationRecord {
+                        collection_id,
+                        space_id,
+                        method,
+                        sample,
+                        vectors,
+                        curve: serde_json::from_str(&curve)?,
+                        metrics: serde_json::from_str(&metrics)?,
+                        created_at: Some(at),
+                    })
+                },
+            )
+            .transpose()
+    }
+
+    /// Top-level items with a non-empty title and at least `min_text_chars` of text, ordered by
+    /// id (ids are hash-derived, so this order is a stable pseudo-random sample).
+    pub fn titled_items(
+        &self,
+        collection_id: &str,
+        min_text_chars: usize,
+        limit: usize,
+    ) -> Result<Vec<EmbedRow>> {
+        let mut st = self.conn.prepare(
+            "SELECT item_id, parent_id, title, text FROM items
+             WHERE collection_id = ? AND parent_id IS NULL AND length(trim(coalesce(title, ''))) > 0
+               AND length(text) >= ? AND trim(text) <> trim(title)
+             ORDER BY item_id LIMIT ?",
+        )?;
+        let rows = st
+            .query_map(
+                params![collection_id, min_text_chars as i64, limit as i64],
+                |r| {
+                    Ok(EmbedRow {
+                        item_id: r.get(0)?,
+                        parent_id: r.get(1)?,
+                        title: r.get(2)?,
+                        text: r.get(3)?,
+                    })
+                },
+            )?
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(rows)
+    }
+
     // ---- jobs --------------------------------------------------------------------------
 
     pub fn save_job(&self, j: &JobRecord) -> Result<()> {
@@ -663,6 +776,26 @@ mod tests {
         };
         s.record_parity(&p, &serde_json::json!({})).unwrap();
         assert!(s.latest_parity("a", "b").unwrap().unwrap().passed);
+
+        assert!(s.latest_calibration("c", "a").unwrap().is_none());
+        let mut c = CalibrationRecord {
+            collection_id: "c".into(),
+            space_id: "a".into(),
+            method: "m1".into(),
+            sample: 10,
+            vectors: 99,
+            curve: serde_json::json!({"points": [[0.1, 0.0]]}),
+            metrics: serde_json::json!({"auc": 0.9}),
+            created_at: None,
+        };
+        s.save_calibration(&c).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        c.method = "m2".into();
+        s.save_calibration(&c).unwrap();
+        let got = s.latest_calibration("c", "a").unwrap().unwrap();
+        assert_eq!((got.method.as_str(), got.vectors), ("m2", 99));
+        assert_eq!(got.metrics["auc"], 0.9);
+        assert!(got.created_at.is_some());
     }
 
     #[test]

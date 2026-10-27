@@ -5,7 +5,7 @@ pub mod import;
 pub mod mapping;
 pub mod source;
 
-pub use chunk::ChunkPolicy;
-pub use import::{ImportReport, ImportRequest, Preview, import, preview};
+pub use chunk::{ChunkPolicy, TokenChunking};
+pub use import::{ImportReport, ImportRequest, Preview, import, import_with, preview};
 pub use mapping::{Mapping, MetaMapping, RoleMapping};
 pub use source::Source;

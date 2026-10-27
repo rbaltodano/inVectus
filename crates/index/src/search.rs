@@ -251,7 +251,7 @@ pub fn search(
 
 /// Collapse chunk hits into their parents (best similarity wins) and keep the top `k`.
 /// Returns `(parent id, similarity, chunk item id when the best match was a chunk)`.
-fn collapse(scored: &[Scored], k: usize) -> Vec<(i64, f32, Option<i64>)> {
+pub fn collapse(scored: &[Scored], k: usize) -> Vec<(i64, f32, Option<i64>)> {
     let mut best: HashMap<i64, (f32, Option<i64>)> = HashMap::new();
     for s in scored {
         let parent = s.parent_id.unwrap_or(s.item_id);

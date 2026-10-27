@@ -7,9 +7,11 @@ verify it before claiming it does not exist. Local-first desktop app for macOS, 
 - Ledger and next steps: [PROGRESS.md](PROGRESS.md)
 - P0 measurements and decisions: [docs/spikes](docs/spikes/README.md)
 
-P1 engine: `invectus import / embed / search` on CSV, Parquet and folder input, read-only gapmap
-import, and a desktop shell over the same crates. Search returns nearest items with evidence; it
-is not an absence verdict (calibrated inVectus search verdicts are P2).
+Engine (P1–P2): `invectus import / embed / search` on CSV, Parquet and folder input, read-only
+gapmap import, and a desktop shell over the same crates. `invectus calibrate` fits what similarity
+means "already exists" for a collection, and `invectus check` gives the inVectus search verdict
+(exists / near / open with P(exists) and the nearest items). Calibration currently uses a no-LLM
+fallback, so P(exists) is approximate; `search` alone is never an absence verdict.
 
 ## Development
 
@@ -47,6 +49,10 @@ invectus import -p ~/inVectus\ Projects/demo.invectus papers.csv -c papers \
 invectus import -p … (same arguments without --preview)
 invectus --offline embed -p ~/inVectus\ Projects/demo.invectus -c papers        # Ctrl-C keeps progress; re-run resumes
 invectus --offline search -p ~/inVectus\ Projects/demo.invectus -c papers "idea" --exhaustive --role coverage
+invectus --offline calibrate -p … -c papers                 # once per collection and model (re-run after changes)
+invectus --offline check -p … -c papers "idea in a sentence or two" [--role coverage]
+# Optional: size chunks in the model's tokens instead of characters (new collections only)
+invectus import -p … notes/ -c notes --chunk-tokenizer bge-small-en-v1.5
 invectus gapmap import -p … --source ~/Documents/Medical\ Paper\ Vector\ Database --limit 2000
 invectus parity -p … -c gapmap      # required before searching imported gapmap vectors
 ```

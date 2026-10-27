@@ -8,6 +8,7 @@ publish = false
 invectus-core.workspace = true
 invectus-index.workspace = true
 invectus-regions.workspace = true
+invectus-llm.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

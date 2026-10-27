@@ -26,11 +26,41 @@ use invectus_core::{CancelToken, InputKind, Progress, Project, TextEmbedder};
 use invectus_index::VectorStore;
 use invectus_index::search::{check_compatible, collapse};
 use invectus_index::vectors::cosine;
+use invectus_llm::{GenOptions, TextGenerator};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::time::Instant;
 
 pub const METHOD_TITLE_TEXT: &str = "title-vs-text split (no LLM)";
+pub const METHOD_LLM_PREFIX: &str = "llm paraphrase";
+
+const PARAPHRASE_SYSTEM: &str = "You rewrite documents as the idea a person would type into a \
+search box to check whether such work already exists. Reply with the idea only.";
+
+/// The prompt asking for a paraphrase of one item.
+fn paraphrase_prompt(title: &str, text: &str) -> String {
+    let start: String = text.chars().take(600).collect();
+    format!(
+        "Title: {title}\nText (start): {start}\n\nWrite that idea in one or two plain \
+         sentences, at most 40 words, in your own words: do not reuse the title's phrasing."
+    )
+}
+
+/// First paragraph of a reply, without quotes or labels.
+pub fn clean_paraphrase(reply: &str) -> String {
+    let first = reply
+        .split("\n\n")
+        .map(str::trim)
+        .find(|p| !p.is_empty())
+        .unwrap_or("");
+    first
+        .trim_start_matches("Idea:")
+        .trim()
+        .trim_matches(|c: char| matches!(c, '"' | '“' | '”' | '*'))
+        .replace('\n', " ")
+        .trim()
+        .to_string()
+}
 
 #[derive(Clone, Debug)]
 pub struct CalibrateOptions {
@@ -126,6 +156,8 @@ pub struct CalibrationReport {
     pub curve: Curve,
     pub vectors: usize,
     pub embed_seconds: f64,
+    /// `(title, paraphrase)` for the first sampled items, when a language model wrote queries.
+    pub examples: Vec<(String, String)>,
     pub seconds: f64,
     pub cancelled: bool,
     pub notes: Vec<String>,
@@ -134,6 +166,9 @@ pub struct CalibrationReport {
 pub fn job_id(collection_id: &str, space_id: &str) -> String {
     format!("calibrate:{collection_id}:{}", &space_id[..12])
 }
+
+/// Per-item pairs, embedding time and `(title, paraphrase)` examples.
+type Sampled = (Vec<Pairs>, f64, Vec<(String, String)>);
 
 struct Pairs {
     /// Title vs own text.
@@ -152,16 +187,22 @@ impl Pairs {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_calibration(
     project: &Project,
     vectors: &VectorStore,
     table: &VectorTableRecord,
     encoder: &mut dyn TextEmbedder,
+    paraphraser: Option<&mut dyn TextGenerator>,
     opts: &CalibrateOptions,
     cancel: &CancelToken,
     progress: ProgressFn<'_>,
 ) -> Result<CalibrationReport> {
     let started = Instant::now();
+    let method = match &paraphraser {
+        Some(g) => format!("{METHOD_LLM_PREFIX} ({})", g.identity().model_key),
+        None => METHOD_TITLE_TEXT.to_string(),
+    };
     let compatibility = check_compatible(project, table, encoder)?;
     vectors.check(table)?;
     let total_vectors = vectors.count(table)?;
@@ -170,7 +211,7 @@ pub fn run_calibration(
         job_id: job_id.clone(),
         kind: "calibrate".into(),
         params: serde_json::json!({"collection": table.collection_id, "space_id": table.space_id,
-                                   "sample": opts.sample, "method": METHOD_TITLE_TEXT}),
+                                   "sample": opts.sample, "method": method}),
         state: "running".into(),
         progress: 0.0,
         checkpoint: serde_json::json!({}),
@@ -181,6 +222,7 @@ pub fn run_calibration(
         vectors,
         table,
         encoder,
+        paraphraser,
         opts,
         cancel,
         progress,
@@ -197,12 +239,12 @@ pub fn run_calibration(
     };
     job.checkpoint = serde_json::json!({"error": result.as_ref().err().map(|e| format!("{e:#}"))});
     project.store.save_job(&job)?;
-    let Some((pairs, embed_seconds)) = result? else {
+    let Some((pairs, embed_seconds, examples)) = result? else {
         return Ok(CalibrationReport {
             collection: table.collection_id.clone(),
             space_id: table.space_id.clone(),
             model_key: table.identity.model_key.clone(),
-            method: METHOD_TITLE_TEXT.into(),
+            method: method.clone(),
             compatibility,
             items: 0,
             own_text: Spread::default(),
@@ -225,6 +267,7 @@ pub fn run_calibration(
             curve: Curve { points: vec![] },
             vectors: total_vectors,
             embed_seconds: 0.0,
+            examples: Vec::new(),
             seconds: started.elapsed().as_secs_f64(),
             cancelled: true,
             notes: vec!["cancelled; nothing was saved".into()],
@@ -261,11 +304,15 @@ pub fn run_calibration(
         recall_at_10: pairs.iter().filter(|p| p.rank <= 10).count() as f64 / n,
         mrr: pairs.iter().map(|p| 1.0 / p.rank as f64).sum::<f64>() / n,
     };
-    let mut notes = vec![
+    let mut notes = vec![if method.starts_with(METHOD_LLM_PREFIX) {
+        "queries are language-model paraphrases of sampled items, compared with the items as \
+         stored; the paraphrases are not human-checked (examples are kept)"
+            .to_string()
+    } else {
         "fallback calibration without a language model: titles stand in for paraphrases, so \
          P(exists) is approximate (SPEC §6.2)"
-            .to_string(),
-    ];
+            .to_string()
+    }];
     if pairs.len() < 100 {
         notes.push(format!(
             "only {} items could be sampled; the curve is coarse",
@@ -288,7 +335,7 @@ pub fn run_calibration(
         collection: table.collection_id.clone(),
         space_id: table.space_id.clone(),
         model_key: table.identity.model_key.clone(),
-        method: METHOD_TITLE_TEXT.into(),
+        method: method.clone(),
         compatibility,
         items: pairs.len(),
         own_text: Spread::of(&own),
@@ -302,6 +349,7 @@ pub fn run_calibration(
         curve: curve.clone(),
         vectors: total_vectors,
         embed_seconds,
+        examples: examples.clone(),
         seconds: started.elapsed().as_secs_f64(),
         cancelled: false,
         notes,
@@ -309,7 +357,7 @@ pub fn run_calibration(
     project.store.save_calibration(&CalibrationRecord {
         collection_id: table.collection_id.clone(),
         space_id: table.space_id.clone(),
-        method: METHOD_TITLE_TEXT.into(),
+        method: method.clone(),
         sample: pairs.len() as i64,
         vectors: total_vectors as i64,
         curve: serde_json::to_value(&curve)?,
@@ -319,6 +367,7 @@ pub fn run_calibration(
             "related": report.related, "pairwise_auc": report.pairwise_auc,
             "similarity_at_p50": report.similarity_at_p50,
             "similarity_at_p70": report.similarity_at_p70,
+            "examples": report.examples,
         }),
         created_at: None,
     })?;
@@ -376,12 +425,13 @@ fn calibrate_inner(
     vectors: &VectorStore,
     table: &VectorTableRecord,
     encoder: &mut dyn TextEmbedder,
+    mut paraphraser: Option<&mut dyn TextGenerator>,
     opts: &CalibrateOptions,
     cancel: &CancelToken,
     progress: ProgressFn<'_>,
     job_id: &str,
     total_vectors: usize,
-) -> Result<Option<(Vec<Pairs>, f64)>> {
+) -> Result<Option<Sampled>> {
     let candidates =
         project
             .store
@@ -412,7 +462,7 @@ fn calibrate_inner(
         .map(|r| identity.format_document(None, &r.text))
         .collect();
 
-    let steps = items.len() * 3;
+    let steps = items.len() * if paraphraser.is_some() { 4 } else { 3 };
     let mut done = 0usize;
     let mut tick = |n: usize| {
         done += n;
@@ -423,13 +473,49 @@ fn calibrate_inner(
             total: steps,
         });
     };
+    // With a language model, queries are paraphrases of each item; without, its title.
+    let mut examples = Vec::new();
+    let query_texts: Vec<String> = match paraphraser.as_deref_mut() {
+        None => titles.clone(),
+        Some(g) => {
+            let mut out = Vec::with_capacity(items.len());
+            for (r, title) in items.iter().zip(&titles) {
+                if cancel.is_cancelled() {
+                    return Ok(None);
+                }
+                let reply = g.generate(
+                    Some(PARAPHRASE_SYSTEM),
+                    &paraphrase_prompt(title, &r.text),
+                    &GenOptions {
+                        max_tokens: 80,
+                        ..Default::default()
+                    },
+                )?;
+                let p = clean_paraphrase(&reply.text);
+                let p = if p.is_empty() { title.clone() } else { p };
+                if examples.len() < 20 {
+                    examples.push((title.clone(), p.clone()));
+                }
+                out.push(p);
+                tick(1);
+            }
+            out
+        }
+    };
     let t = Instant::now();
-    let Some(queries) = embed_batched(encoder, &titles, InputKind::Query, cancel, &mut tick)?
+    let Some(queries) = embed_batched(encoder, &query_texts, InputKind::Query, cancel, &mut tick)?
     else {
         return Ok(None);
     };
-    let Some(docs) = embed_batched(encoder, &texts, InputKind::Document, cancel, &mut tick)? else {
-        return Ok(None);
+    let paraphrase_mode = paraphraser.is_some();
+    let docs = if paraphrase_mode {
+        Vec::new()
+    } else {
+        let Some(d) = embed_batched(encoder, &texts, InputKind::Document, cancel, &mut tick)?
+        else {
+            return Ok(None);
+        };
+        d
     };
     let embed_seconds = t.elapsed().as_secs_f64();
 
@@ -460,7 +546,13 @@ fn calibrate_inner(
             .into_iter()
             .map(|(id, sim, _)| (id, sim))
             .collect();
-        let positive = cosine(&queries[i], &docs[i]);
+        // A paraphrase is compared with the item as stored (title and text); a title with the
+        // item's text alone, since the stored text repeats the title verbatim.
+        let positive = if paraphrase_mode {
+            best.get(&r.item_id).copied().unwrap_or(-1.0)
+        } else {
+            cosine(&queries[i], &docs[i])
+        };
         let negatives: Vec<f32> = picks
             .iter()
             .filter_map(|id| best.get(id).copied())
@@ -476,7 +568,7 @@ fn calibrate_inner(
         });
         tick(1);
     }
-    Ok(Some((pairs, embed_seconds)))
+    Ok(Some((pairs, embed_seconds, examples)))
 }
 
 /// `n` items spread evenly across `xs` (all of them when there are fewer).

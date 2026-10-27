@@ -420,6 +420,8 @@ fn start_calibration(
     state: State<AppState>,
     collection: String,
     space: Option<String>,
+    // Paraphrase queries with the local language model (SPEC §6.2) instead of titles.
+    llm: Option<bool>,
 ) -> CmdResult<()> {
     let session = state.session.clone();
     if session
@@ -441,11 +443,21 @@ fn start_calibration(
             encoder_for(s, &table)?;
             let encoder = &mut s.encoder.as_mut().unwrap().1;
             let app2 = app.clone();
+            let mut generator = if llm.unwrap_or(false) {
+                let store = ModelStore::new(ModelStore::default_root()?);
+                let spec = invectus_llm::registry::spec(invectus_llm::DEFAULT_LLM)?;
+                Some(invectus_llm::LlamaGenerator::load(&store.root, spec, 8)?)
+            } else {
+                None
+            };
             run_calibration(
                 &s.project,
                 &s.vectors,
                 &table,
                 encoder,
+                generator
+                    .as_mut()
+                    .map(|g| g as &mut dyn invectus_llm::TextGenerator),
                 &CalibrateOptions::default(),
                 &cancel,
                 &mut |p| {

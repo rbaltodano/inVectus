@@ -240,6 +240,10 @@ struct CalibrateArgs {
     /// Items to sample (one same-thing pair and five related pairs each).
     #[arg(long, default_value_t = CalibrateOptions::default().sample)]
     sample: usize,
+    /// Write the queries with this local language model (paraphrases of each item, SPEC §6.2)
+    /// instead of using item titles; e.g. gemma-4-12b-it-qat-q4_0.
+    #[arg(long, num_args = 0..=1, default_missing_value = invectus_llm::DEFAULT_LLM)]
+    llm: Option<String>,
     #[arg(long, default_value_t = EmbedOptions::default().threads)]
     threads: usize,
     #[arg(long)]
@@ -1115,11 +1119,22 @@ fn cmd_calibrate(a: CalibrateArgs, models_dir: &Option<PathBuf>) -> Result<()> {
     .context("installing Ctrl-C handler")?;
     let quiet = a.json;
     let mut last = Instant::now();
+    let mut generator = a
+        .llm
+        .as_deref()
+        .map(|key| {
+            let spec = invectus_llm::registry::spec(key)?;
+            invectus_llm::LlamaGenerator::load(&store.root, spec, a.threads)
+        })
+        .transpose()?;
     let r = run_calibration(
         &project,
         &vectors,
         &table,
         &mut encoder,
+        generator
+            .as_mut()
+            .map(|g| g as &mut dyn invectus_llm::TextGenerator),
         &CalibrateOptions {
             sample: a.sample,
             ..Default::default()
@@ -1176,6 +1191,9 @@ fn cmd_calibrate(a: CalibrateArgs, models_dir: &Option<PathBuf>) -> Result<()> {
         r.embed_seconds,
         r.seconds
     );
+    for (title, idea) in r.examples.iter().take(5) {
+        println!("example: {title}\n      → {idea}");
+    }
     for n in &r.notes {
         println!("note: {n}");
     }

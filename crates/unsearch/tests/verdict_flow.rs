@@ -142,6 +142,7 @@ fn calibrated_verdicts_separate_existing_from_new_ideas() {
         &v,
         &table,
         &mut e,
+        None,
         &opts(),
         &CancelToken::default(),
         &mut |_| ticks += 1,
@@ -223,7 +224,7 @@ fn calibration_goes_stale_and_cancels_cleanly() {
 
     let cancel = CancelToken::default();
     cancel.cancel();
-    let r = run_calibration(&p, &v, &table, &mut e, &opts(), &cancel, &mut |_| {}).unwrap();
+    let r = run_calibration(&p, &v, &table, &mut e, None, &opts(), &cancel, &mut |_| {}).unwrap();
     assert!(r.cancelled);
     assert!(
         p.store
@@ -237,6 +238,7 @@ fn calibration_goes_stale_and_cancels_cleanly() {
         &v,
         &table,
         &mut e,
+        None,
         &opts(),
         &CancelToken::default(),
         &mut |_| {},
@@ -277,6 +279,7 @@ fn calibration_goes_stale_and_cancels_cleanly() {
         &v2,
         &t2,
         &mut e,
+        None,
         &opts(),
         &CancelToken::default(),
         &mut |_| {},
@@ -284,4 +287,87 @@ fn calibration_goes_stale_and_cancels_cleanly() {
     .unwrap_err()
     .to_string();
     assert!(err.contains("30 or more"), "{err}");
+}
+
+/// Paraphrases by reversing the title's words (enough for a bag-of-words space).
+struct Reverser(invectus_llm::LlmIdentity, usize);
+
+impl invectus_llm::TextGenerator for Reverser {
+    fn identity(&self) -> &invectus_llm::LlmIdentity {
+        &self.0
+    }
+    fn generate(
+        &mut self,
+        _: Option<&str>,
+        user: &str,
+        _: &invectus_llm::GenOptions,
+    ) -> Result<invectus_llm::Generation> {
+        self.1 += 1;
+        let title = user
+            .lines()
+            .find_map(|l| l.strip_prefix("Title: "))
+            .unwrap_or("");
+        Ok(invectus_llm::Generation {
+            text: format!(
+                "\"{}\"",
+                title.split(' ').rev().collect::<Vec<_>>().join(" ")
+            ),
+            prompt_tokens: 0,
+            generated_tokens: 0,
+            seconds: 0.0,
+            truncated: false,
+        })
+    }
+}
+
+#[test]
+fn paraphrase_calibration_records_its_model_and_examples() {
+    let (_d, p, v) = setup(60);
+    let table = select_table(&p, "c", None).unwrap();
+    let mut e = BagOfWords::new();
+    let mut g = Reverser(
+        invectus_llm::LlmIdentity {
+            model_key: "reverser".into(),
+            repo: "test".into(),
+            revision: "1".into(),
+            sha256: "0".into(),
+            runtime: "test".into(),
+        },
+        0,
+    );
+    let r = run_calibration(
+        &p,
+        &v,
+        &table,
+        &mut e,
+        Some(&mut g),
+        &opts(),
+        &CancelToken::default(),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(g.1, 60, "one paraphrase per sampled item");
+    assert_eq!(r.method, "llm paraphrase (reverser)");
+    assert_eq!(r.examples.len(), 20);
+    let (title, idea) = &r.examples[0];
+    assert_eq!(idea.split(' ').rev().collect::<Vec<_>>().join(" "), *title);
+    assert!(r.holdout.auc > 0.95, "{:?}", r.holdout);
+    assert!(r.notes[0].contains("paraphrases"));
+    let cal = p
+        .store
+        .latest_calibration("c", &table.space_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(cal.metrics["examples"].as_array().unwrap().len(), 20);
+    let c = check(
+        &p,
+        &v,
+        &table,
+        &mut e,
+        "term7c term7b term7a",
+        &CheckOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(c.verdict, Verdict::Exists);
+    assert!(!c.calibration.quality.contains("without a language model"));
 }

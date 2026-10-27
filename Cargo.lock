@@ -3825,6 +3825,7 @@ dependencies = [
  "anyhow",
  "invectus-core",
  "invectus-index",
+ "invectus-llm",
  "invectus-regions",
  "serde",
  "serde_json",

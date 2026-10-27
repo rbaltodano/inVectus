@@ -673,6 +673,54 @@ async fn set_gap_verdict(
     .await
 }
 
+/// Describe what would fill a gap with the local language model (round-trip checked; stored).
+/// Loads the model for each call (~1 s once its checksum is cached).
+#[tauri::command]
+async fn describe_gap(
+    state: State<'_, AppState>,
+    form: TableForm,
+    gap_id: i32,
+    t: Option<f32>,
+    genre: Option<String>,
+    coverage_genre: Option<String>,
+) -> CmdResult<invectus_midpoint::DescribeResult> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            let g = invectus_gaps::detail(&s.project, &table, gap_id)?.view.gap;
+            let target = match g.region_b {
+                Some(b) => invectus_midpoint::Target::Between {
+                    a: g.region_a,
+                    b,
+                    t: t.unwrap_or(0.5),
+                },
+                None => invectus_midpoint::Target::Region { region: g.region_a },
+            };
+            let store = ModelStore::new(ModelStore::default_root()?);
+            let spec = invectus_llm::registry::spec(invectus_llm::DEFAULT_LLM)?;
+            let mut generator = invectus_llm::LlamaGenerator::load(&store.root, spec, 8)?;
+            encoder_for(s, &table)?;
+            let encoder = &mut s.encoder.as_mut().unwrap().1;
+            let defaults = invectus_midpoint::DescribeOptions::default();
+            invectus_midpoint::describe(
+                &s.project,
+                &s.vectors,
+                &table,
+                encoder,
+                &mut generator,
+                &target,
+                &invectus_midpoint::DescribeOptions {
+                    genre: genre.unwrap_or(defaults.genre),
+                    coverage_genre: coverage_genre.unwrap_or(defaults.coverage_genre),
+                    ..defaults
+                },
+            )
+        })
+    })
+    .await
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -694,7 +742,8 @@ pub fn run() {
             scan_gaps,
             list_gaps,
             gap_detail,
-            set_gap_verdict
+            set_gap_verdict,
+            describe_gap
         ])
         .run(tauri::generate_context!())
         .expect("failed to run inVectus");

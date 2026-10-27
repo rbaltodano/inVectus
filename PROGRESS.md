@@ -487,6 +487,44 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
 - **Not yet:** LLM calibration paraphrases (SPEC §6.2) and midpoint descriptions with the
   round-trip check (P5, §6.3). Windows/Linux llama.cpp builds are untested.
 
+## 2026-10-27 — P5 gap descriptions (midpoints) with the local model
+
+- **`invectus-midpoint`** (SPEC §6.3):
+  - **Targets.** *Between two fine regions* at `t`: the slerp of the centroids. The model sees
+    the titles nearest each centroid and nearest the point, and a description is **on target**
+    when its embedding is closer to the point than to either centroid. *One region's missing
+    coverage* (coverage and stale gaps): the model sees the region's central demand titles and
+    the 3 nearest coverage items, and the description is on target when its nearest fine region
+    is that region.
+  - **Novel** = an inVectus check of the description (calibrated, exhaustive; coverage-only for
+    region targets) is not `exists`. It is skipped, with a note, when there is no calibration.
+  - **Attempts.** Up to 3: the first greedy, later ones sampled (temperature 0.8, seeds 1, 2).
+  - **Storage.** Every run goes to a new `midpoints` table: target, attempts, both checks, the
+    context titles, and the LLM and embedding identities. The model sees titles, roles and years
+    only.
+- **CLI:** `invectus gaps describe <id>` (bridge → between its regions, coverage/stale → its
+  region) and `invectus midpoint --a A --b B [--t]`. `--genre` / `--coverage-genre` default to
+  "research study" / "systematic review". **Desktop backend:** `describe_gap`.
+- Tests: slerp, reply parsing, and an end-to-end test with a scripted model (an off-target
+  first reply is rejected and the retry accepted; a region target; prompts carry no item text;
+  stored identities; t out of range). `cargo test --workspace` (release profile): **84 passed**.
+  Clippy and fmt are clean.
+- **Demo runs (BGE, Gemma 4 12B, M4 Pro):**
+  - Coverage gap "Visual Perception of Color and Luminance" (82 demand, no review): accepted on
+    the first attempt in 5.7 s. *"Neurophysiological and Computational Models of Chromatic and
+    Luminance Perception"* (review); nearest region = target (0.903); novel (open,
+    P(exists) 0.07).
+  - Between "Biomechanical Properties and Parameters of the Cornea" (47) and "Choroidal
+    Thickness and Optical Coherence Tomography" (62), t = 0.5: 3 coherent study designs
+    (Corvis ST hysteresis × SD-OCT choroidal thickness in myopia), 6.8–7.7 s each. Two of three
+    were on target, but **all were rejected as `exists`** (P 0.92–0.94) because the nearest
+    paper is a corneal-biomechanics study at similarity 0.877 that does not involve the choroid.
+- **Limitation found:** a single-vector novelty check cannot tell a new *combination* from
+  papers on one of its halves, because a description of A×B sits close to strong A papers. The
+  calibration was fitted on title→own-text pairs, not on combinations. Options: require the
+  nearest match to also be near both centroids, check each half separately, or calibrate on
+  combination examples. Not done yet. Descriptions are not human-reviewed.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.

@@ -10,7 +10,7 @@ use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::num::NonZeroU32;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -19,7 +19,7 @@ use std::time::Instant;
 pub const RUNTIME: &str = "llama.cpp (llama-cpp-2 0.1.160)";
 
 /// Which model produced a text; stored with anything generated (SPEC §6.3 step 5).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmIdentity {
     pub model_key: String,
     pub repo: String,

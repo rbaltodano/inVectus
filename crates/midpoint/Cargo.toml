@@ -3,3 +3,17 @@ name = "invectus-midpoint"
 version.workspace = true
 edition.workspace = true
 publish = false
+
+[dependencies]
+invectus-core.workspace = true
+invectus-index.workspace = true
+invectus-unsearch.workspace = true
+invectus-llm.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+invectus-regions.workspace = true
+tempfile.workspace = true
+sha2.workspace = true

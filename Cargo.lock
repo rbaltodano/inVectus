@@ -3647,6 +3647,8 @@ dependencies = [
  "invectus-gaps",
  "invectus-index",
  "invectus-ingest",
+ "invectus-llm",
+ "invectus-midpoint",
  "invectus-regions",
  "invectus-unsearch",
  "serde",
@@ -3670,6 +3672,7 @@ dependencies = [
  "invectus-index",
  "invectus-ingest",
  "invectus-llm",
+ "invectus-midpoint",
  "invectus-regions",
  "invectus-unsearch",
  "serde",
@@ -3787,6 +3790,18 @@ dependencies = [
 [[package]]
 name = "invectus-midpoint"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "invectus-core",
+ "invectus-index",
+ "invectus-llm",
+ "invectus-regions",
+ "invectus-unsearch",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
 
 [[package]]
 name = "invectus-regions"

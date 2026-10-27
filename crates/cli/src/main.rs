@@ -83,6 +83,19 @@ enum Command {
         #[command(subcommand)]
         command: GapsCommand,
     },
+    /// Describe the item that would sit between two regions (SPEC §6.3).
+    Midpoint {
+        #[command(flatten)]
+        t: TableArgs,
+        /// First fine region id.
+        #[arg(long)]
+        a: i32,
+        /// Second fine region id.
+        #[arg(long)]
+        b: i32,
+        #[command(flatten)]
+        d: DescribeArgs,
+    },
     /// Local language models (offline generation with a pinned GGUF model).
     Llm {
         #[command(subcommand)]
@@ -365,6 +378,14 @@ enum GapsCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Describe what would fill a gap with the local language model, checked by a round trip.
+    Describe {
+        #[command(flatten)]
+        t: TableArgs,
+        id: i32,
+        #[command(flatten)]
+        d: DescribeArgs,
+    },
     /// Write a report of the ranked gaps (titles and links only, never source text).
     Export {
         #[command(flatten)]
@@ -387,6 +408,27 @@ enum GapsCommand {
         #[arg(long, default_value = "")]
         note: String,
     },
+}
+
+#[derive(Args)]
+struct DescribeArgs {
+    /// Position between two regions (bridges and `midpoint`): 0 = first region, 1 = second.
+    #[arg(long, default_value_t = 0.5)]
+    t: f32,
+    /// What one item is, e.g. "research study" or "game".
+    #[arg(long, default_value = "research study")]
+    genre: String,
+    /// What a coverage item is (coverage and stale gaps).
+    #[arg(long, default_value = "systematic review")]
+    coverage_genre: String,
+    #[arg(long, default_value_t = 3)]
+    tries: usize,
+    #[arg(long, default_value = invectus_llm::DEFAULT_LLM)]
+    model: String,
+    #[arg(long, default_value_t = 8)]
+    threads: usize,
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Subcommand)]
@@ -537,8 +579,12 @@ fn run() -> Result<()> {
         Command::Calibrate(a) => cmd_calibrate(a, &cli.models_dir)?,
         Command::Check(a) => cmd_check(a, &cli.models_dir)?,
         Command::Regions { command } => cmd_regions(command, &cli.models_dir)?,
-        Command::Gaps { command } => cmd_gaps(command)?,
+        Command::Gaps { command } => cmd_gaps(command, &cli.models_dir)?,
         Command::Llm { command } => cmd_llm(command, &cli.models_dir)?,
+        Command::Midpoint { t, a, b, d } => {
+            let target = invectus_midpoint::Target::Between { a, b, t: d.t };
+            run_describe(&t, target, &d, &cli.models_dir)?
+        }
         Command::Eval {
             command: EvalCommand::Tune { from, json },
         } => {
@@ -1416,7 +1462,83 @@ fn print_gap(g: &invectus_gaps::GapView) {
     println!("       {}", g.gap.explanation);
 }
 
-fn cmd_gaps(c: GapsCommand) -> Result<()> {
+fn run_describe(
+    t: &TableArgs,
+    target: invectus_midpoint::Target,
+    d: &DescribeArgs,
+    models_dir: &Option<PathBuf>,
+) -> Result<()> {
+    let project = open(&t.p)?;
+    let table = select_table(&project, &t.collection, t.space.as_deref())?;
+    let store = models(models_dir)?;
+    let mut encoder = query_encoder(
+        &store,
+        &table.identity,
+        &EmbedOptions {
+            threads: 4,
+            batch_size: 1,
+        },
+    )?;
+    let spec = invectus_llm::registry::spec(&d.model)?;
+    let mut generator = invectus_llm::LlamaGenerator::load(&store.root, spec, d.threads)?;
+    let vectors = VectorStore::open(&project)?;
+    let r = invectus_midpoint::describe(
+        &project,
+        &vectors,
+        &table,
+        &mut encoder,
+        &mut generator,
+        &target,
+        &invectus_midpoint::DescribeOptions {
+            genre: d.genre.clone(),
+            coverage_genre: d.coverage_genre.clone(),
+            tries: d.tries,
+            ..Default::default()
+        },
+    )?;
+    if d.json {
+        return print_json(&r);
+    }
+    println!("{} · {:?}", r.label, r.target);
+    for (i, a) in r.attempts.iter().enumerate() {
+        let mark = if r.accepted == Some(i) {
+            "ACCEPTED"
+        } else {
+            "rejected"
+        };
+        println!("\n[{}] {mark}: {}\n{}", i + 1, a.title, a.description);
+        let o = &a.on_target;
+        match (o.to_a, o.to_b) {
+            (Some(sa), Some(sb)) => println!(
+                "    on target: {} (to midpoint {:.3}, to A {:.3}, to B {:.3})",
+                o.passed, o.to_target, sa, sb
+            ),
+            _ => println!(
+                "    on target: {} (nearest region {:?} at {:.3})",
+                o.passed,
+                o.nearest_region,
+                o.nearest_region_similarity.unwrap_or(f32::NAN)
+            ),
+        }
+        if let Some(n) = &a.novelty {
+            println!(
+                "    novel: {} ({}, P(exists) {:.2}; nearest: {} {:.3})",
+                n.passed,
+                n.verdict,
+                n.p_exists,
+                n.nearest_title.as_deref().unwrap_or("-"),
+                n.nearest_similarity.unwrap_or(f32::NAN)
+            );
+        }
+        println!("    {:.1}s", a.seconds);
+    }
+    for n in &r.notes {
+        println!("note: {n}");
+    }
+    Ok(())
+}
+
+fn cmd_gaps(c: GapsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
     match c {
         GapsCommand::Scan {
             t,
@@ -1525,6 +1647,21 @@ fn cmd_gaps(c: GapsCommand) -> Result<()> {
                         .unwrap_or_default()
                 );
             }
+        }
+        GapsCommand::Describe { t, id, d } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let g = gap_detail(&project, &table, id)?.view.gap;
+            drop(project);
+            let target = match g.region_b {
+                Some(b) => invectus_midpoint::Target::Between {
+                    a: g.region_a,
+                    b,
+                    t: d.t,
+                },
+                None => invectus_midpoint::Target::Region { region: g.region_a },
+            };
+            run_describe(&t, target, &d, models_dir)?;
         }
         GapsCommand::Export {
             t,

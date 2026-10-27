@@ -30,6 +30,8 @@ invectus-index.workspace = true
 invectus-unsearch.workspace = true
 invectus-regions.workspace = true
 invectus-gaps.workspace = true
+invectus-llm.workspace = true
+invectus-midpoint.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS gaps (
 CREATE TABLE IF NOT EXISTS gap_verdicts (
   collection_id TEXT, space_id TEXT, kind TEXT, core JSON, verdict TEXT, note TEXT,
   updated_at TIMESTAMP);
+CREATE TABLE IF NOT EXISTS midpoints (
+  collection_id TEXT, space_id TEXT, target JSON, result JSON, created_at TIMESTAMP);
 ALTER TABLE regions ADD COLUMN IF NOT EXISTS llm_label TEXT;
 ALTER TABLE regions ADD COLUMN IF NOT EXISTS llm_model TEXT;
 "#;
@@ -1048,6 +1050,50 @@ impl Store {
                     date,
                 },
             ))
+        })
+        .collect()
+    }
+
+    /// Store a generated description (SPEC §6.3 step 5): what it describes and the full result.
+    pub fn save_midpoint(
+        &self,
+        collection_id: &str,
+        space_id: &str,
+        target: &serde_json::Value,
+        result: &serde_json::Value,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO midpoints VALUES (?, ?, CAST(? AS JSON), CAST(? AS JSON), now())",
+            params![
+                collection_id,
+                space_id,
+                target.to_string(),
+                result.to_string()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Stored descriptions of a collection's space, newest first: `(target, result, created)`.
+    pub fn midpoints(
+        &self,
+        collection_id: &str,
+        space_id: &str,
+    ) -> Result<Vec<(serde_json::Value, serde_json::Value, String)>> {
+        let mut st = self.conn.prepare(
+            "SELECT target::VARCHAR, result::VARCHAR, CAST(created_at AS VARCHAR) FROM midpoints
+             WHERE collection_id = ? AND space_id = ? ORDER BY created_at DESC",
+        )?;
+        let rows = st.query_map([collection_id, space_id], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (t, r, at) = row?;
+            Ok((serde_json::from_str(&t)?, serde_json::from_str(&r)?, at))
         })
         .collect()
     }

@@ -83,6 +83,11 @@ enum Command {
         #[command(subcommand)]
         command: GapsCommand,
     },
+    /// Local language models (offline generation with a pinned GGUF model).
+    Llm {
+        #[command(subcommand)]
+        command: LlmCommand,
+    },
     /// Evaluation: backtest the gap ranking against what happened later (SPEC §9.1).
     Eval {
         #[command(subcommand)]
@@ -299,6 +304,20 @@ enum RegionsCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Name regions with the local language model (resumes; skips named regions).
+    Label {
+        #[command(flatten)]
+        t: TableArgs,
+        #[arg(long, default_value = invectus_llm::DEFAULT_LLM)]
+        model: String,
+        /// Label at most this many regions in this run.
+        #[arg(long)]
+        limit: Option<usize>,
+        #[arg(long, default_value_t = 8)]
+        threads: usize,
+        #[arg(long)]
+        json: bool,
+    },
     /// Write map data (regions and one point per item) as JSON.
     Map {
         #[command(flatten)]
@@ -367,6 +386,31 @@ enum GapsCommand {
         verdict: String,
         #[arg(long, default_value = "")]
         note: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum LlmCommand {
+    /// Pinned language models and whether they are installed.
+    List,
+    /// Re-hash the installed model file against its pinned SHA-256.
+    Verify {
+        #[arg(default_value = invectus_llm::DEFAULT_LLM)]
+        key: String,
+    },
+    /// Generate a reply to a prompt (smoke test; offline).
+    Generate {
+        prompt: String,
+        #[arg(long, default_value = invectus_llm::DEFAULT_LLM)]
+        model: String,
+        #[arg(long)]
+        system: Option<String>,
+        #[arg(long, default_value_t = 300)]
+        max_tokens: usize,
+        #[arg(long, default_value_t = 8)]
+        threads: usize,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -492,8 +536,9 @@ fn run() -> Result<()> {
         Command::Search(a) => cmd_search(a, &cli.models_dir)?,
         Command::Calibrate(a) => cmd_calibrate(a, &cli.models_dir)?,
         Command::Check(a) => cmd_check(a, &cli.models_dir)?,
-        Command::Regions { command } => cmd_regions(command)?,
+        Command::Regions { command } => cmd_regions(command, &cli.models_dir)?,
         Command::Gaps { command } => cmd_gaps(command)?,
+        Command::Llm { command } => cmd_llm(command, &cli.models_dir)?,
         Command::Eval {
             command: EvalCommand::Tune { from, json },
         } => {
@@ -1183,7 +1228,10 @@ fn print_regions(regions: &[RegionRecord]) {
             r.size,
             r.stability.map_or("-".into(), |s| format!("{s:.2}")),
             r.parent_id.map_or("-".into(), |b| b.to_string()),
-            r.label
+            match &r.llm_label {
+                Some(l) => format!("{l}  [{}]", r.label),
+                None => r.label.clone(),
+            }
         );
     }
     for r in regions.iter().filter(|r| r.level == "broad") {
@@ -1191,7 +1239,7 @@ fn print_regions(regions: &[RegionRecord]) {
     }
 }
 
-fn cmd_regions(c: RegionsCommand) -> Result<()> {
+fn cmd_regions(c: RegionsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
     match c {
         RegionsCommand::Run {
             t,
@@ -1290,6 +1338,52 @@ fn cmd_regions(c: RegionsCommand) -> Result<()> {
                 data.run.created_at.as_deref().unwrap_or("")
             );
             print_regions(&data.regions);
+        }
+        RegionsCommand::Label {
+            t,
+            model,
+            limit,
+            threads,
+            json,
+        } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let spec = invectus_llm::registry::spec(&model)?;
+            let mut generator =
+                invectus_llm::LlamaGenerator::load(&models(models_dir)?.root, spec, threads)?;
+            let cancel = CancelToken::default();
+            let c2 = cancel.clone();
+            ctrlc::set_handler(move || {
+                eprintln!("\nstopping after this region (labels so far are kept)…");
+                c2.cancel();
+            })
+            .context("installing Ctrl-C handler")?;
+            let r = invectus_regions::llm_labels::label_regions(
+                &project,
+                &table,
+                &mut generator,
+                limit,
+                &cancel,
+                &mut |p| {
+                    if !json {
+                        eprintln!("  {}/{}", p.done, p.total);
+                    }
+                },
+            )?;
+            if json {
+                return print_json(&r);
+            }
+            for (id, terms, name) in &r.labels {
+                println!("{id:>5}  {name}   [{terms}]");
+            }
+            println!(
+                "{} labelled, {} already labelled, {:.1}s ({:.2}s per region) with {}",
+                r.labelled,
+                r.already_labelled,
+                r.seconds,
+                r.seconds / r.labelled.max(1) as f64,
+                r.model
+            );
         }
         RegionsCommand::Map { t, out } => {
             let project = open(&t.p)?;
@@ -1469,6 +1563,93 @@ fn cmd_gaps(c: GapsCommand) -> Result<()> {
                 "gap {id}: {verdict} (kept across re-runs while its core items stay together)"
             );
             print_gap(&g);
+        }
+    }
+    Ok(())
+}
+
+fn cmd_llm(c: LlmCommand, models_dir: &Option<PathBuf>) -> Result<()> {
+    let root = models(models_dir)?.root.clone();
+    match c {
+        LlmCommand::List => {
+            println!("models folder: {}", root.display());
+            for m in invectus_llm::MODELS {
+                println!(
+                    "{}{} — {}@{} · {} · {:.2} GB · {} · {}",
+                    m.key,
+                    if m.key == invectus_llm::DEFAULT_LLM {
+                        " (default)"
+                    } else {
+                        ""
+                    },
+                    m.repo,
+                    &m.revision[..12],
+                    m.license,
+                    m.bytes as f64 / 1e9,
+                    if invectus_llm::store::is_installed(&root, m) {
+                        "installed"
+                    } else {
+                        "not installed"
+                    },
+                    m.note
+                );
+            }
+        }
+        LlmCommand::Verify { key } => {
+            let spec = invectus_llm::registry::spec(&key)?;
+            let path = invectus_llm::store::model_path(&root, spec);
+            let got = invectus_llm::store::sha256_file(&path)?;
+            if got != spec.sha256 {
+                bail!(
+                    "{} has SHA-256 {got}, expected {}",
+                    path.display(),
+                    spec.sha256
+                );
+            }
+            println!("{key}: {} matches its pinned SHA-256", path.display());
+        }
+        LlmCommand::Generate {
+            prompt,
+            model,
+            system,
+            max_tokens,
+            threads,
+            json,
+        } => {
+            use invectus_llm::TextGenerator;
+            let spec = invectus_llm::registry::spec(&model)?;
+            let t = Instant::now();
+            let mut g = invectus_llm::LlamaGenerator::load(&root, spec, threads)?;
+            let load_s = t.elapsed().as_secs_f64();
+            let out = g.generate(
+                system.as_deref(),
+                &prompt,
+                &invectus_llm::GenOptions {
+                    max_tokens,
+                    ..Default::default()
+                },
+            )?;
+            if json {
+                return print_json(
+                    &serde_json::json!({"model": g.identity(), "load_seconds": load_s,
+                    "generation": out}),
+                );
+            }
+            println!("{}", out.text);
+            eprintln!(
+                "{} · load {:.1}s · {} prompt + {} generated tokens in {:.1}s ({:.1} tok/s){}",
+                spec.key,
+                load_s,
+                out.prompt_tokens,
+                out.generated_tokens,
+                out.seconds,
+                out.generated_tokens as f64 / out.seconds.max(1e-9),
+                if out.truncated {
+                    " · stopped at --max-tokens"
+                } else {
+                    ""
+                }
+            );
         }
     }
     Ok(())

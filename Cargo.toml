@@ -17,6 +17,7 @@ invectus-unsearch = { path = "crates/unsearch" }
 invectus-regions = { path = "crates/regions" }
 invectus-gaps = { path = "crates/gaps" }
 invectus-eval = { path = "crates/eval" }
+invectus-llm = { path = "crates/llm" }
 
 anyhow = "1"
 thiserror = "2"
@@ -44,6 +45,9 @@ ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "
 # No `http` feature: the tokenizer can only be loaded from a local file.
 tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+# llama.cpp for local language models; built from the vendored source (cmake), loads local GGUF
+# files only.
+llama-cpp-2 = { version = "=0.1.160", default-features = false }
 
 [patch.crates-io]
 lancedb = { path = "third_party/lancedb-0.40.0" }

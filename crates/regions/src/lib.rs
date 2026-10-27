@@ -5,6 +5,7 @@ pub mod knn;
 pub mod labels;
 pub mod layout;
 pub mod leiden;
+pub mod llm_labels;
 pub mod map;
 pub mod run;
 pub mod stability;

@@ -1,9 +1,9 @@
-//! Llm boundary from SPEC §7.2. Implementation starts after P0.
+//! Local language models (SPEC §7.2): a pinned registry, checksum-verified installation and
+//! offline generation through llama.cpp. Used for region labels, calibration paraphrases and
+//! midpoint descriptions; every output records the model that produced it.
+pub mod generate;
+pub mod registry;
+pub mod store;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn scaffold_is_available() {
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
-    }
-}
+pub use generate::{GenOptions, Generation, LlamaGenerator, LlmIdentity, TextGenerator};
+pub use registry::{DEFAULT_LLM, LlmSpec, MODELS};

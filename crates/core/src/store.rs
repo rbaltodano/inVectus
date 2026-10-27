@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS gaps (
 CREATE TABLE IF NOT EXISTS gap_verdicts (
   collection_id TEXT, space_id TEXT, kind TEXT, core JSON, verdict TEXT, note TEXT,
   updated_at TIMESTAMP);
+ALTER TABLE regions ADD COLUMN IF NOT EXISTS llm_label TEXT;
+ALTER TABLE regions ADD COLUMN IF NOT EXISTS llm_model TEXT;
 "#;
 
 /// Settings applied to every DuckDB connection: never fetch extensions from the network.
@@ -179,6 +181,9 @@ pub struct RegionRecord {
     pub x: f64,
     pub y: f64,
     pub radius: f64,
+    /// A readable name written by a local language model (`invectus regions label`).
+    #[serde(default)]
+    pub llm_label: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -745,7 +750,9 @@ impl Store {
         )?;
         {
             let mut ins = tx.prepare(
-                "INSERT INTO regions VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO regions (run_id, region_id, level, parent_id, label, terms, size,
+                   stability, centroid, x, y, radius)
+                 VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?, ?, ?)",
             )?;
             for r in regions {
                 ins.execute(params![
@@ -822,7 +829,7 @@ impl Store {
     pub fn regions(&self, run_id: &str) -> Result<Vec<RegionRecord>> {
         let mut st = self.conn.prepare(
             "SELECT region_id, level, parent_id, label, terms::VARCHAR, size, stability, centroid,
-                    x, y, radius
+                    x, y, radius, llm_label
              FROM regions WHERE run_id = ? ORDER BY level DESC, region_id",
         )?;
         let rows = st.query_map([run_id], |r| {
@@ -839,6 +846,7 @@ impl Store {
                     x: r.get(8)?,
                     y: r.get(9)?,
                     radius: r.get(10)?,
+                    llm_label: r.get(11)?,
                 },
                 r.get::<_, String>(4)?,
             ))
@@ -849,6 +857,23 @@ impl Store {
             Ok(rec)
         })
         .collect()
+    }
+
+    /// Store a language-model label for one region of a run.
+    pub fn set_region_llm_label(
+        &self,
+        run_id: &str,
+        level: &str,
+        region_id: i32,
+        label: &str,
+        model: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE regions SET llm_label = ?, llm_model = ?
+             WHERE run_id = ? AND level = ? AND region_id = ?",
+            params![label, model, run_id, level, region_id],
+        )?;
+        Ok(())
     }
 
     pub fn region_members(&self, run_id: &str) -> Result<Vec<MemberRecord>> {

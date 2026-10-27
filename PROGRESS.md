@@ -451,6 +451,42 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
   projects behind; these were removed. Temp cleanup on SIGKILL is not possible from inside the
   process.
 
+## 2026-10-27 — Local language model (owner chose local; approved the 6.98 GB download)
+
+- **Model:** `google/gemma-4-12B-it-qat-q4_0-gguf@29d09777…`, file
+  `gemma-4-12b-it-qat-q4_0.gguf` (6,975,879,296 bytes, Apache-2.0, ungated). It is Google's
+  quantization-aware-trained 4-bit GGUF; the 0.18 GB vision projector was not downloaded. The
+  download's SHA-256 `93567e57…` matches the pinned value. It is installed in the dev model store
+  (`.spike-data/models-store/gemma-4-12b-it-qat-q4_0/model.gguf`). Qwen 3.5 9B was considered,
+  but Qwen publishes only BF16 safetensors (19.3 GB, no official GGUF), which did not fit the
+  free disk. Free disk was 25 GiB before the download and ~18 GiB after.
+- **`invectus-llm` crate:**
+  - A pinned registry (repository, revision, size, SHA-256, license, context 8,192).
+  - Checksum verification cached by a size+mtime stamp.
+  - A `TextGenerator` trait with a llama.cpp backend (`llama-cpp-2 =0.1.160`, built from
+    vendored source with cmake; Metal with all layers on the GPU on macOS). It loads local files
+    only and runs offline.
+  - llama.cpp's built-in template engine does not know Gemma 4's `<|turn>` format
+    (`apply_chat_template` → ffi error −1). A fallback reproduces the model's own Jinja template
+    output for one system and one user turn with thinking disabled (empty thought channel), and
+    generation stops on the turn-ending control token. Every output records the model identity.
+- **CLI:** `invectus llm list | verify | generate`, and `invectus regions label` (LLM region
+  names, resumable, skips regions that already have one, Ctrl-C keeps progress). `regions list`
+  shows the LLM name next to the c-TF-IDF terms. The model sees each region's top terms and the
+  titles of its 10 most central items, never full texts. The labels are stored in new
+  `regions.llm_label` / `llm_model` columns, added with `ALTER TABLE … ADD COLUMN IF NOT EXISTS`,
+  so existing projects upgrade in place.
+- **Measured (M4 Pro, Metal):** load 1.2 s with a cached checksum; ~15 tokens/s end to end on a
+  short prompt. Labelling the demo's **71 regions took 140 s (2.0 s per region)**, e.g.
+  "Surgical Treatments for Nasolacrimal Duct Obstruction", "Genetic and Clinical Aspects of
+  LHON", "Choroidal Thickness and Optical Coherence Tomography". The full set (769 regions)
+  would take ~25 min. Labels are not human-reviewed. A few are broad ("Ocular Side Effects and
+  Clinical Findings").
+- Tests: checksum verification, Gemma 4 prompt format, label cleaning. Clippy and fmt are clean.
+  The lockfile gained `llama-cpp-2` / `llama-cpp-sys-2` 0.1.160 and their dependencies.
+- **Not yet:** LLM calibration paraphrases (SPEC §6.2) and midpoint descriptions with the
+  round-trip check (P5, §6.3). Windows/Linux llama.cpp builds are untested.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.

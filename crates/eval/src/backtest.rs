@@ -156,7 +156,7 @@ pub fn backtest(
     }
     let (ids, matrix) = vectors.parent_matrix(table)?;
     let dim = table.identity.dimensions;
-    let items = project.store.items_by_ids(&ids)?;
+    let items = project.store.item_facts(&table.collection_id)?;
     let row_of: HashMap<i64, usize> = ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
     let mut cutoffs = Vec::new();
     for cutoff in &opts.cutoffs {
@@ -182,8 +182,15 @@ pub fn backtest(
             mapping: serde_json::json!({}),
             chunking: serde_json::json!({}),
         })?;
-        let batch: Vec<_> = past.iter().map(|id| (items[id].clone(), vec![])).collect();
-        temp.store.write_items(&batch)?;
+        // Full items (text for region labels) are copied in batches to bound memory.
+        for part in past.chunks(20_000) {
+            let full = project.store.items_by_ids(part)?;
+            let batch: Vec<_> = part
+                .iter()
+                .filter_map(|id| full.get(id).map(|i| (i.clone(), vec![])))
+                .collect();
+            temp.store.write_items(&batch)?;
+        }
         let tv = VectorStore::open(&temp)?;
         let ttable = tv.ensure_table(&temp, &table.collection_id, &table.identity, "embedded")?;
         let rows: Vec<VectorRow> = past

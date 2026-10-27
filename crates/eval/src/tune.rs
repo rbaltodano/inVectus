@@ -117,7 +117,8 @@ pub fn tune(report: &BacktestReport) -> Result<TuneReport> {
              gaps; rerun `invectus eval backtest --json` with this version)"
         );
     }
-    let default = [1.0, 0.5, 0.5, 1.0];
+    let d = invectus_gaps::ScanOptions::default().weights;
+    let default = [d.demand_since, d.coverage_ratio, d.momentum, d.stale_share];
     let mut folds = Vec::new();
     for (i, held) in usable.iter().enumerate() {
         let train: Vec<&Vec<ScoredGap>> = usable
@@ -232,8 +233,6 @@ mod tests {
             assert_eq!(f.held_out.auc, 1.0, "{:?}", f.weights);
             assert_eq!(f.weights[TERMS[0]], 0.0);
             assert!(f.weights[TERMS[1]] > 0.0);
-            // Default weights favour the misleading term.
-            assert!(f.default.auc < 0.5);
         }
         let mut one = report.clone();
         one.cutoffs.truncate(1);

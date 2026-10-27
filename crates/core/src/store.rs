@@ -238,6 +238,13 @@ fn blob_to_f32s(b: &[u8]) -> Vec<f32> {
         .collect()
 }
 
+/// The role and date of an item.
+#[derive(Clone, Debug)]
+pub struct ItemFacts {
+    pub role: Role,
+    pub date: Option<String>,
+}
+
 /// Row needed to embed an item.
 #[derive(Clone, Debug)]
 pub struct EmbedRow {
@@ -989,6 +996,33 @@ impl Store {
                 note,
                 updated_at: Some(at),
             })
+        })
+        .collect()
+    }
+
+    /// Role and date of top-level items: what gap scans and backtests need, without loading
+    /// text or metadata (gigabytes at 500k items).
+    pub fn item_facts(&self, collection_id: &str) -> Result<HashMap<i64, ItemFacts>> {
+        let mut st = self.conn.prepare(
+            "SELECT item_id, role, CAST(date AS VARCHAR) FROM items
+             WHERE collection_id = ? AND parent_id IS NULL",
+        )?;
+        let rows = st.query_map([collection_id], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (id, role, date) = row?;
+            Ok((
+                id,
+                ItemFacts {
+                    role: role.parse()?,
+                    date,
+                },
+            ))
         })
         .collect()
     }

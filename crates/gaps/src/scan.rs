@@ -91,9 +91,12 @@ impl Default for ScanOptions {
             sibling_similarity: 0.95,
             max_bridge_ratio: 0.2,
             weights: Weights {
-                demand_since: 1.0,
-                coverage_ratio: 0.5,
-                momentum: 0.5,
+                // Chosen by leave-one-cutoff-out tuning on the full gapmap benchmark
+                // (PROGRESS.md, 2026-10-27): demand per coverage carries the signal; demand
+                // since the last coverage added none on held-out cutoffs.
+                demand_since: 0.0,
+                coverage_ratio: 2.0,
+                momentum: 1.0,
                 stale_share: 1.0,
                 bridge: 1.0,
                 saturation: 1.0,
@@ -243,8 +246,7 @@ pub fn scan(
         })?;
     let regions = project.store.regions(&run.run_id)?;
     let members = project.store.region_members(&run.run_id)?;
-    let ids: Vec<i64> = members.iter().map(|m| m.item_id).collect();
-    let items = project.store.items_by_ids(&ids)?;
+    let items = project.store.item_facts(&table.collection_id)?;
     let fine: Vec<_> = regions.iter().filter(|r| r.level == "fine").collect();
     let index: HashMap<i32, usize> = fine
         .iter()

@@ -362,10 +362,68 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
   text is never exported; a test asserts that item text is absent. `cargo test --workspace`:
   **74 passed**.
 
+## 2026-10-27 — Full gapmap benchmark (owner approved copying beyond 10k, read-only)
+
+- **Copy:** `gapmap import` without a limit wrote all **591,484** papers and their stored Nomic
+  vectors to `.spike-data/p1/work/gapmap-full.invectus` (2.4 GB) in 13 min 4 s. Roles: 8,462
+  coverage / 235,550 demand / 347,472 neutral.
+- **Reference safety:** reads used read-only DuckDB and Lance scans. A per-file listing (path,
+  size, mtime) of `data/gapmap.duckdb` and `data/vectors/` (233 files) is saved in
+  `.spike-data/p1/reference-fingerprint-2026-10-27.txt`. No file or folder there has an mtime
+  after Oct 26 18:57 (before this session's work). The listing hash `57523207…` reproduces. A
+  first fingerprint taken just before the import (`fad1d81f…`) did not reproduce, and I cannot
+  explain it. P1's `3375279f…` (232 files) used a different script, so it is not comparable.
+- **Scaling fixes found by the full set:**
+  - Exact kNN would take hours at 591k. Regions above 40k items now use an inverted-file
+    approximate kNN (√n spherical k-means lists, 8 probes) and report recall against exact
+    neighbours on 200 items.
+  - The fixed "≥ 10 demand per coverage" threshold flagged 600 of 709 stable regions, because
+    this field averages 28 demand items per review. Coverage gaps now need at least twice the
+    collection's own ratio (here ≈ 56).
+  - Item-to-centroid similarities are now computed in parallel, and demand is counted in one
+    pass.
+- **Regions (591,484 items):** 769 fine / 28 broad regions; sizes 36/673/3,062; 0 noise;
+  **709/769 stable** (mean 0.822); modularity 0.714; trustworthiness@15 0.758. Approximate kNN:
+  763 s with **recall@30 = 0.918**. Clustering (search plus 5 seeds) 62 s; total **15 min**;
+  peak RSS **6.7 GB**. Labels are specific ("dmek · descemet · endothelial", "rop · prematurity
+  · infants", "psp · supranuclear · palsy").
+- **Gap scan:** 177 coverage gaps, 15 stale, 0 bridges (60 unstable regions skipped; 451
+  future-dated items ignored). It took 171 s before parallelizing.
+- **Backtest (cutoffs 2014/16/18/20, horizon 2 years; 356k–469k items per past; 220–265 gaps
+  and 52–86 filled per cutoff; 37 min; peak RSS 13.1 GB):**
+
+  | ranking | p@10 | p@25 | AUC |
+  |---|---|---|---|
+  | model | 0.450 | 0.380 | **0.550** |
+  | raw-count | 0.550 | 0.610 | **0.705** |
+  | density | 0.525 | 0.420 | 0.662 |
+
+  Every cutoff was informative. The model beats chance but not the baselines, so the SPEC §9.3
+  gate still **fails** on the real benchmark. Bridges: 7 across the 4 cutoffs, 3 filled.
+  "Filled" asks where reviews get written next, and raw demand predicts that well. Whether that
+  is the right definition of a gap (rather than "a review would be valuable here") is a product
+  question for the owner.
+- **Per-term ablation** (rerun with the same cutoffs; identical model and baseline numbers; 36.6
+  min, 12.9 GB). Each coverage-gap term was used alone as a ranking, over coverage gaps only, so
+  these are not directly comparable with the baselines above, which rank coverage and stale
+  gaps together:
+
+  | term alone | weight now | p@10 | p@25 | AUC |
+  |---|---|---|---|---|
+  | demand per coverage (log) | 0.5 | 0.500 | 0.460 | **0.661** |
+  | demand since last coverage (log) | 1.0 | 0.375 | 0.360 | 0.536 |
+  | momentum | 0.5 | 0.200 | 0.200 | 0.539 |
+
+  The most predictive term has the lowest weight, and the most heavily weighted term barely
+  beats chance. Weights were **not** changed: each backtest takes ~37 min, and picking weights
+  on these 4 cutoffs without a held-out cutoff (§9.1 step 4) would overfit. A proper tuning run
+  should cache each cutoff's regions and gap terms and then search weights with
+  leave-one-cutoff-out.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.
-2. **Backtest on a real benchmark.** The gapmap optometry set (591k papers with
+2. **Backtest on a real benchmark** (done above). The gapmap optometry set (591k papers with
    primary/synthesis roles) is the SPEC §9.2 benchmark, but development copies are limited to
    10k items. Running it needs the owner's approval to use more of it, read-only. Then compare
    per-term ablations before tuning weights.

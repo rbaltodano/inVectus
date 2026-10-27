@@ -153,8 +153,97 @@ started. Nothing pushed.
 - The Apple linker still warns about a large `__eh_frame` section. `target/` is ~29 GB; disk free fell
   to ~9.5 GiB during the build.
 
-## Next — P2 (not started)
-1. Decide the default model with a retrieval-quality comparison (BGE vs Nomic, gapmap parity
-   now available), and add token-aware chunking.
-2. Calibration and verdicts (§6.1–6.2, spec-recommendations 2), on top of the exhaustive route.
-3. Run the three-OS CI when a push is authorized; add Windows/Linux inference smoke fixtures.
+## 2026-10-27 — P2 engine and CLI (UI screen deferred)
+
+Scope (owner direction): SPEC §11 P2 engine and CLI first; the first UI screen waits for the owner's
+designs. Calibration uses the no-LLM fallback (owner decision; no LLM downloaded or called).
+Nothing pushed.
+
+### Changes
+- **unsearch** (internal crate name): `curve` (weighted isotonic regression, pool adjacent
+  violators, P clamped to [0.01, 0.99], AUC, balanced Brier), `calibrate`, `verdict`.
+- **Calibration (query level, no LLM).** For each sampled titled item, the title is embedded as
+  a query and the item's text alone (no title) is embedded as a document. *Absent* = the best
+  similarity to every other stored item (chunks collapsed to parents). *Exists* = the best of
+  that and the own-text similarity. The fit is isotonic exists/absent on the top similarity, one
+  of each per item (even odds). Every fifth item is held out for AUC / Brier / balanced accuracy.
+  Diagnostics: own text vs 20th–50th neighbours (SPEC §6.2's pairs) and title → own-text
+  known-item recall among all items. Results go to a new `calibrations` table with the vector
+  count; it is a cancellable job record that saves nothing when cancelled.
+- **Verdict** (`invectus check`): exhaustive exact retrieval by default (`--fast` allows ANN and
+  adds a note). P(exists) comes from the nearest similarity. exists ≥ 0.7 > near ≥ 0.3 > open.
+  The output also has the drop to the 10th neighbour and local density (mean of the top 10), a
+  calibration quality line, a note when the collection changed since calibration (vector count),
+  a note when a role filter is used, and "Not found in …" wording. Regions are noted as P3.
+- **Token-sized chunking** (opt-in, `import --chunk-tokenizer <model>`; default 448 tokens, 48
+  overlap). It uses the pinned, checksum-verified tokenizer (`ModelTokenizer`, `TokenOffsets`
+  in core) and cuts at a paragraph, then a sentence, then a word boundary. The policy records
+  the tokenizer SHA-256, and imports with another tokenizer are refused. Character policies
+  serialize unchanged, so existing collections keep their hashes.
+- **CLI:** `calibrate` and `check`, and the import flags above. **Desktop:** backend commands
+  `start_calibration` (progress via `calibrate-event`, cancel via `cancel_job`) and
+  `check_idea`. There is no UI yet.
+
+### Checks (arm64 macOS only)
+- `cargo test --workspace`: **61 passed** (11 new), with no model-test skips. New tests cover
+  isotonic fitting, token splitting (including non-ASCII), the stored-policy hash, calibration
+  round-trip, end-to-end calibrate → check (exists / open / role filter, stale, cancel,
+  too-few-items), real-BGE tokenizer offsets, and CLI `check`/`calibrate`/token import + embed.
+  `cargo fmt --check` and `cargo clippy --workspace --all-targets --locked -D warnings` are clean.
+- Release CLI build: 7 m 16 s. Free disk is ~23 GiB with the debug tree rebuilt.
+
+### Measurements (5,000-paper dev sample; M4 Pro; not a 100k validation)
+- **Model comparison (SPEC §14 Q1), calibration at 1,000 titles, 200 held out:**
+
+  | | held-out AUC | Brier | bal. acc. | recall@1 | recall@10 | MRR | own vs related AUC | embed 2,000 texts |
+  |---|---|---|---|---|---|---|---|---|
+  | BGE-small | 0.913 | 0.118 | 0.835 | 0.934 | 0.990 | 0.956 | 0.989 | 29.7 s (67/s) |
+  | Nomic v1.5 | 0.933 | 0.100 | 0.880 | 0.940 | 0.987 | 0.961 | 0.995 | 75.9 s (26/s) |
+
+  At 300 titles: BGE AUC 0.890 / Nomic 0.905. P(exists) = 0.5 at a nearest similarity of 0.827
+  (BGE) / 0.821 (Nomic).
+- **50 held-out titles** (papers *not* in the collection): BGE gave open 39 / near 10 / exists 1;
+  Nomic gave open 36 / near 10 / exists 4. The "exists" cases are closely related papers (e.g.
+  another Graves' orbitopathy review); none were adjudicated. `check` takes ~0.13 s (BGE) /
+  0.26 s (Nomic) per query including process start and model load.
+- **gapmap (imported Nomic, parity-verified, 2,000 papers):** held-out AUC **0.804**, recall@1
+  0.787. Its symmetric `clustering:` prefix and the dense Lance-order sample are the likely
+  causes; not investigated.
+- **Token chunking (BGE tokenizer) vs P1 characters:** 674 items chunked into 1,366 chunks (vs
+  470 → 947); 464 inputs truncated (vs 584). Since 464 < 674 chunked parents (head-truncated by
+  design), this is consistent with no truncated chunks, but it was not verified per input.
+  Import took 2.6 s (vs 1.5 s).
+
+### Decisions and spec conflicts to review
+1. **Default model stays BGE-small.** Nomic is marginally better on the calibration metrics
+   (+0.02 AUC with 200 held-out queries, within noise), BGE gave fewer "exists" on papers not
+   in the collection (1 vs 4 of 50), and BGE is 2.6× faster. SPEC §7.3 names Nomic; the owner
+   should confirm. This is one domain (ophthalmology abstracts), titles as queries, and no human
+   relevance labels.
+2. **Query-level calibration instead of SPEC §6.2's pairwise curve**, following P0
+   recommendation 2: a pairwise P(same) is not P(exists) for the best match over a collection.
+   SPEC §6.2's 20th–50th-neighbour pairs are kept as a diagnostic only. The "absent" class assumes
+   the nearest other item is a different thing; duplicates make the curve more cautious. There
+   are no adjudicated negatives yet.
+3. **Interpolation gap:** when exists and absent scores do not overlap, P between the highest
+   absent and the lowest exists score is a linear guess (seen in tests with a toy embedder).
+4. **Verdicts default to exhaustive retrieval** (SPEC §6.1 says ANN then re-score). An absence
+   claim should not rest on approximate retrieval; at 5k vectors exhaustive is ~5 ms.
+5. Thresholds 0.7 / 0.3 are provisional. With a role filter, the curve fitted on the whole
+   collection is reused, and a note says P(exists) is approximate.
+6. Per-item probabilities were dropped: with a query-level curve only the query has a P(exists).
+7. Token chunking is opt-in, not the default, because changing the default would change new
+   collections' behaviour silently. Owner call.
+
+### Limitations
+- No LLM paraphrases (SPEC §6.2 primary method), so the calibration is the flagged fallback.
+  There are no human-adjudicated verdicts, and the thresholds are not tuned.
+- Regions ("sits between A and B") need P3 clustering. No UI screen yet.
+- Windows/Linux are not built or run. The CLI still panics on a broken pipe (`| head`).
+
+## Next
+1. P2 UI: the Search verdict screen from the owner's designs (backend commands are ready).
+2. Owner decisions: default model (decision 1), token chunking default (7), and whether to add an
+   LLM paraphrase calibration (needs a provider choice or an approved download).
+3. Adjudicate a sample of verdicts (e.g. the 5 "exists" above) before trusting thresholds.
+4. Run the three-OS CI when a push is authorized; add Windows/Linux inference smoke fixtures.

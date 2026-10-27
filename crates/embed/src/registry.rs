@@ -40,8 +40,9 @@ impl ModelSpec {
     }
 }
 
-/// Provisional CPU default from the P0 spike (71.95 items/s vs Nomic's 26.69 items/s on the
-/// spike sample); retrieval quality has not been compared (SPEC §14 Q1 stays open).
+/// CPU default: 2.6x faster than Nomic with near-equal quality in the P2 comparison (held-out
+/// calibration AUC 0.913 vs 0.933, title recall@1 0.934 vs 0.940 on 1,000 dev titles; see
+/// PROGRESS.md). SPEC §7.3 names Nomic; the owner has not yet confirmed (SPEC §14 Q1).
 pub const DEFAULT_MODEL: &str = "bge-small-en-v1.5";
 
 pub const MODELS: &[ModelSpec] = &[

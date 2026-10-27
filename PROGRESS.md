@@ -241,9 +241,98 @@ Nothing pushed.
 - Regions ("sits between A and B") need P3 clustering. No UI screen yet.
 - Windows/Linux are not built or run. The CLI still panics on a broken pipe (`| head`).
 
+## 2026-10-27 — P3 regions and map, P4 gap scan (engine, CLI, desktop backend)
+
+Owner direction: keep the P2 defaults (BGE-small default, token chunking opt-in, no-LLM
+calibration). The designs are coming, so the work is engine, CLI and backend only. Nothing pushed.
+
+### Changes
+- **regions** (P0 recommended a kNN-graph/Leiden backend over the tested HDBSCAN/UMAP crates):
+  - Exact cosine kNN (k = 30, rayon, already in the lockfile) builds a symmetric graph weighted by
+    similarity.
+  - Leiden is a new implementation: fast local moving, well-connectedness refinement with greedy
+    merges, aggregation on the refined partition, two passes, and a seeded RNG. It handles
+    isolated nodes and empty graphs.
+  - The resolution is automatic: bisection to about √n fine regions (8–1,000). `--resolution`
+    and `--target-regions` override it.
+  - Communities under 10 items are noise: they are attached to the nearest centroid and flagged.
+  - Broad regions come from Ward agglomeration of fine centroids, so they always nest.
+  - Labels use c-TF-IDF with a stop-word list; there is no LLM.
+  - Stability is the mean best-Jaccard over seeds 1–4 against seed 0; the gate is ≥ 0.5.
+  - The map follows P0's fallback: classical MDS of fine centroids, circles sized √n pushed apart,
+    then local PCA inside each circle. It is deterministic and reports trustworthiness@15.
+  - Storage: `region_runs`, `regions` (centroids as f32 BLOBs) and `region_members`. The latest
+    run replaces earlier regions; run records stay as history.
+- **check** gains "Your idea sits between A and B" from the two nearest fine centroids.
+- **gaps** (SPEC §5.1–5.3, 5.6–5.7):
+  - Coverage reach follows gapmap's rule: an item counts toward its 2 nearest regions when it is
+    at or above the region's 25th-percentile member similarity.
+  - A coverage gap is no coverage, or ≥ 10 demand per coverage item. Otherwise, a stale gap is
+    ≥ 50 % of demand newer than the latest coverage.
+  - Bridges: each region's 3 nearest regions; both regions stable and not shrinking; a centroid
+    similarity at least the collection's median nearest-region similarity (relevance gate, P0
+    recommendation 3); near-duplicate siblings (same broad region, ≥ 0.95) excluded; and a
+    bridge ratio ≤ 0.2 (density gate).
+  - Momentum: a Poisson IRLS slope over the 6 most recent complete years. Saturation is −1 z when
+    coverage falls within 24 months.
+  - Scores are z-scored per type, and the stored terms (value, z, weight, contribution) sum to the
+    score. Dates after today are ignored and noted. Regions with stability < 0.5 are not ranked.
+  - Human verdicts (open / confirmed_gap / already_exists / not_viable / selected + note) are
+    stored by the gap's 20 core items. They carry over to a re-run's gap of the same type at
+    Jaccard ≥ 0.5.
+  - Query voids (need a search log) and density holes (exploratory) are not scanned, and the
+    output says so.
+- **CLI:** `regions run|list|map --out`, `gaps scan|list|show|verdict`. **Desktop backend:**
+  `start_regions` (`regions-event`), `region_map`, `scan_gaps`, `list_gaps`, `gap_detail`,
+  `set_gap_verdict`. There is no UI.
+
+### Checks (arm64 macOS only)
+- `cargo test --workspace`: **71+ passed**. New tests cover:
+  - Leiden: planted cliques for 5 seeds, resolution, reproducibility, isolated nodes.
+  - Ward, c-TF-IDF, best-Jaccard, layout containment and trustworthiness, Poisson slope.
+  - Region job end to end: 4 planted topics, labels, stability, map containment, the auto
+    target, rerun replacement, and cancel keeping the old run.
+  - Gap scan end to end: planted coverage, stale and bridge gaps; explained scores; future-date
+    note; verdict validation; and a verdict carried over a re-clustering.
+- fmt and clippy (`-D warnings`) are clean. The lockfile only gained internal crates.
+
+### Measurements (dev data; M4 Pro; not a 100k validation)
+- **Demo, 5,000 papers, BGE, automatic resolution 7.34:** 71 fine / 8 broad regions; sizes
+  15/66/155; 17 noise items (0.3 %); 58/71 stable (mean 0.685); modularity 0.342; map
+  trustworthiness@15 **0.893**. kNN took 0.4 s, clustering 5 seeds plus the search 0.2 s, total
+  1.1 s. Labels are specific ("keratoconus · corneal · keratoplasty", "graves · thyroid ·
+  disease", "lasik · laser · ablation"). Resolution 1.0 gave only 10 coarse regions.
+- **Gap scan on the demo:** 0.22 s, with 56 coverage gaps, 0 stale and 0 bridges (13 unstable
+  regions skipped; 4 future-dated items ignored). The demo's P1 role rule marks every "Journal
+  Article" as demand (4,922 demand vs 66 coverage), so basic-science regions rank high: that is
+  a mapping artefact, not a finding. Bridges: even with no ratio gate only 1 pair passes the
+  other gates (ratio 0.27 at similarity 0.943). The 0.2 default yields none on this sample.
+- **gapmap (2,000 papers, imported Nomic):** 45 regions (35 stable), trustworthiness 0.916, 0.7 s;
+  3 coverage gaps. `check` on a held-out title: exists, P 0.84, *"sits between 'graves · thyroid ·
+  serum' and 'orbital · orbit · tumor'"*.
+- These trustworthiness values are on different samples from P0's UMAP numbers (Python 0.866,
+  Rust 0.62), so they are not a like-for-like comparison.
+
+### Decisions and spec conflicts to review
+1. **Leiden instead of HDBSCAN** (SPEC §6.4 allowed either; P0 rejected the HDBSCAN crate). This
+   is my implementation with greedy rather than randomized refinement. It is not yet compared with
+   a reference Leiden or with gapmap's leaf HDBSCAN on the same data.
+2. **Automatic resolution to ≈ √n regions** is my heuristic. For gapmap's 591k it would aim at
+   ~770 (gapmap found 656). SPEC says target sizes are set per collection; both flags override it.
+3. **Map = MDS + local PCA, not UMAP** (P0 fallback). Distances between regions are meaningful;
+   inside a circle only the two main directions of variation are shown.
+4. Coverage-gap vs stale split (ratio ≥ 10 → coverage gap; else ≥ 50 % newer → stale) and all the
+   default weights are untuned. The backtest is meant to tune them.
+5. Exact kNN is O(n²): fine at 5k (0.4 s). 100k is estimated at minutes but not measured; ANN
+   neighbours would be the fallback.
+
 ## Next
-1. P2 UI: the Search verdict screen from the owner's designs (backend commands are ready).
-2. Owner decisions: default model (decision 1), token chunking default (7), and whether to add an
-   LLM paraphrase calibration (needs a provider choice or an approved download).
-3. Adjudicate a sample of verdicts (e.g. the 5 "exists" above) before trusting thresholds.
-4. Run the three-OS CI when a push is authorized; add Windows/Linux inference smoke fixtures.
+1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
+   backend commands exist.
+2. P7 backtest harness (§9.1) on the dev samples; full benchmarks need data beyond the 10k-item
+   development limit.
+3. LLM-dependent work (calibration paraphrases, midpoint descriptions P5, LLM region labels)
+   waits for a provider decision. Verification connectors (P6) need network approval for live
+   tests.
+4. Adjudicate a sample of verdicts and gaps before trusting thresholds and weights.
+5. Run the three-OS CI when a push is authorized.

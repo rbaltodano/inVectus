@@ -96,7 +96,7 @@ impl Default for ScanOptions {
                 // since the last coverage added none on held-out cutoffs.
                 demand_since: 0.0,
                 coverage_ratio: 2.0,
-                momentum: 1.0,
+                momentum: 0.5,
                 stale_share: 1.0,
                 bridge: 1.0,
                 saturation: 1.0,

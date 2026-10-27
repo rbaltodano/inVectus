@@ -428,25 +428,26 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
   backtest is slow. Each cutoff now runs as its own process, so one failure loses one cutoff.
 - Memory: scans and backtests load only role and date per item (`Store::item_facts`), and
   backtests copy items into the past project in batches of 20k.
-- **Held-out results, full gapmap, cutoffs 2014/2016/2018** (3 folds):
+- **Held-out results, full gapmap, cutoffs 2014/2016/2018/2020** (4 folds):
 
   | ranking on the held-out cutoff | p@10 | p@25 | AUC |
   |---|---|---|---|
-  | tuned weights | 0.433 | 0.333 | **0.622** |
-  | previous default weights | 0.400 | 0.333 | 0.566 |
-  | raw-count baseline | 0.467 | 0.533 | **0.692** |
+  | tuned weights | 0.500 | 0.370 | **0.623** |
+  | previous default weights | 0.450 | 0.380 | 0.550 |
+  | raw-count baseline | 0.550 | 0.610 | **0.705** |
 
   The chosen weights were consistent: demand per coverage **2.0** in every fold, demand since
-  last coverage **0** in every fold, momentum 0.25 / 1 / 1, stale share 0 / 0 / 0.5.
-- **Defaults changed** to demand per coverage 2.0, demand since 0, momentum 1.0. Stale share
-  stays 1.0: only ~15 stale gaps, which is too little evidence. Tuning improves held-out AUC by
-  +0.056 but the model **still trails raw count** (0.622 vs 0.692). §9.3's gate still fails.
+  last coverage **0** in every fold, momentum 0.25 / 0.5 / 0.5 / 1 (0.5 on all cutoffs), stale
+  share 0 in every fold.
+- **Defaults changed** to demand per coverage 2.0, demand since 0, momentum 0.5. Stale share
+  stays 1.0: only ~15 stale gaps, which is too little evidence to zero it. Tuning improves
+  held-out AUC by +0.073 but the model **still trails raw count** (0.623 vs 0.705). §9.3's gate still fails.
   The score terms are relative measures, so they cannot express "big regions get reviewed
   next". Whether the score *should* predict where reviews appear (versus where one is most
   needed) is the open product question.
-- **2020 fold missing:** that cutoff (469k items) was killed by the OS three times (SIGKILL at
-  ~5 min, ~10.5 GB RSS) while swap was nearly exhausted (5.1 of 6 GB used) and free disk was
-  low. It completed in the earlier full run at 13 GB. Killed runs left four 1.8–2.0 GB temp
+- The 2020 cutoff (469k items) was killed by the OS three times (SIGKILL at ~5 min, ~10.5 GB
+  RSS) while swap was nearly exhausted (5.1 of 6 GB used) and free disk was low. It completed on
+  the fourth try (10 min 53 s, 11.3 GB) after the leftover temp projects were removed. Killed runs left four 1.8–2.0 GB temp
   projects behind; these were removed. Temp cleanup on SIGKILL is not possible from inside the
   process.
 

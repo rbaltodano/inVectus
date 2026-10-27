@@ -356,6 +356,12 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
   only 66 coverage); and very few fills. This is not yet evidence either way about the method on
   gapmap-quality roles. Weights were **not** tuned: 4 cutoffs with 4–13 fills each would overfit.
 
+## 2026-10-27 — Gap reports (SPEC §4 step 8)
+- `invectus gaps export --out report.md|report.csv`: rank, type, score, label, verdict, note and
+  explanation. The Markdown report adds the 5 central items of each gap as titled links. Source
+  text is never exported; a test asserts that item text is absent. `cargo test --workspace`:
+  **74 passed**.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.

@@ -289,4 +289,14 @@ fn planted_gaps_are_found_explained_and_keep_their_verdicts() {
     assert_eq!(carried.len(), 1);
     assert_eq!(topic_of(&carried[0].gap.label), 0);
     assert_eq!(carried[0].verdict.as_ref().unwrap().note, "checked PubMed");
+
+    // Reports carry titles, verdicts and explanations, never the source text.
+    let csv = invectus_gaps::export::csv(&l);
+    assert!(csv.starts_with("rank,type,score") && csv.contains("confirmed_gap,checked PubMed"));
+    let md = invectus_gaps::export::markdown(&p, "c", &l, 10).unwrap();
+    assert!(md.contains("Verdict: confirmed_gap — checked PubMed") && md.contains("item "));
+    assert!(
+        !md.contains("uniq0x") && !csv.contains("uniq0x"),
+        "no item text"
+    );
 }

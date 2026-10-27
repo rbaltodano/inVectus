@@ -56,6 +56,7 @@ invectus regions map -p … -c papers --out map.json
 invectus gaps scan -p … -c papers            # coverage, stale and bridge gaps, explained
 invectus gaps show -p … -c papers 3
 invectus gaps verdict -p … -c papers 3 confirmed_gap --note "checked PubMed"
+invectus gaps export -p … -c papers --out gaps.md   # titles and links only
 invectus eval backtest -p … -c papers --cutoff 2018-12-31,2020-12-31 --horizon-years 2
 # Optional: size chunks in the model's tokens instead of characters (new collections only)
 invectus import -p … notes/ -c notes --chunk-tokenizer bge-small-en-v1.5

@@ -346,6 +346,19 @@ enum GapsCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Write a report of the ranked gaps (titles and links only, never source text).
+    Export {
+        #[command(flatten)]
+        t: TableArgs,
+        /// md or csv (from the file extension when omitted).
+        #[arg(long)]
+        format: Option<String>,
+        /// Gaps in the Markdown report.
+        #[arg(long, default_value_t = 25)]
+        top: usize,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Record a decision: open, confirmed_gap, already_exists, not_viable or selected.
     Verdict {
         #[command(flatten)]
@@ -1356,6 +1369,30 @@ fn cmd_gaps(c: GapsCommand) -> Result<()> {
                         .unwrap_or_default()
                 );
             }
+        }
+        GapsCommand::Export {
+            t,
+            format,
+            top,
+            out,
+        } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let l = gap_list(&project, &table)?;
+            let format = format.unwrap_or_else(|| {
+                out.extension()
+                    .map(|e| e.to_string_lossy().to_lowercase())
+                    .unwrap_or_default()
+            });
+            let text = match format.as_str() {
+                "csv" => invectus_gaps::export::csv(&l),
+                "md" | "markdown" => {
+                    invectus_gaps::export::markdown(&project, &t.collection, &l, top)?
+                }
+                other => bail!("unknown report format {other:?} (md or csv)"),
+            };
+            std::fs::write(&out, text).with_context(|| format!("writing {}", out.display()))?;
+            println!("wrote {} gaps to {}", l.gaps.len(), out.display());
         }
         GapsCommand::Verdict {
             t,

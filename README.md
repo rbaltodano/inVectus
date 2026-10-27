@@ -7,7 +7,9 @@ verify it before claiming it does not exist. Local-first desktop app for macOS, 
 - Ledger and next steps: [PROGRESS.md](PROGRESS.md)
 - P0 measurements and decisions: [docs/spikes](docs/spikes/README.md)
 
-P0 scaffold only: the desktop shell connects to the Rust core; import and search are P1+.
+P1 engine: `invectus import / embed / search` on CSV, Parquet and folder input, read-only gapmap
+import, and a desktop shell over the same crates. Search returns nearest items with evidence; it
+is not an absence verdict (calibrated inVectus search verdicts are P2).
 
 ## Development
 
@@ -26,13 +28,38 @@ npm run build
 cargo test --workspace --locked
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo run --locked --bin invectus
+cargo run --locked --bin invectus -- --help
 npm run tauri build -- --no-bundle --ci
 ```
 
+LanceDB needs `protoc` at build time (`PROTOC=/absolute/path/to/protoc`; see
+[docs/spikes](docs/spikes/README.md)). The workspace builds a locally patched LanceDB 0.40.0
+without its `remote` feature; see [third_party/README.md](third_party/README.md).
+
+## Engine quick start
+
+```sh
+invectus models install bge-small-en-v1.5 --from <folder with the pinned files>   # or: models download (network)
+invectus init ~/inVectus\ Projects/demo
+invectus import -p ~/inVectus\ Projects/demo.invectus papers.csv -c papers \
+  --id pmid --title title --text abstract --date pub_date \
+  --role-column pub_types --role-rules "Systematic Review=coverage,Journal Article=demand" --preview 20
+invectus import -p … (same arguments without --preview)
+invectus --offline embed -p ~/inVectus\ Projects/demo.invectus -c papers        # Ctrl-C keeps progress; re-run resumes
+invectus --offline search -p ~/inVectus\ Projects/demo.invectus -c papers "idea" --exhaustive --role coverage
+invectus gapmap import -p … --source ~/Documents/Medical\ Paper\ Vector\ Database --limit 2000
+invectus parity -p … -c gapmap      # required before searching imported gapmap vectors
+```
+
+Every vector table belongs to one embedding space: model commit and weights checksum, tokenizer,
+prefixes, text template, pooling, normalization, token cap, dimensions, precision and runtime. Queries
+are only compared with vectors from the same space, or, for imported vectors from another runtime,
+after a recorded parity check. Models install into the OS app-data folder (`INVECTUS_MODELS_DIR` overrides);
+only `models download` uses the network, and `--offline` / `INVECTUS_OFFLINE=1` refuses it.
+
 The root Cargo workspace contains `src-tauri` (`invectus-app`) and `crates/{core,ingest,embed,index,
 regions,gaps,unsearch,midpoint,llm,verify,eval,cli}` (packages prefixed `invectus-`). The CLI binary is
-`invectus`. No model is bundled or downloaded by the app. ML candidates are isolated in the
+`invectus`. No model is bundled; models are installed explicitly. ML candidates are isolated in the
 [spike workspace](spikes/Cargo.toml); see its reproduction instructions before running them.
 
 CI compiles the desktop shell and spike binaries on all three OSes; benchmark data is local only.

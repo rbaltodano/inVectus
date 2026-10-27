@@ -230,10 +230,10 @@ pub fn import_gapmap(
         HashMap<i64, String>,
     )> = None;
 
-    let mut flush = |pending: &mut Vec<(i64, Vec<f32>)>,
-                     ctx: &mut Option<_>,
-                     report: &mut GapmapReport,
-                     project: &mut Project|
+    let flush = |pending: &mut Vec<(i64, Vec<f32>)>,
+                 ctx: &mut Option<_>,
+                 report: &mut GapmapReport,
+                 project: &mut Project|
      -> Result<()> {
         if pending.is_empty() {
             return Ok(());
@@ -354,11 +354,11 @@ pub fn import_gapmap(
                         .context("vector type")?;
                     pending.push((pmids.value(i), v.values().to_vec()));
                     report.vectors_read += 1;
-                    if pending.len() >= BATCH {
-                        if let Err(e) = flush(&mut pending, &mut ctx, &mut report, project) {
-                            err = Some(e);
-                            bail!("import failed");
-                        }
+                    if pending.len() >= BATCH
+                        && let Err(e) = flush(&mut pending, &mut ctx, &mut report, project)
+                    {
+                        err = Some(e);
+                        bail!("import failed");
                     }
                 }
                 Ok(())

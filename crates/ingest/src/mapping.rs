@@ -12,8 +12,8 @@ pub enum RoleMapping {
     /// Every item gets this role.
     Constant { role: Role },
     /// Look up a column. A rule matches when the value, or any element of a list value such as
-    /// `[Journal Article, Systematic Review]`, equals the rule's value (case-insensitive). The
-    /// first matching rule wins; otherwise `default`.
+    /// `[Journal Article, Systematic Review]` or `Journal Article; Systematic Review`, equals the
+    /// rule's value (case-insensitive). The first matching rule wins; otherwise `default`.
     Column {
         column: String,
         rules: Vec<(String, Role)>,
@@ -54,7 +54,7 @@ impl RoleMapping {
                         .split(',')
                         .map(|s| s.trim().trim_matches('\''))
                         .collect(),
-                    None => vec![v],
+                    None => v.split(';').map(str::trim).collect(),
                 };
                 rules
                     .iter()
@@ -283,6 +283,12 @@ mod tests {
         assert_eq!(out.meta, serde_json::json!({"journal": "Optom"}));
 
         let mut row2 = row.clone();
+        row2[4] = s("Editorial; Systematic Review");
+        assert_eq!(
+            r.map(1, &row2).unwrap().role,
+            Role::Coverage,
+            "';'-separated lists"
+        );
         row2[4] = s("[Journal Article]");
         row2[3] = s("sometime");
         let out = r.map(1, &row2).unwrap();

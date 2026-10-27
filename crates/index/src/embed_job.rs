@@ -25,7 +25,7 @@ impl Default for EmbedJobOptions {
     fn default() -> Self {
         Self {
             flush_every: 256,
-            ann_min_rows: 5_000,
+            ann_min_rows: 50_000,
         }
     }
 }
@@ -102,7 +102,10 @@ pub fn run_embed(
     }
     job.state = match &result {
         Ok(()) if report.cancelled => "cancelled".into(),
-        Ok(()) => "completed".into(),
+        Ok(()) => {
+            job.progress = 1.0;
+            "completed".into()
+        }
         Err(_) => "failed".into(),
     };
     job.checkpoint = serde_json::json!({

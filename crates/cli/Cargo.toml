@@ -9,4 +9,15 @@ name = "invectus"
 path = "src/main.rs"
 
 [dependencies]
-invectus-core = { path = "../core" }
+invectus-core.workspace = true
+invectus-ingest.workspace = true
+invectus-embed.workspace = true
+invectus-index.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+ctrlc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -2,7 +2,7 @@
 
 **Version:** 0.1 (draft, 2026-10-26)
 **Owner:** Ryan Baltodano
-**Working name:** inVectus (product); **unSearch** (the core "negative search" interaction)
+**Working name:** inVectus, for both the product and its core "negative search" interaction (the earlier feature name "unSearch" was retired on 2026-10-26 because it is taken)
 **Platforms:** desktop: macOS, Windows, Linux
 **Stack:** Tauri 2 (Rust core) + React + TypeScript front end
 
@@ -18,7 +18,7 @@ You give it a collection: papers, games, products, support tickets, patents or n
 2. **Fills** them: describes what would sit in each gap.
 3. **Verifies**: checks the collection, and optionally outside sources, before claiming that something doesn't exist.
 
-The interaction at the centre is **unSearch**. You type an idea, and instead of a list of matches you get a verdict: *does it exist, how close is the nearest thing, and which way does the gap point?*
+The interaction at the centre is the **inVectus search**. You type an idea, and instead of a list of matches you get a verdict: *does it exist, how close is the nearest thing, and which way does the gap point?*
 
 ### 1.1 Origin and evidence
 
@@ -39,7 +39,7 @@ inVectus generalizes that pipeline to any collection and puts the lessons at its
 ### 1.2 Goals
 
 - Import a collection (files, tables or connectors) and build a local vector index.
-- unSearch: a free-text query returns an **absence verdict** with evidence.
+- inVectus search: a free-text query returns an **absence verdict** with evidence.
 - Gap scan: automatically rank gaps of several types (§5), each with a plain-language explanation.
 - Midpoints: generate a description of what would fill a gap, and check that the description itself is novel (§6.3).
 - Verification: check candidate gaps against the collection and against outside sources (PubMed, OpenAlex, Steam, …).
@@ -57,8 +57,8 @@ inVectus generalizes that pipeline to any collection and puts the lessons at its
 ### 1.4 Success criteria
 
 1. On the optometry benchmark (§9.2), the gap score beats random and "raw item count" baselines on backtest precision@10.
-2. unSearch absence verdicts are **calibrated**: among queries the tool calls "exists (high confidence)", at least 90% have a true match on manual review.
-3. A collection of 100k short items imports, embeds and indexes on a 2023+ laptop in under 30 minutes (CPU), and unSearch answers in under 300 ms.
+2. inVectus search absence verdicts are **calibrated**: among queries the tool calls "exists (high confidence)", at least 90% have a true match on manual review.
+3. A collection of 100k short items imports, embeds and indexes on a 2023+ laptop in under 30 minutes (CPU), and inVectus search answers in under 300 ms.
 4. Builds and runs on macOS, Windows and Linux from one codebase.
 
 ---
@@ -88,7 +88,7 @@ The architecture stays domain-general. v1 ships connectors and presets for **res
 | **Role** | What an item *is* in gap terms: `demand` (something asking or needing), `coverage` (something answering or satisfying), or `neutral`. Assigned by schema mapping, rule (for example pub type = Systematic Review → coverage), or a small classifier. |
 | **Region** | A cluster of items (two levels: broad and fine) with a label, centroid and statistics. |
 | **Gap** | A scored, explained claim that something is missing. Types in §5. |
-| **Absence claim** | The evidence behind "this doesn't exist": nearest items with distances, local density, calibrated confidence and verification results. Every gap and every unSearch verdict carries one. |
+| **Absence claim** | The evidence behind "this doesn't exist": nearest items with distances, local density, calibrated confidence and verification results. Every gap and every inVectus search verdict carries one. |
 | **Midpoint** | A point in vector space (between regions or items) plus a generated description of what would sit there. |
 | **Verdict** | A human decision on a gap: `open`, `confirmed_gap`, `already_exists`, `not_viable`, `selected`, with a note. Verdicts survive re-runs. |
 
@@ -99,7 +99,7 @@ The architecture stays domain-general. v1 ships connectors and presets for **res
 1. **Create a project → import a collection.** A wizard picks the source (folder, CSV/Parquet/JSON, PubMed query, Steam), maps columns to text, title, date, role and URL, and previews 20 items.
 2. **Index.** A background job embeds, indexes and clusters, with progress, cancel and resume.
 3. **Map.** A 2-D map of all items, coloured by region, role or date, with gaps overlaid as markers.
-4. **unSearch.** Type an idea and get a verdict card (§6.1). Save it as a gap if interesting.
+4. **inVectus search.** Type an idea and get a verdict card (§6.1). Save it as a gap if interesting.
 5. **Gap scan.** A ranked list of gaps by type, with filters and an explanation per row.
 6. **Inspect a gap.** Evidence, nearest items, the regions on each side, the midpoint description, verification results, and the verdict buttons and note.
 7. **Verify.** Run connectors (one click per gap, or batch), and see what outside sources found.
@@ -137,7 +137,7 @@ score          = sim(a,b) · (1 − bridge_ratio) · (1 + momentum_a + momentum_
 
 Exclude near-duplicate sibling regions (similarity above a high cutoff), which are usually one topic split in two.
 
-### 5.4 Query void (unSearch)
+### 5.4 Query void (inVectus search)
 A query point, or a cluster of logged queries, with no coverage item within the calibrated "same thing" distance (§6.2). With an imported search log, the tool ranks voids by how often people searched for them.
 
 ### 5.5 Density hole (exploratory only)
@@ -156,7 +156,7 @@ A per-type z-scored weighted sum, with weights stored in the project and tunable
 
 ## 6. Algorithms
 
-### 6.1 unSearch verdict
+### 6.1 inVectus search verdict
 Input: query text `q`, an optional collection filter and an optional role filter (usually `coverage`).
 
 1. Embed `q` with the collection's model (using that model's query prefix, if any).
@@ -180,7 +180,7 @@ Raw cosine distances mean different things for different models and collections,
 3. **Decode:** retrieve the nearest items to the midpoint and to each endpoint. Prompt the LLM with those titles and short summaries to describe the item that would sit at the midpoint (title plus 3–5 sentences, in the collection's genre: a study, a game, a product).
 4. **Round-trip check:** embed the generated description.
    - *On target:* it should land closer to the midpoint than either endpoint centroid. If not, the description drifted, so regenerate (up to 3 tries).
-   - *Novel:* run unSearch on it. If P(exists) is high, the idea already exists, so report the match instead of a gap.
+   - *Novel:* run an inVectus search on it. If P(exists) is high, the idea already exists, so report the match instead of a gap.
 5. Store the midpoint with endpoints, `t`, the description, both check results and the model ids used.
 
 ### 6.4 Regions (clustering)
@@ -229,7 +229,7 @@ The core is a **Rust library with a CLI** (`invectus`), and the desktop app is a
 ```
 ┌──────────────────────── Tauri app ─────────────────────────┐
 │  React UI (TypeScript, Vite)                               │
-│   Projects · Import wizard · Map · unSearch · Gaps · Gap   │
+│   Projects · Import wizard · Map · Search · Gaps · Gap     │
 │   detail · Verify · Export · Settings                      │
 │        │ invoke(commands)            ▲ events (progress)   │
 ├────────┼─────────────────────────────┼─────────────────────┤
@@ -321,7 +321,7 @@ Long work (import, embed, cluster, scan, verify) runs as **resumable jobs**: che
 | Projects | Recent projects, new project, storage-location warning |
 | Import wizard | Source → mapping (text, title, date, role, URL) → role rules → preview → index |
 | Map | WebGL scatter; colour by region, role, date or gap score; region labels; gap markers; lasso selection |
-| unSearch | One search box. The verdict card shows exists / near / open, P(exists), the 5 nearest items with similarity, the regions it sits between, and actions (save, midpoint, verify) |
+| Search | One search box. The verdict card shows exists / near / open, P(exists), the 5 nearest items with similarity, the regions it sits between, and actions (save, midpoint, verify) |
 | Gaps | Ranked table by type; filters (type, region, verdict, score); the explanation in each row |
 | Gap detail | Explanation, score breakdown, timeline (demand vs coverage per year), nearest items, midpoint with a `t` slider, verification results, verdict and note |
 | Settings | Models, LLM provider, network switch, weights, calibration status |
@@ -341,10 +341,10 @@ Design rule from gapmap: **put the evidence and the verdict controls on the same
 ### 9.2 Benchmarks
 - **Optometry (from gapmap):** 591k PubMed abstracts with roles (primary vs synthesis), plus the 25 manually verified candidates as a labelled set (17 already covered, 3 strong leads). Import straight from gapmap's DuckDB and LanceDB files.
 - **Steam games:** a public dataset of game descriptions with release dates; "filled" = a later game near the midpoint.
-- **unSearch calibration set:** 300 manually labelled (query, exists?) pairs per benchmark.
+- **inVectus search calibration set:** 300 manually labelled (query, exists?) pairs per benchmark.
 
 ### 9.3 Quality gates
-No release without the backtest beating baselines on at least 2 benchmarks, and unSearch calibration error (ECE) ≤ 0.1.
+No release without the backtest beating baselines on at least 2 benchmarks, and inVectus search calibration error (ECE) ≤ 0.1.
 
 ---
 
@@ -354,7 +354,7 @@ No release without the backtest beating baselines on at least 2 benchmarks, and 
 |---|---|
 | Import + embed | ≤ 30 min (≥ 60 items/s), resumable |
 | ANN index build | ≤ 2 min |
-| unSearch query | ≤ 300 ms (cached model) |
+| inVectus search query | ≤ 300 ms (cached model) |
 | Regions (one seed) | ≤ 5 min |
 | Gap scan | ≤ 1 min |
 | Map render | 60 fps pan/zoom at 500k points |
@@ -369,7 +369,7 @@ Gapmap reference on an M4 Pro: about 50–70 docs/s embedding (nomic, MPS, fp16)
 |---|---|---|
 | P0 | Setup and spikes | Rust toolchain, Tauri + React skeleton, CI builds on all 3 OSes; spikes on `ort` embeddings, `lancedb` Rust, clustering crate vs Python reference, UMAP crate — each with a go / no-go note |
 | P1 | Engine CLI | `invectus import / embed / search` on CSV, Parquet and folder input; gapmap import; tests |
-| P2 | unSearch | Calibration, verdict, CLI plus a first UI screen. **First demo** |
+| P2 | inVectus search | Calibration, verdict, CLI plus a first UI screen. **First demo** |
 | P3 | Regions and map | Clustering, labels, stability, WebGL map |
 | P4 | Gap scan | Coverage, stale and bridge gaps; scoring and explanations; Gaps screen |
 | P5 | Midpoints | LLM provider layer, decode prompts, round-trip check |
@@ -377,7 +377,7 @@ Gapmap reference on an M4 Pro: about 50–70 docs/s embedding (nomic, MPS, fp16)
 | P7 | Evaluation | Backtest harness and benchmark results; weight tuning |
 | P8 | Ship | Signed installers (macOS notarized, Windows, Linux AppImage), docs, demo video |
 
-**Early win:** P2 alone, unSearch on an imported collection with calibrated verdicts, is a demo-able product. Build it before the map.
+**Early win:** P2 alone, inVectus search on an imported collection with calibrated verdicts, is a demo-able product. Build it before the map.
 
 ---
 
@@ -391,7 +391,7 @@ Gapmap reference on an M4 Pro: about 50–70 docs/s embedding (nomic, MPS, fp16)
 | Midpoints come out generic ("a game") | Bridge selection rules (§5.3), round-trip check, show the neighbouring items, not only the prose |
 | Local LLM too heavy for some laptops | Small default model; Ollama / LM Studio integration; cloud opt-in |
 | Source-text copyright | Local use; exports default to titles and links |
-| Name conflicts ("unSearch" is in use elsewhere, "Invictus" marks exist) | Keep inVectus as the working name; trademark check before launch; unSearch as a feature name |
+| Name conflicts ("Invictus" marks exist; "unSearch" was dropped because it is taken) | Keep inVectus as the working name for the product and its search; trademark check before launch |
 | Scope creep | Ship P2 first; every connector beyond PubMed and Steam is post-v1 |
 
 ---

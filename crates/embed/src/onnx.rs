@@ -315,6 +315,22 @@ pub fn pool(
     Ok(out)
 }
 
+/// Local query encoder for vectors stored with `identity`: the registry model itself when the
+/// identity is exactly what this build produces, otherwise a same-model encoder that reproduces
+/// the identity's text policy (admitted only after a passing parity check).
+pub fn query_encoder(
+    store: &ModelStore,
+    identity: &EmbeddingIdentity,
+    opts: &EmbedOptions,
+) -> Result<OnnxEmbedder> {
+    if let Ok(spec) = registry::spec(&identity.model_key)
+        && OnnxEmbedder::identity_for(spec) == *identity
+    {
+        return OnnxEmbedder::load(store, spec.key, opts);
+    }
+    OnnxEmbedder::load_for_space(store, identity, opts)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

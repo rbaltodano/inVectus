@@ -134,9 +134,17 @@ pub struct Store {
 
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
-        let conn =
-            Connection::open_with_flags(path, Config::default().enable_autoload_extension(false)?)
-                .with_context(|| format!("opening {}", path.display()))?;
+        let conn = Connection::open_with_flags(
+            path,
+            Config::default().enable_autoload_extension(false)?,
+        )
+        .with_context(|| {
+            format!(
+                "opening {} (a project can be used by one inVectus process at a time; close the \
+                 desktop app or other `invectus` commands using it)",
+                path.display()
+            )
+        })?;
         harden(&conn)?;
         conn.execute_batch(SCHEMA)?;
         let v: Option<i32> = conn

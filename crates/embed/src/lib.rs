@@ -3,6 +3,6 @@ pub mod onnx;
 pub mod registry;
 pub mod store;
 
-pub use onnx::{EmbedOptions, OnnxEmbedder};
+pub use onnx::{EmbedOptions, OnnxEmbedder, query_encoder};
 pub use registry::{DEFAULT_MODEL, MODELS, ModelSpec};
 pub use store::ModelStore;

@@ -158,7 +158,8 @@ mod tests {
         let base = test_identity();
         let id = base.space_id();
         assert_eq!(id, test_identity().space_id(), "space id is deterministic");
-        let variants: Vec<Box<dyn Fn(&mut EmbeddingIdentity)>> = vec![
+        type Change = Box<dyn Fn(&mut EmbeddingIdentity)>;
+        let variants: Vec<Change> = vec![
             Box::new(|i| i.revision = "def".into()),
             Box::new(|i| i.weights_sha256 = "01".into()),
             Box::new(|i| i.tokenizer_sha256 = "12".into()),

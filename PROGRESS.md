@@ -533,6 +533,33 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
   single-item curve on a filtered set is approximate, as with role filters. Combination
   verdicts are not human-reviewed. Tests: 85 passed.
 
+## 2026-10-27 — Verdict calibration with LLM paraphrases (SPEC §6.2 primary method)
+
+- `invectus calibrate --llm [model]` (desktop: `start_calibration` with `llm`). Gemma rewrites
+  each sampled item, from its title and the first 600 characters of text, as a ≤ 40-word search
+  idea "in your own words". The query-level fit compares the paraphrase with the item **as
+  stored** (exists) against the best other item (absent). Method, model and 20 example
+  paraphrases are stored with the curve. Without `--llm` the title fallback is unchanged. A
+  test with a scripted paraphraser covers the method name, examples, holdout and check.
+- **Demo (BGE, 300 items, 60 held out; 10 min 40 s; 9.9 GB peak):**
+
+  | calibration | held-out AUC | balanced Brier | balanced accuracy |
+  |---|---|---|---|
+  | **Gemma paraphrases** | **0.952** | **0.092** | **0.858** |
+  | titles (no LLM, same sample size) | 0.890 | 0.141 | 0.808 |
+
+  P(exists) = 0.5 at a nearest similarity of 0.829 and 0.7 at 0.841. Example: "Change in
+  intraocular lens power calculation results after ptosis surgery" → "Does surgery to repair
+  drooping eyelids affect the accuracy of measurements used to calculate intraocular lens
+  power?"
+- **50 held-out papers not in the collection** (their titles as queries): open 40 / near 8 /
+  exists 2, versus 39 / 10 / 1 with the title calibration. Both "exists" cases are near-topic
+  papers (corneal endothelium after keratoplasty; Usher syndrome genetics) and need human
+  judgement. The paraphrases are not human-checked, and SPEC §9.2's 300 hand-labelled queries
+  and ECE ≤ 0.1 are still not measured.
+- The demo's latest calibration is now the paraphrase curve, so `check` uses it. The title
+  curve stays in history.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.

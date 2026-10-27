@@ -1165,7 +1165,7 @@ fn cmd_calibrate(a: CalibrateArgs, models_dir: &Option<PathBuf>) -> Result<()> {
         format!("{:.3}/{:.3}/{:.3}", s.p10, s.p50, s.p90)
     };
     println!(
-        "{} titles · similarity p10/p50/p90: own text {} · nearest other item {} · related items {}",
+        "{} queries · similarity p10/p50/p90: own item {} · nearest other item {} · related items {}",
         r.items,
         spread(&r.own_text),
         spread(&r.nearest_other),
@@ -1180,7 +1180,7 @@ fn cmd_calibrate(a: CalibrateArgs, models_dir: &Option<PathBuf>) -> Result<()> {
         r.pairwise_auc
     );
     println!(
-        "title → own text among all {} vectors: recall@1 {:.3}, recall@10 {:.3}, MRR {:.3}",
+        "query → own item among all {} vectors: recall@1 {:.3}, recall@10 {:.3}, MRR {:.3}",
         r.vectors, r.known_item.recall_at_1, r.known_item.recall_at_10, r.known_item.mrr
     );
     let at = |s: Option<f32>| s.map_or("never".into(), |s| format!("{s:.3}"));

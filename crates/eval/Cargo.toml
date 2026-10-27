@@ -3,3 +3,17 @@ name = "invectus-eval"
 version.workspace = true
 edition.workspace = true
 publish = false
+
+[dependencies]
+invectus-core.workspace = true
+invectus-index.workspace = true
+invectus-regions.workspace = true
+invectus-gaps.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Each cutoff runs in a throwaway project.
+tempfile.workspace = true
+
+[dev-dependencies]
+sha2.workspace = true

@@ -16,6 +16,7 @@ invectus-index = { path = "crates/index" }
 invectus-unsearch = { path = "crates/unsearch" }
 invectus-regions = { path = "crates/regions" }
 invectus-gaps = { path = "crates/gaps" }
+invectus-eval = { path = "crates/eval" }
 
 anyhow = "1"
 thiserror = "2"

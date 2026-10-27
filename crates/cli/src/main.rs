@@ -7,6 +7,7 @@ use invectus_core::{CancelToken, Project, Role, TextEmbedder};
 use invectus_embed::{
     EmbedOptions, ModelStore, ModelTokenizer, OnnxEmbedder, query_encoder, registry,
 };
+use invectus_eval::{BacktestOptions, backtest};
 use invectus_gaps::{
     GapKind, ScanOptions, detail as gap_detail, list as gap_list, scan,
     set_verdict as set_gap_verdict,
@@ -81,6 +82,11 @@ enum Command {
     Gaps {
         #[command(subcommand)]
         command: GapsCommand,
+    },
+    /// Evaluation: backtest the gap ranking against what happened later (SPEC §9.1).
+    Eval {
+        #[command(subcommand)]
+        command: EvalCommand,
     },
     /// Check that the local encoder reproduces a collection's imported vectors.
     Parity(ParityArgs),
@@ -351,6 +357,23 @@ enum GapsCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum EvalCommand {
+    /// Freeze the collection at each cutoff, rank gaps, and check which were filled later.
+    Backtest {
+        #[command(flatten)]
+        t: TableArgs,
+        /// Cutoff dates (YYYY-MM-DD), comma-separated.
+        #[arg(long, value_delimiter = ',', required = true)]
+        cutoff: Vec<String>,
+        /// Years after each cutoff in which new coverage counts as filling a gap.
+        #[arg(long, default_value_t = 2)]
+        horizon_years: i32,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[derive(Args)]
 struct ParityArgs {
     #[command(flatten)]
@@ -450,6 +473,81 @@ fn run() -> Result<()> {
         Command::Check(a) => cmd_check(a, &cli.models_dir)?,
         Command::Regions { command } => cmd_regions(command)?,
         Command::Gaps { command } => cmd_gaps(command)?,
+        Command::Eval {
+            command:
+                EvalCommand::Backtest {
+                    t,
+                    cutoff,
+                    horizon_years,
+                    json,
+                },
+        } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let vectors = VectorStore::open(&project)?;
+            let r = backtest(
+                &project,
+                &vectors,
+                &table,
+                &BacktestOptions {
+                    cutoffs: cutoff,
+                    horizon_years,
+                    regions: RegionOptions::default(),
+                    scan: ScanOptions::default(),
+                },
+            )?;
+            if json {
+                return print_json(&r);
+            }
+            let f = |x: f64| {
+                if x.is_nan() {
+                    "-".to_string()
+                } else {
+                    format!("{x:.3}")
+                }
+            };
+            println!(
+                "{:<10} {:>6} {:>7} {:>5} {:>6} {:>6} | model p@10 p@25 AUC | raw-count p@10 p@25 AUC | density p@10 p@25 AUC",
+                "cutoff", "items", "regions", "gaps", "filled", "base"
+            );
+            for c in &r.cutoffs {
+                println!(
+                    "{:<10} {:>6} {:>7} {:>5} {:>6} {:>6} | {} {} {} | {} {} {} | {} {} {}",
+                    c.cutoff,
+                    c.items,
+                    c.regions,
+                    c.gaps,
+                    c.filled,
+                    f(c.base_rate),
+                    f(c.model.precision_at_10),
+                    f(c.model.precision_at_25),
+                    f(c.model.auc),
+                    f(c.raw_count.precision_at_10),
+                    f(c.raw_count.precision_at_25),
+                    f(c.raw_count.auc),
+                    f(c.density.precision_at_10),
+                    f(c.density.precision_at_25),
+                    f(c.density.auc)
+                );
+            }
+            for (name, m) in [
+                ("model", &r.mean_model),
+                ("raw-count", &r.mean_raw_count),
+                ("density", &r.mean_density),
+            ] {
+                if let Some(m) = m {
+                    println!(
+                        "mean {name}: p@10 {} p@25 {} AUC {}",
+                        f(m.precision_at_10),
+                        f(m.precision_at_25),
+                        f(m.auc)
+                    );
+                }
+            }
+            for n in &r.notes {
+                println!("note: {n}");
+            }
+        }
         Command::Parity(a) => cmd_parity(a, &cli.models_dir)?,
         Command::Models { command } => cmd_models(command, &cli.models_dir)?,
         Command::Gapmap {

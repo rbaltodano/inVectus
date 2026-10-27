@@ -326,11 +326,43 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
 5. Exact kNN is O(n²): fine at 5k (0.4 s). 100k is estimated at minutes but not measured; ANN
    neighbours would be the fallback.
 
+## 2026-10-27 — P7 backtest harness (§9.1)
+
+- `invectus eval backtest --cutoff A,B,… --horizon-years N` (`invectus-eval`). For each cutoff it
+  builds a throwaway project from the dated items up to that cutoff (undated items are excluded,
+  since they could leak the future). It copies their stored vectors (no re-embedding), reruns
+  regions (automatic resolution) and the gap scan as of the cutoff, and then marks a coverage or
+  stale gap **filled** when coverage dated within the horizon reaches its region (the scan's own
+  reach rule). Bridges are reported separately.
+- Metrics: precision@10/25 and ROC-AUC for the model ranking against raw-count (demand items) and
+  density (region size) baselines on the same gaps. The random baseline is the base rate
+  (AUC 0.5). Cutoffs with no filled or no unfilled gaps are left out of the means.
+- Without an LLM there is no midpoint description, so "the same thing" (§9.1 step 3) is judged by
+  region reach.
+- Tests: ranking metrics, plus an end-to-end test where reviews arriving after the cutoff fill
+  exactly their region's gap. `cargo test --workspace`: **73 passed**, and clippy/fmt are clean.
+- **Demo result (5,000 papers, BGE, cutoffs 2016/18/20/22, horizon 2 years, 10.9 s):**
+
+  | ranking | p@10 | p@25 | AUC |
+  |---|---|---|---|
+  | model | 0.075 | 0.130 | **0.386** |
+  | raw-count | 0.200 | 0.180 | 0.553 |
+  | density | 0.175 | 0.180 | 0.551 |
+
+  The base rate was 8.5–24.5 % of 46–53 gaps per cutoff (4–13 fills). The model ranks **below**
+  both baselines, so SPEC §9.3's gate (beat the baselines) **fails** on this data. There are
+  likely reasons: new reviews land in large, already-reviewed areas, while the score rewards
+  regions with no coverage; the demo's crude P1 role rule (every "Journal Article" is demand,
+  only 66 coverage); and very few fills. This is not yet evidence either way about the method on
+  gapmap-quality roles. Weights were **not** tuned: 4 cutoffs with 4–13 fills each would overfit.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.
-2. P7 backtest harness (§9.1) on the dev samples; full benchmarks need data beyond the 10k-item
-   development limit.
+2. **Backtest on a real benchmark.** The gapmap optometry set (591k papers with
+   primary/synthesis roles) is the SPEC §9.2 benchmark, but development copies are limited to
+   10k items. Running it needs the owner's approval to use more of it, read-only. Then compare
+   per-term ablations before tuning weights.
 3. LLM-dependent work (calibration paraphrases, midpoint descriptions P5, LLM region labels)
    waits for a provider decision. Verification connectors (P6) need network approval for live
    tests.

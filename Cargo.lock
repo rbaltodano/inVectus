@@ -3587,6 +3587,7 @@ dependencies = [
  "ctrlc",
  "invectus-core",
  "invectus-embed",
+ "invectus-eval",
  "invectus-gaps",
  "invectus-index",
  "invectus-ingest",
@@ -3630,6 +3631,17 @@ dependencies = [
 [[package]]
 name = "invectus-eval"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "invectus-core",
+ "invectus-gaps",
+ "invectus-index",
+ "invectus-regions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
 
 [[package]]
 name = "invectus-gaps"

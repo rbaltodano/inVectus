@@ -19,6 +19,7 @@ invectus-gaps = { path = "crates/gaps" }
 invectus-eval = { path = "crates/eval" }
 invectus-llm = { path = "crates/llm" }
 invectus-midpoint = { path = "crates/midpoint" }
+invectus-verify = { path = "crates/verify" }
 
 anyhow = "1"
 thiserror = "2"

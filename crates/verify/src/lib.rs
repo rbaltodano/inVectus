@@ -1,9 +1,7 @@
-//! Verify boundary from SPEC §7.2. Implementation starts after P0.
+//! Verification against outside sources (SPEC §6.6): PubMed and OpenAlex connectors with a
+//! project cache, and gap verification that re-ranks their titles with the local model.
+pub mod connectors;
+pub mod gap;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn scaffold_is_available() {
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
-    }
-}
+pub use connectors::{ExternalHit, KeywordQuery, Source, SourceResult};
+pub use gap::{Verification, VerifyOptions, verify_gap};

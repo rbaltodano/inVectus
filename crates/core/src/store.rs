@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS gaps (
 CREATE TABLE IF NOT EXISTS gap_verdicts (
   collection_id TEXT, space_id TEXT, kind TEXT, core JSON, verdict TEXT, note TEXT,
   updated_at TIMESTAMP);
+CREATE TABLE IF NOT EXISTS verifications (
+  collection_id TEXT, space_id TEXT, run_id TEXT, gap_id INTEGER, result JSON,
+  created_at TIMESTAMP);
 CREATE TABLE IF NOT EXISTS midpoints (
   collection_id TEXT, space_id TEXT, target JSON, result JSON, created_at TIMESTAMP);
 ALTER TABLE regions ADD COLUMN IF NOT EXISTS llm_label TEXT;
@@ -1072,6 +1075,40 @@ impl Store {
             ],
         )?;
         Ok(())
+    }
+
+    /// Store the outside-source verification of a gap of a region run.
+    pub fn save_verification(
+        &self,
+        collection_id: &str,
+        space_id: &str,
+        run_id: &str,
+        gap_id: i32,
+        result: &serde_json::Value,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO verifications VALUES (?, ?, ?, ?, CAST(? AS JSON), now())",
+            params![collection_id, space_id, run_id, gap_id, result.to_string()],
+        )?;
+        Ok(())
+    }
+
+    /// The latest verification of a gap, if any.
+    pub fn latest_verification(
+        &self,
+        run_id: &str,
+        gap_id: i32,
+    ) -> Result<Option<serde_json::Value>> {
+        let r: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT result::VARCHAR FROM verifications WHERE run_id = ? AND gap_id = ?
+                 ORDER BY created_at DESC LIMIT 1",
+                params![run_id, gap_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        r.map(|s| Ok(serde_json::from_str(&s)?)).transpose()
     }
 
     /// Stored descriptions of a collection's space, newest first: `(target, result, created)`.

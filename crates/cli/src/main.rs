@@ -390,6 +390,27 @@ enum GapsCommand {
         #[command(flatten)]
         d: DescribeArgs,
     },
+    /// Check a gap against outside sources (PubMed, OpenAlex): keyword search, re-ranked
+    /// locally against its description. Uses the network; results are cached in the project.
+    Verify {
+        #[command(flatten)]
+        t: TableArgs,
+        id: i32,
+        /// Sources, comma-separated.
+        #[arg(long, value_delimiter = ',', default_value = "pubmed,openalex")]
+        sources: Vec<invectus_verify::Source>,
+        /// Allow this command to use the network although the project's network switch is off.
+        #[arg(long)]
+        network: bool,
+        /// Items fetched per source.
+        #[arg(long, default_value_t = 20)]
+        max: usize,
+        /// Hits to show.
+        #[arg(short, default_value_t = 10)]
+        k: usize,
+        #[arg(long)]
+        json: bool,
+    },
     /// Write a report of the ranked gaps (titles and links only, never source text).
     Export {
         #[command(flatten)]
@@ -1683,6 +1704,72 @@ fn cmd_gaps(c: GapsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
                 None => invectus_midpoint::Target::Region { region: g.region_a },
             };
             run_describe(&t, target, &d, models_dir)?;
+        }
+        GapsCommand::Verify {
+            t,
+            id,
+            sources,
+            network,
+            max,
+            k,
+            json,
+        } => {
+            let project = open(&t.p)?;
+            let table = select_table(&project, &t.collection, t.space.as_deref())?;
+            let store = models(models_dir)?;
+            let mut encoder = query_encoder(
+                &store,
+                &table.identity,
+                &EmbedOptions {
+                    threads: 4,
+                    batch_size: 16,
+                },
+            )?;
+            let v = invectus_verify::verify_gap(
+                &project,
+                &table,
+                &mut encoder,
+                id,
+                &invectus_verify::VerifyOptions {
+                    sources,
+                    max_per_source: max,
+                    allow_network: network,
+                },
+            )?;
+            if json {
+                return print_json(&v);
+            }
+            println!("gap {} ({}): {}", v.gap_id, v.kind, v.label);
+            println!("{}", v.summary);
+            for s in &v.sources {
+                match &s.error {
+                    Some(e) => println!("  {}: error: {e}", s.source),
+                    None => println!(
+                        "  {}: {} matching, {} fetched{} · {}",
+                        s.source,
+                        s.total.map_or("?".into(), |n| n.to_string()),
+                        s.fetched,
+                        if s.cached { " (cached)" } else { "" },
+                        s.query
+                    ),
+                }
+            }
+            for h in v.hits.iter().take(k) {
+                println!(
+                    "{} {:.3}  [{}{}] {}",
+                    if h.looks_like_match { "≈" } else { " " },
+                    h.similarity,
+                    h.hit.source,
+                    h.hit.year.map(|y| format!(" {y}")).unwrap_or_default(),
+                    h.hit.title
+                );
+                if let Some(u) = &h.hit.url {
+                    println!("         {u}");
+                }
+            }
+            for n in &v.notes {
+                println!("note: {n}");
+            }
         }
         GapsCommand::Export {
             t,

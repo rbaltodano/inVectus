@@ -19,6 +19,7 @@ invectus-gaps.workspace = true
 invectus-eval.workspace = true
 invectus-llm.workspace = true
 invectus-midpoint.workspace = true
+invectus-verify.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

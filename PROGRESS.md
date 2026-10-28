@@ -560,6 +560,39 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
 - The demo's latest calibration is now the paraphrase curve, so `check` uses it. The title
   curve stays in history.
 
+## 2026-10-28 — P6 verification against outside sources (owner approved live PubMed/OpenAlex calls)
+
+- **`invectus-verify`:**
+  - **Connectors.** PubMed E-utilities (esearch, then esummary; terms in `[tiab]`; reviews via
+    `review[pt] OR systematic review[pt] OR meta-analysis[pt]`) and OpenAlex `/works`
+    (boolean full-text search; `filter=type:review`).
+  - **Requests.** Explicit only. Refused under `--offline`. Refused when the project's network
+    switch is off unless the command passes `--network`. Rate-limited (PubMed ≥ 400 ms apart,
+    OpenAlex ≥ 150 ms), retried up to 3 times with backoff, and sent with an inVectus
+    User-Agent. No email or API key is sent.
+  - **Cache.** Answers are cached in `cache/verify/` for 7 days, so repeats work offline.
+  - **Gap verification.** The keyword query comes from region terms. Coverage and stale gaps
+    use the top 2 terms ORed AND the next 3 ORed, reviews only; bridges use (side-A top 3) AND
+    (side-B top 3). Hit titles are re-ranked with the local embedding model against the gap's
+    accepted description (or its label when none exists). Hits at or above the calibration's
+    P = 0.5 similarity are marked "looks like a match". Results are stored in a new
+    `verifications` table.
+- **CLI:** `invectus gaps verify <id> [--sources pubmed,openalex] [--network] [--max N]`.
+  **Desktop backend:** `verify_gap`.
+- Tests: query syntax for both sources, parsing fixture replies (including missing fields and
+  error shapes), and offline refusal with the cache still served. `cargo test --workspace`
+  (release profile): **88 passed**. Clippy and fmt are clean.
+- **Live run, demo gap 1** (coverage gap "Visual Perception of Color and Luminance", compared
+  with its accepted Gemma description): 1.8 s. PubMed reported 1,125 reviews for the keywords
+  and OpenAlex 79,219 (20 fetched each). None crossed the 0.829 match line, but the top titles
+  were plainly relevant: "Cortical mechanisms of colour vision" (2003, 0.824) and "The Retinal
+  Basis of Vertebrate Color Vision" (PubMed 2019, 0.795). A human reading says reviews on this
+  topic exist, so the gap mostly reflects the 5,000-paper sample having none. That is the
+  gapmap lesson the spec cites. The automatic threshold, fitted on paper-to-paper similarity, is
+  conservative for title-only hits. The repeat run was served from the cache under `--offline`.
+- Not done: the Steam and other-collection connectors, batch verification (`--top N`), a
+  title-calibrated match threshold, and showing verification in gap lists and reports.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.

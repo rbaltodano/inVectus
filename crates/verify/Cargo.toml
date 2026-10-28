@@ -3,3 +3,16 @@ name = "invectus-verify"
 version.workspace = true
 edition.workspace = true
 publish = false
+
+[dependencies]
+invectus-core.workspace = true
+invectus-gaps.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

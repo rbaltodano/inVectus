@@ -3651,6 +3651,7 @@ dependencies = [
  "invectus-midpoint",
  "invectus-regions",
  "invectus-unsearch",
+ "invectus-verify",
  "serde",
  "serde_json",
  "tauri",
@@ -3675,6 +3676,7 @@ dependencies = [
  "invectus-midpoint",
  "invectus-regions",
  "invectus-unsearch",
+ "invectus-verify",
  "serde",
  "serde_json",
  "tempfile",
@@ -3836,6 +3838,17 @@ dependencies = [
 [[package]]
 name = "invectus-verify"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "invectus-core",
+ "invectus-gaps",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "ureq",
+]
 
 [[package]]
 name = "io-uring"

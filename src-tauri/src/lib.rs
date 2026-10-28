@@ -733,6 +733,36 @@ async fn describe_gap(
     .await
 }
 
+/// Check a gap against PubMed and OpenAlex (network; cached in the project). `network` allows
+/// this call to use the network when the project's switch is off.
+#[tauri::command]
+async fn verify_gap(
+    state: State<'_, AppState>,
+    form: TableForm,
+    gap_id: i32,
+    network: bool,
+) -> CmdResult<invectus_verify::Verification> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            encoder_for(s, &table)?;
+            let encoder = &mut s.encoder.as_mut().unwrap().1;
+            invectus_verify::verify_gap(
+                &s.project,
+                &table,
+                encoder,
+                gap_id,
+                &invectus_verify::VerifyOptions {
+                    allow_network: network,
+                    ..Default::default()
+                },
+            )
+        })
+    })
+    .await
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -755,7 +785,8 @@ pub fn run() {
             list_gaps,
             gap_detail,
             set_gap_verdict,
-            describe_gap
+            describe_gap,
+            verify_gap
         ])
         .run(tauri::generate_context!())
         .expect("failed to run inVectus");

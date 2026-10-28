@@ -1,7 +1,6 @@
 name: Desktop build
+# Manual only: never run CI while the repository is private (see AGENTS.md).
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:

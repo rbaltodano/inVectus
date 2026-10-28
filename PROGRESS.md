@@ -603,7 +603,7 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
    waits for a provider decision. Verification connectors (P6) need network approval for live
    tests.
 4. Adjudicate a sample of verdicts and gaps before trusting thresholds and weights.
-5. Run the three-OS CI when a push is authorized.
+5. Run the three-OS CI once the repository is public (AGENTS.md: no CI while private).
 
 
 ## 2026-10-27 — Multimodal baseline, runtime evidence and preparatory contracts

@@ -3,6 +3,7 @@
 // you zoom. Map positions are for browsing only (SPEC §6.5): nothing here is evidence.
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as PE } from "react";
 import { fmt, year, KIND_LABEL, type GapView, type JobInfo, type MapData, type MapPoint, type Region } from "./api";
+import { DotFlicker } from "./dot-flicker";
 
 export interface Marks {
   /** Estimated position of the searched idea, in map coordinates (approximate). */
@@ -117,6 +118,16 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const placeholders = useRef(0);
   const [glide, setGlide] = useState(0); // 0 = none, (0,1] = animating
   const prevData = useRef<MapData>();
+  const [flicker] = useState(() => new DotFlicker());
+  const [flickerFrame, setFlickerFrame] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const changed = () => setReducedMotion(preference.matches);
+    preference.addEventListener("change", changed);
+    return () => preference.removeEventListener("change", changed);
+  }, []);
 
   useEffect(() => {
     const el = wrap.current;
@@ -170,17 +181,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     return b ? toScreen((a.x + b.x) / 2, (a.y + b.y) / 2) : toScreen(a.x, a.y);
   };
 
-  useEffect(() => {
-    const c = canvas.current;
-    if (!c) return;
-    const dpr = window.devicePixelRatio || 1;
-    c.width = size * dpr; c.height = size * dpr;
-    const g = c.getContext("2d")!;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, size, size);
-    g.save();
-    g.beginPath(); g.arc(R, R, R - 1, 0, Math.PI * 2); g.clip();
-
+  const renderedCells = useMemo(() => {
     // Group items in a fine screen grid, then merge squares that touch.
     const CELL = SINGLE + 1;
     const grid = new Map<number, Cell>();
@@ -193,8 +194,31 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       if (cell) { cell.x += x; cell.y += y; cell.n++; cell.regions.set(p.fine_id, (cell.regions.get(p.fine_id) ?? 0) + 1); }
       else grid.set(k, { x, y, n: 1, first: p, regions: new Map([[p.fine_id, 1]]) });
     }
-    const list = mergeTouching([...grid.values()].map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n })));
+    return mergeTouching([...grid.values()].map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n })));
+  }, [data, size, view, loading, fit]);
+  const placeholderCount = placeholders.current;
+  const showPlaceholders = placeholderCount > 0 && (loading || glide > 0);
+  useEffect(() => {
+    const keys = renderedCells.map((cell) => `item:${data?.run.run_id}:${cell.first.item_id}`);
+    if (showPlaceholders) for (let i = 0; i < placeholderCount; i++) keys.push(`placeholder:${i}`);
+    flicker.sync(keys, performance.now());
+  }, [renderedCells, showPlaceholders, placeholderCount, data?.run.run_id, flicker]);
+
+  useEffect(() => {
+    const c = canvas.current;
+    if (!c) return;
+    const dpr = window.devicePixelRatio || 1;
+    c.width = size * dpr; c.height = size * dpr;
+    const g = c.getContext("2d")!;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, size, size);
+    g.save();
+    g.beginPath(); g.arc(R, R, R - 1, 0, Math.PI * 2); g.clip();
+
+    const list = renderedCells;
     cells.current = list;
+    const now = performance.now();
+    const opacity = (key: string) => reducedMotion ? 1 : flicker.opacity(key, now);
 
     // Region outlines: hidden until hover (or the toggle / a marked region).
     const majority = (c: Cell) => [...c.regions.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -220,7 +244,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         const [ux, uy] = disc(i);
         let x = R + ux * R, y = R + uy * R;
         if (glide > 0 && list.length) { const t = list[(i * 7919) % list.length]; x += (t.x - x) * ease; y += (t.y - y) * ease; }
-        g.globalAlpha = loading ? 0.55 : 0.55 * (1 - ease) + 0.2;
+        g.globalAlpha = (loading ? 0.55 : 0.55 * (1 - ease) + 0.2) * opacity(`placeholder:${i}`);
         g.fillRect(x - 2, y - 2, 4, 4);
       }
       g.globalAlpha = 1;
@@ -228,16 +252,16 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
 
     // Items (merged): one square per cell, larger when it holds more.
     if (!loading) {
-      g.globalAlpha = glide > 0 ? glide : 1;
       const hl = new Set(marks.items ?? []);
       for (const c of list) {
         const s = side(c.n);
         g.fillStyle = INK;
-        g.globalAlpha = (glide > 0 ? glide : 1) * (c.n === 1 ? 0.85 : 1);
+        g.globalAlpha = (c.n === 1 ? 0.85 : 1) * opacity(`item:${data?.run.run_id}:${c.first.item_id}`);
         g.fillRect(c.x - s / 2, c.y - s / 2, s, s);
         if (hl.size && hl.has(c.first.item_id)) { g.strokeStyle = ACCENT; g.lineWidth = 1.5; g.strokeRect(c.x - s / 2 - 3, c.y - s / 2 - 3, s + 6, s + 6); }
       }
       if (hl.size) {
+        g.globalAlpha = 1;
         g.strokeStyle = ACCENT; g.lineWidth = 1.5;
         for (const p of data?.points ?? []) if (hl.has(p.item_id)) { const [x, y] = toScreen(p.x, p.y); g.strokeRect(x - 5, y - 5, 10, 10); }
       }
@@ -270,7 +294,11 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       g.lineWidth = 3;
       g.beginPath(); g.arc(R, R, R - 2, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); g.stroke();
     }
-  }, [data, size, view, gaps, marks, showGaps, showOutlines, hover?.cell, loading, frac, glide, fit]);
+    if (!reducedMotion && flicker.pending(now)) {
+      const frame = requestAnimationFrame(setFlickerFrame);
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [data, size, view, gaps, marks, showGaps, showOutlines, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion]);
 
   // Pointer: drag to pan, wheel to zoom, hover to inspect, click to open.
   const at = (e: PE) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };

@@ -1077,3 +1077,22 @@ packaging gates are still open. Details, reproducible commands and limitations:
   720 ms. Reduced-motion fallback remains. Updated the traversal regression test.
 - All 14 UI tests, frontend TypeScript/Vite build and diff checks passed. No native rebuild
   or relaunch; live animation review remains pending the owner's next launch.
+
+## 2026-10-29 — Staggered flicker entrance for map dots
+
+- New visible map squares and loading placeholders receive an independent uniform random
+  delay of 0–250 ms followed by a 150 ms stepped-opacity flicker, then settle at their usual
+  opacity. Surviving squares retain timing across redraws; off-screen squares are pruned,
+  and reappearing/new-layout squares get a fresh entrance. Existing placeholder motion stays;
+  real squares no longer depend on the old global fade to become fully visible.
+- Cached screen grouping/merging separately from animation ticks so the entrance frames
+  reuse visible cells rather than rescanning every stored point. Animation work stops after
+  the last entrance completes, cancels on unmount, and is skipped for reduced-motion users.
+  Appearance state is bounded by current visible squares/placeholders, not collection size.
+- All 18 local UI tests passed, including exact delay/flicker boundaries, independent random
+  timing, redraw stability and pruning/reappearance. Frontend TypeScript/Vite build and diff
+  checks passed. No performance/framerate measurement or live animation inspection claimed.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker warning;
+  relaunched the rebuilt app with the dev model store as requested. This also includes the
+  pending quiet search focus and clockwise 3×2 loader changes. Visual review remains with
+  the owner; Windows/Linux unverified. No GitHub CI dispatched.

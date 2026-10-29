@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { navigateTo, returnToSearch, pageTab, tabKeyIndex, PROJECT_TABS, type TabStacks } from "../src/navigation.ts";
+import { navigateTo, returnFromDetail, pageTab, tabKeyIndex, PROJECT_TABS, type TabStacks } from "../src/navigation.ts";
 
 test("project destinations map to the correct tabs", () => {
   assert.equal(pageTab({ kind: "search" }), "search");
@@ -47,22 +47,23 @@ test("only Search, Gaps and Collections remain", () => {
 test("Back skips successive point selections and preserves the existing Search query", () => {
   const point = { item_id: 1, title: "First", role: "demand" as const, date: null, url: null, x: 0, y: 0, fine_id: 1, broad_id: 1, noise: false };
   const stacks: TabStacks = { search: [{ kind: "search", query: "retinal imaging" }, { kind: "item", point }, { kind: "item", point: { ...point, item_id: 2 } }] };
-  const next = returnToSearch(stacks, "search");
+  const next = returnFromDetail(stacks, "search");
   assert.equal(next.tab, "search");
   assert.deepEqual(next.stacks.search, [{ kind: "search", query: "retinal imaging" }]);
   assert.equal(stacks.search?.length, 3);
 });
 
-test("Back from a gap returns to Search and leaves Gaps at its list", () => {
-  const stacks: TabStacks = { search: [{ kind: "search", query: "existing query" }, { kind: "gap", id: 1 }], gaps: [{ kind: "gaps" }, { kind: "gap", id: 2 }, { kind: "gap", id: 3 }] };
-  const next = returnToSearch(stacks, "gaps");
-  assert.equal(next.tab, "search");
-  assert.deepEqual(next.stacks.search, [{ kind: "search", query: "existing query" }]);
+test("Back from a gap returns to the gap list and leaves Search alone", () => {
+  const search: TabStacks["search"] = [{ kind: "search", query: "existing query" }, { kind: "gap", id: 1 }];
+  const stacks: TabStacks = { search, gaps: [{ kind: "gaps" }, { kind: "gap", id: 2 }, { kind: "gap", id: 3 }] };
+  const next = returnFromDetail(stacks, "gaps");
+  assert.equal(next.tab, "gaps");
   assert.deepEqual(next.stacks.gaps, [{ kind: "gaps" }]);
+  assert.equal(next.stacks.search, search);
 });
 
 test("Back creates Search when it has not been visited", () => {
-  const next = returnToSearch({ collections: [{ kind: "index" }, { kind: "import" }] }, "collections");
+  const next = returnFromDetail({ collections: [{ kind: "index" }, { kind: "import" }] }, "collections");
   assert.deepEqual(next.stacks.search, [{ kind: "search" }]);
   assert.deepEqual(next.stacks.collections, [{ kind: "index" }]);
 });

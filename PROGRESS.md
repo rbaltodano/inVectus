@@ -1427,3 +1427,11 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live appearance review remains with the owner;
   no GitHub CI dispatched.
+
+## 2026-10-29 — Back from a gap returns to the gap list
+
+- The panel Back button on a gap detail now returns to the Gaps list (dropping any
+  stacked gap details) instead of switching to Search. Item details still return to the
+  existing Search. Helper renamed `returnFromDetail`; navigation test updated.
+- UI tests (28), type check and frontend build pass. Not rebuilt or relaunched as a
+  macOS app, at the owner's request; unchecked in the native window. No CI dispatched.

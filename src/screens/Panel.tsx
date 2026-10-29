@@ -1,5 +1,5 @@
 // The menu beside the data circle. Pages stack: choosing a row replaces the menu with that
-// page, and Back returns directly to Search. The circle stays in view beside the details.
+// page, and Back skips details (to the gap list or Search). The circle stays in view beside the details.
 import { useEffect, useMemo, useRef, useState, Fragment, type CSSProperties, type FormEvent } from "react";
 import { api, fmt, local, year, KIND_LABEL, verdictLabel, type CheckResult, type GapKind, type Role, type SearchResult, type Weights } from "../api";
 import { ErrorLine, useAction, type Ctx, type Page } from "../App";
@@ -38,7 +38,7 @@ export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: 
   useEffect(() => { if (page.kind !== "search" && page.kind !== "item" && page.kind !== "gap") ctx.setMarks({}); }, [page.kind]);
   return <aside ref={scroller} className={`menu ${shown.kind === "search" ? "search-menu" : ""}`} role="tabpanel" id={`panel-${tabId}`} aria-labelledby={`tab-${tabId}`} hidden={!active} tabIndex={0}>
     <div className={`page-swap ${phase}`}>
-    {stack.length > 1 && shown.kind !== "search" && <button type="button" className="back" onClick={ctx.backToSearch}><ArrowLeft size={16} aria-hidden="true" />Back</button>}
+    {stack.length > 1 && shown.kind !== "search" && <button type="button" className="back" onClick={ctx.backFromDetail}><ArrowLeft size={16} aria-hidden="true" />Back</button>}
     {searchPage && <div className="stack gap-s" hidden={shown.kind !== "search"}>
       <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && shown.kind === "search"} />
     </div>}

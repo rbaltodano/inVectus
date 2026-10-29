@@ -8,10 +8,10 @@ import IndexingIndicator from "./IndexingIndicator";
 import WorkspaceSplit from "./WorkspaceSplit";
 import Settings from "./screens/Settings";
 import { ArrowLeft, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
-import { PROJECT_TABS, pageTab, navigateTo, returnToSearch, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
+import { PROJECT_TABS, pageTab, navigateTo, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import "./App.css";
 
-/** A page of the menu beside the circle; Back returns directly to the Search root. */
+/** A page of the menu beside the circle; Back skips details: to the gap list from a gap, otherwise to Search. */
 export type Page =
   | { kind: "search"; query?: string } | { kind: "import"; path?: string }
   | { kind: "index"; collection?: string } | { kind: "gaps" }
@@ -33,7 +33,7 @@ export interface Ctx {
   go: (r: Route | Legacy) => void;
   push: (p: Page) => void;
   back: () => void;
-  backToSearch: () => void;
+  backFromDetail: () => void;
   setMarks: (m: Marks) => void;
   showRegion: (region: number) => void;
   reloadGaps: () => Promise<void>;
@@ -266,9 +266,10 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   };
   const push = (p: Page) => pushFrom(activeTab, p);
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
-  const backToSearch = (from = activeTab) => {
-    setTabStacks((previous) => returnToSearch(previous, from).stacks);
-    setActiveTab("search");
+  const backFromDetail = (from = activeTab) => {
+    const next = returnFromDetail(tabStacks, from);
+    setTabStacks(next.stacks);
+    setActiveTab(next.tab);
   };
   const showRegion = (region: number) => {
     setMarks({ region });
@@ -285,7 +286,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
 
   const ctx: Ctx = {
-    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, backToSearch, setMarks, showRegion, reloadGaps, refresh, setProject, pickTable,
+    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, backFromDetail, setMarks, showRegion, reloadGaps, refresh, setProject, pickTable,
     view: { ...opts, set: (k, v) => setOpts((o) => ({ ...o, [k]: v })), reset: () => setResetKey((k) => k + 1) },
   };
   const addData = async () => {
@@ -325,7 +326,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         </div>
           {PROJECT_TABS.filter((tab) => tabStacks[tab.id]).map((tab) => <Panel key={tab.id} active={activeTab === tab.id} tabId={tab.id}
             ctx={{ ...ctx, push: (p) => pushFrom(tab.id, p), back: () => setStack((s) => s.length > 1 ? s.slice(0, -1) : s, tab.id),
-              backToSearch: () => backToSearch(tab.id),
+              backFromDetail: () => backFromDetail(tab.id),
               setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} />)}
       </section>
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey} focusRegion={mapFocus}

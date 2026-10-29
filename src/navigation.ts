@@ -19,10 +19,12 @@ export function navigateTo(stacks: TabStacks, from: ProjectTab, page: Page): { t
   return { tab, stacks: { ...stacks, [tab]: page.kind === root.kind ? [page] : [...pages, page] } };
 }
 
-/** The visible Back button returns to the existing Search, skipping selected details. */
-export function returnToSearch(stacks: TabStacks, from: ProjectTab): { tab: ProjectTab; stacks: TabStacks } {
+/** The visible Back button skips selected details: from a gap it returns to the gap list,
+ *  from anywhere else to the existing Search. */
+export function returnFromDetail(stacks: TabStacks, from: ProjectTab): { tab: ProjectTab; stacks: TabStacks } {
   const root = PROJECT_TABS.find((t) => t.id === from)!.page;
   const sourceRoot = stacks[from]?.find((p) => p.kind === root.kind) ?? root;
+  if (from === "gaps") return { tab: "gaps", stacks: { ...stacks, gaps: [sourceRoot] } };
   const search = stacks.search?.find((p) => p.kind === "search") ?? { kind: "search" };
   return { tab: "search", stacks: { ...stacks, [from]: [sourceRoot], search: [search] } };
 }

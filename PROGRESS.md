@@ -1305,3 +1305,21 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app with its existing project history and dev
   model store. No GitHub CI dispatched.
+
+## 2026-10-29 — All gap rings thicken on Gaps
+
+- Corrected the previous interpretation: every visible gap ring transitions to 4 CSS px
+  while the Gaps tab is active, including its detail views. Outside Gaps, rings return
+  to 1 px except for a selected gap, which stays at 4 px. The selected ring remains
+  green; square opacity remains 15% on Gaps. Uses the existing 250 ms transition and
+  reduced-motion fallback.
+
+## 2026-10-29 — Remove Reset view button
+
+- Removed the map's conditional Reset view button and both of its CSS rules. It no
+  longer appears after panning, zooming or Show on map. Automatic map initialization
+  and region focus remain unchanged.
+- Frontend and macOS release builds and diff checks passed for both this removal and
+  the all-rings-on-Gaps correction, with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app with its existing project history and dev
+  model store. Live visual review remains with the owner; no CI dispatched.

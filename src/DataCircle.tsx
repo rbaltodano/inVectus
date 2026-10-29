@@ -366,7 +366,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         const p = gapPos(gp); if (!p || !inside(p[0], p[1], 7)) return;
         g.globalAlpha = gapsActive ? opacity(markKey.gap(data?.run.run_id, gp.gap_id)) : 1;
         const selected = gp.gap_id === selectedGapId;
-        g.lineWidth = 1 + 3 * (selectedEmphasis[gp.gap_id] ?? 0);
+        g.lineWidth = 1 + 3 * Math.max(gapEmphasis, selectedEmphasis[gp.gap_id] ?? 0);
         g.strokeStyle = selected ? ACCENT : INK; g.fillStyle = "#0e0f10";
         g.beginPath(); g.arc(p[0], p[1], 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
         // Codes on the strongest few only; the rest show theirs on hover.
@@ -537,7 +537,6 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         {c && c.n > 1 && <><b>{fmt(c.n)} items</b><span className="dim">Mostly {regionName(majorityRegion)} · click to zoom</span></>}
       </div>}
 
-      {(view.s !== 1 || view.x !== 0 || view.y !== 0) && <button type="button" className="circle-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>Reset view</button>}
     </div>
   </div>;
 }

@@ -99,7 +99,6 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .circle-tip { position: absolute; z-index: 2; max-width: 240px; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r); font-size: 14px; color: var(--text); pointer-events: none; }
 .circle-tip .dim { font-size: 11px; }
 .circle-label { position: absolute; transform: translate(-50%, -50%); padding: 1px 6px; background: rgba(20, 20, 20, 0.85); font-size: 9px; font-weight: 500; text-transform: none; color: var(--text-2); white-space: nowrap; pointer-events: none; }
-.circle-reset { position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%); border: 1px solid var(--line-2); background: var(--bg); color: var(--text-2); font: inherit; font-size: 11px; text-transform: none; padding: 4px 10px; border-radius: var(--r); cursor: pointer; }
 
 /* Menu body; the project console owns its width and scrolling. */
 .menu { flex: 0 0 414px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 4px; }
@@ -503,7 +502,6 @@ code, .path, .mono { font-family: var(--mono); }
 .circle-title { font-family: var(--sans); font-weight: 300; font-size: 15px; color: var(--text); }
 .circle-center .circle-title, .circle-center .circle-sub { background: rgba(14, 15, 16, 0.85); }
 .circle-tip { background: var(--bg); border-color: var(--line-2); border-radius: var(--r); font-size: 12px; }
-.circle-reset { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 999px; background: var(--bg); }
 
 /* Controls */
 .btn { border-color: var(--line-2); border-radius: var(--r); font-family: var(--sans); }

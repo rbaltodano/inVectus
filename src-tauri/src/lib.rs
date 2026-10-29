@@ -313,6 +313,32 @@ async fn project_info(state: State<'_, AppState>) -> CmdResult<ProjectInfo> {
     off_thread(move || with_session(&session, |s| info(s, &board))).await
 }
 
+#[tauri::command]
+async fn rename_project(
+    state: State<'_, AppState>,
+    path: String,
+    name: String,
+) -> CmdResult<String> {
+    let session = state.session.clone();
+    off_thread(move || {
+        let path = user_path(&path);
+        let root = std::fs::canonicalize(&path).map_err(err)?;
+        let mut guard = session
+            .try_lock()
+            .map_err(|_| "busy: the open project is answering a request; try again".to_string())?;
+        if let Some(s) = guard
+            .as_mut()
+            .filter(|s| std::fs::canonicalize(&s.project.root).ok().as_ref() == Some(&root))
+        {
+            s.project.rename(&name).map_err(err)?;
+            Ok(s.project.config.name.clone())
+        } else {
+            Project::rename_at(&root, &name).map_err(err)
+        }
+    })
+    .await
+}
+
 #[derive(Deserialize)]
 struct ImportForm {
     collection: String,
@@ -1346,6 +1372,7 @@ pub fn run() {
             default_projects_dir,
             open_project,
             project_info,
+            rename_project,
             inspect_source,
             set_network,
             list_llms,

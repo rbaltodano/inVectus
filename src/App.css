@@ -142,7 +142,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-height: 192px; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }
 .card-open { border: none; background: none; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .card-open:disabled { opacity: 0.5; cursor: default; }
-.card-open[aria-current="true"] .card-title { color: var(--accent); }
+.card-open[aria-current="true"] .card-title { color: var(--text); }
 .card .card-foot { flex-wrap: wrap; }
 .rule-line { flex: 0 0 100%; border-top: 1px solid var(--line); margin-bottom: 4px; }
 .card-forget { position: absolute; top: 12px; right: 12px; border: none; background: none; color: var(--dim); font: inherit; font-size: 13px; cursor: pointer; opacity: 0; }
@@ -442,6 +442,17 @@ h2, .h1, .h2 { font-family: var(--sans); font-weight: 400; font-size: 15px; lett
 .eyebrow { color: var(--dim); margin-bottom: 6px; }
 .project-back { display: inline-flex; align-items: center; gap: 8px; border: none; background: none; padding: 0; cursor: pointer; }
 .project-back:hover { color: var(--ink); }
+.project-heading { min-width: 0; flex: 1; }
+.editable-project-name { display: block; min-width: 0; }
+.project-name-button { display: block; max-width: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-name-button:disabled { cursor: default; opacity: 0.45; }
+.editable-project-name input { display: block; width: 100%; min-width: 0; min-height: 0; padding: 0; border: none; border-radius: 0; background: transparent; color: inherit; font: inherit; }
+.project-name-error { display: block; margin-top: 4px; color: var(--danger); font-size: 12px; line-height: 1.5; font-weight: 400; letter-spacing: 0; }
+.project-sidebar-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; min-height: 36px; color: var(--text-2); }
+.project-sidebar-row:hover, .project-sidebar-row[data-current="true"] { background: var(--surface); color: var(--ink); }
+.project-open { display: flex; align-items: center; justify-content: center; flex: none; width: 18px; min-height: 20px; padding: 0; border: none; background: none; color: inherit; cursor: pointer; }
+.project-open:disabled { opacity: 0.45; cursor: default; }
+.sidebar-project-name { flex: 1; font-size: 13px; line-height: 20px; }
 .score, .stat b, .big-num, .indexing-percent { font-family: var(--sans); font-variant-numeric: tabular-nums; }
 code, .path, .mono { font-family: var(--mono); }
 .head .path { font-size: 11px; color: var(--dim); margin-top: 6px; }

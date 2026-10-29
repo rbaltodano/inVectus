@@ -19,6 +19,10 @@ export function remember(p: ProjectInfo) {
 
 export function forget(root: string) { local.set(KEY, recentProjects().filter((r) => r.root !== root)); }
 
+export function renameRecent(root: string, name: string) {
+  local.set(KEY, recentProjects().map((r) => r.root === root ? { ...r, name } : r));
+}
+
 interface Props {
   current?: ProjectInfo;
   recent: Recent[];

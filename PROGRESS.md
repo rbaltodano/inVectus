@@ -1465,3 +1465,27 @@ packaging gates are still open. Details, reproducible commands and limitations:
   with the existing upstream Apple __eh_frame linker warning. Relaunched the standalone
   app with its existing project history and dev model store. Live underline motion and
   spacing remain unverified through the UI; no GitHub CI dispatched.
+
+## 2026-10-29 — Inline project renaming
+
+- Active project-card titles now use the normal text colour instead of the green accent.
+- Sidebar project names and the header title below Back to Projects are shared inline
+  editors: click the name to type, Enter or blur to save, Escape to cancel. Empty names
+  are rejected; save errors stay visible beside the editor. Folder icons in sidebar
+  rows open projects, separating navigation from name editing without nested buttons.
+- Added a local rename command and core metadata operations. Display names persist
+  atomically in project.json; project folders, database contents and embedding identity
+  stay in place. Open-project config is updated only after a successful write; inactive
+  project renaming reads/writes only metadata without opening a database or switching
+  the active session. Format validation and non-empty/single-line validation are enforced.
+- Successful edits update recent-project storage, sidebar, cards and the open header.
+  Async completion checks the latest active project before updating its state, avoiding
+  reopening an old project if the user navigated elsewhere during a rename.
+- Validation: all 28 existing UI tests and 5 focused Rust project tests passed (three
+  new tests cover persistence/path stability, metadata-only rename and invalid/failed
+  writes preserving the old name). Core/app Clippy across all targets with warnings
+  denied, workspace formatting and diff checks passed.
+- Frontend and macOS release builds passed with the existing upstream Apple __eh_frame
+  linker warning. Relaunched the standalone app with its existing project history and
+  dev model store. Live editor interaction/appearance remains unverified through the UI.
+  No GitHub CI dispatched; Windows/Linux remain unverified.

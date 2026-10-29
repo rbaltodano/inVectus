@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
 import DataCircle, { type Marks } from "./DataCircle";
-import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
+import ProjectsPage, { forget, recentProjects, remember, renameRecent, type Recent } from "./screens/Projects";
+import ProjectName from "./ProjectName";
 import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
 import WorkspaceSplit from "./WorkspaceSplit";
@@ -65,6 +66,14 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
   const job = jobs.current;
   const switchingBlocked = isRunning(job) && !!job?.project;
   const [opening, setOpening] = useState(false);
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const renameProject = async (root: string, name: string) => {
+    const saved = await api.rename(root, name);
+    renameRecent(root, saved); setRecent(recentProjects());
+    const current = projectRef.current;
+    if (current?.root === root) setProject({ ...current, name: saved });
+  };
 
   useEffect(() => { if (project) { remember(project); setRecent(recentProjects()); } }, [project]);
 
@@ -111,10 +120,11 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
           {nav("Projects", Folder, route.view === "projects", () => setRoute({ view: "projects" }))}
           <ul className="project-list" aria-label="Projects">
             {matches.map((r) => <li key={r.root}>
-              <button type="button" className="project-link" aria-current={route.view === "project" && project?.root === r.root ? "page" : undefined}
-                title={`${r.name}\n${tilde(r.root)}`} disabled={opening || (switchingBlocked && job?.project !== r.root)} onClick={() => openRecent(r)}>
-                <span>{r.name}</span>
-              </button>
+              <div className="project-sidebar-row" data-current={route.view === "project" && project?.root === r.root}>
+                <button type="button" className="project-open" aria-label={`Open project ${r.name}`} title={tilde(r.root)}
+                  disabled={opening || (switchingBlocked && job?.project !== r.root)} onClick={() => openRecent(r)}><Folder size={14} aria-hidden="true" /></button>
+                <ProjectName name={r.name} className="sidebar-project-name" disabled={opening} onSave={(name) => renameProject(r.root, name)} />
+              </div>
             </li>)}
           </ul>
           {matches.length === 0 && <p className="side-empty">{query.trim() ? "No matching projects" : "No projects yet"}</p>}
@@ -135,7 +145,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
       {route.view === "new" && <NewProject onCreated={opened} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
       {route.view === "settings" && <Settings project={project} setProject={setProject} />}
       {route.view === "project" && project && <Workspace key={project.root} project={project} setProject={setProject} refresh={refresh}
-        initialStack={stack} goRoute={setRoute} />}
+        initialStack={stack} goRoute={setRoute} onRename={(name) => renameProject(project.root, name)} />}
     </main>
   </div>;
 }
@@ -193,9 +203,10 @@ function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?
   </>;
 }
 
-function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
+function Workspace({ project, setProject, refresh, initialStack, goRoute, onRename }: {
   project: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void>;
   initialStack: Page[]; goRoute: (r: Route) => void;
+  onRename: (name: string) => Promise<void>;
 }) {
   const jobs = useJobs();
   const [selected, setSelected] = useState(() => local.get<string | undefined>(`invectus.scope.${project.root}`, undefined));
@@ -323,7 +334,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
 
   return <>
     <header className="head">
-      <div><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
+      <div className="project-heading"><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1><ProjectName name={project.name} onSave={onRename} /></h1><div className="path">{tilde(project.root)}</div></div>
       <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
         onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
         title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>

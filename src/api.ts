@@ -108,6 +108,7 @@ export const api = {
   defaultDir: () => invoke<string>("default_projects_dir"),
   open: (path: string, create: boolean) => invoke<ProjectInfo>("open_project", { path, create }),
   info: () => invoke<ProjectInfo>("project_info"),
+  rename: (path: string, name: string) => invoke<string>("rename_project", { path, name }),
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
   inspect: (path: string) => invoke<SourceInfo>("inspect_source", { path }),
   preview: (form: ImportForm, rows = 20) => invoke<Preview>("preview_import", { form, rows }),

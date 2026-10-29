@@ -58,17 +58,7 @@ impl Project {
         } else {
             with_suffix(path)
         };
-        let cfg_path = root.join("project.json");
-        let raw = std::fs::read(&cfg_path)
-            .with_context(|| format!("no inVectus project at {}", root.display()))?;
-        let config: ProjectConfig = serde_json::from_slice(&raw)
-            .with_context(|| format!("reading {}", cfg_path.display()))?;
-        if config.format_version != PROJECT_FORMAT {
-            bail!(
-                "project format {} is not supported (expected {PROJECT_FORMAT})",
-                config.format_version
-            );
-        }
+        let config = read_config(&root)?;
         let store = Store::open(&root.join("project.duckdb"))?;
         Ok(Self {
             root,
@@ -81,6 +71,29 @@ impl Project {
     pub fn set_network_enabled(&mut self, enabled: bool) -> Result<()> {
         self.config.network_enabled = enabled;
         write_json_atomic(&self.root.join("project.json"), &self.config)
+    }
+
+    /// Change the display name without moving the project or touching its database.
+    pub fn rename(&mut self, name: &str) -> Result<()> {
+        let mut config = self.config.clone();
+        config.name = valid_name(name)?;
+        write_json_atomic(&self.root.join("project.json"), &config)?;
+        self.config = config;
+        Ok(())
+    }
+
+    /// Rename a closed project using only its metadata; no database connection is needed.
+    pub fn rename_at(path: &Path, name: &str) -> Result<String> {
+        let name = valid_name(name)?;
+        let root = if path.join("project.json").exists() {
+            path.to_path_buf()
+        } else {
+            with_suffix(path)
+        };
+        let mut config = read_config(&root)?;
+        config.name = name.clone();
+        write_json_atomic(&root.join("project.json"), &config)?;
+        Ok(name)
     }
 
     /// The same project on a second database connection, for a background job.
@@ -101,6 +114,29 @@ impl Project {
     pub fn storage_warning(&self) -> Option<String> {
         cloud_sync_warning(&self.root)
     }
+}
+
+fn valid_name(name: &str) -> Result<String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().any(char::is_control) {
+        bail!("project name must be a non-empty single line");
+    }
+    Ok(name.to_owned())
+}
+
+fn read_config(root: &Path) -> Result<ProjectConfig> {
+    let path = root.join("project.json");
+    let raw = std::fs::read(&path)
+        .with_context(|| format!("no inVectus project at {}", root.display()))?;
+    let config: ProjectConfig =
+        serde_json::from_slice(&raw).with_context(|| format!("reading {}", path.display()))?;
+    if config.format_version != PROJECT_FORMAT {
+        bail!(
+            "project format {} is not supported (expected {PROJECT_FORMAT})",
+            config.format_version
+        );
+    }
+    Ok(config)
 }
 
 fn with_suffix(path: &Path) -> PathBuf {
@@ -175,5 +211,46 @@ mod tests {
         assert!(cloud_sync_warning(Path::new("/x/Library/Mobile Documents/p")).is_some());
         assert!(cloud_sync_warning(Path::new("/x/Dropbox/p")).is_some());
         assert!(cloud_sync_warning(Path::new("/var/data/p")).is_none());
+    }
+
+    #[test]
+    fn rename_persists_without_moving_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = Project::create(&dir.path().join("demo")).unwrap();
+        let root = p.root.clone();
+        p.rename("  Medical research  ").unwrap();
+        assert_eq!(p.config.name, "Medical research");
+        assert_eq!(p.root, root);
+        drop(p);
+        assert_eq!(
+            Project::open(&root).unwrap().config.name,
+            "Medical research"
+        );
+    }
+
+    #[test]
+    fn metadata_rename_does_not_need_database_access() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Project::create(&dir.path().join("demo")).unwrap();
+        let root = p.root.clone();
+        drop(p);
+        std::fs::remove_file(root.join("project.duckdb")).unwrap();
+        assert_eq!(Project::rename_at(&root, "New title").unwrap(), "New title");
+        assert_eq!(read_config(&root).unwrap().name, "New title");
+        assert!(!root.join("project.duckdb").exists());
+    }
+
+    #[test]
+    fn invalid_or_failed_rename_keeps_existing_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = Project::create(&dir.path().join("demo")).unwrap();
+        for name in ["", "  ", "one\ntwo", "one\0two"] {
+            assert!(p.rename(name).is_err());
+            assert_eq!(p.config.name, "demo");
+            assert_eq!(read_config(&p.root).unwrap().name, "demo");
+        }
+        p.root = dir.path().join("missing");
+        assert!(p.rename("Not saved").is_err());
+        assert_eq!(p.config.name, "demo");
     }
 }

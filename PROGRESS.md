@@ -1196,3 +1196,23 @@ packaging gates are still open. Details, reproducible commands and limitations:
   linker warning. Launched the updated standalone binary with the dev model store in a
   retained terminal session. Visual window/content verification remains with the owner.
   No CI dispatched; no reference data changed.
+
+## 2026-10-29 — Saved gap loading and staggered list entrance
+
+- Saved gap reads now retry on entry to the Gaps tab. Previously the scope/region effect
+  was the only automatic read, and a rejected read silently cleared the results. Loading
+  failures now show their error and a saved-results retry button, retaining prior rows.
+  Request ordering prevents older reads overwriting newer results after a scope change.
+- Explicit post-scan reloads read persisted gaps without relying on the pre-refresh
+  `scanned` flag captured by the scan callback. Successful empty scans and empty type
+  filters now have distinct messages. A first scan remains an explicit action.
+- Gap rows flicker in over 300 ms while translating vertically from -24 px to zero,
+  starting at 0 ms with 150 ms added per subsequent row. Entrances replay on tab/detail
+  return and filter changes. Reduced motion skips animation; keyboard-focused rows
+  become visible immediately.
+- Frontend TypeScript/Vite build, all 18 existing UI tests and diff checks passed.
+  Original missing-list behavior and new animation have not been reproduced/verified
+  through the live UI; the error/retry path makes further failures visible.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Restarted the standalone app with its original project history and dev model
+  store; its process is running. No CI dispatched; Windows/Linux remain unverified.

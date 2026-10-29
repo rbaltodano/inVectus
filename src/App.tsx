@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
 import DataCircle, { type Marks } from "./DataCircle";
@@ -27,6 +27,8 @@ export interface Ctx {
   tref?: TableRef;
   map?: MapData;
   gaps: GapView[];
+  gapsLoading: boolean;
+  gapsError?: string;
   go: (r: Route | Legacy) => void;
   push: (p: Page) => void;
   back: () => void;
@@ -196,6 +198,9 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   const [selected, setSelected] = useState(() => local.get<string | undefined>(`invectus.scope.${project.root}`, undefined));
   const [map, setMap] = useState<MapData>();
   const [gaps, setGaps] = useState<GapView[]>([]);
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsError, setGapsError] = useState<string>();
+  const gapsRequest = useRef(0);
   const initialTab = pageTab(initialStack[initialStack.length - 1]);
   const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
   const [tabStacks, setTabStacks] = useState<TabStacks>(() => ({
@@ -226,8 +231,29 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
     setMap(undefined); setMapError(undefined);
     if (tref && table?.regions) api.map(tref).then(setMap).catch((e) => setMapError(String(e)));
   }, [tref?.collection, tref?.space, table?.regions?.run_id]);
-  const reloadGaps = async () => { if (tref && table?.regions?.scanned) setGaps((await api.gaps(tref)).gaps); else setGaps([]); };
-  useEffect(() => { reloadGaps().catch(() => setGaps([])); }, [tref?.collection, tref?.space, table?.regions?.run_id, table?.regions?.scanned]);
+  const reloadGaps = useCallback(async () => {
+    const request = ++gapsRequest.current;
+    if (!tref || !table?.regions) { setGaps([]); setGapsError(undefined); setGapsLoading(false); return; }
+    setGapsLoading(true); setGapsError(undefined);
+    try {
+      const saved = await api.gaps(tref);
+      if (request === gapsRequest.current) setGaps(saved.gaps);
+    } catch (e) {
+      if (request === gapsRequest.current) setGapsError(String(e));
+    } finally {
+      if (request === gapsRequest.current) setGapsLoading(false);
+    }
+  }, [project.root, tref, table?.regions?.run_id]);
+  const viewingGaps = activeTab === "gaps";
+  useEffect(() => {
+    setGaps([]);
+    if (table?.regions?.scanned) void reloadGaps();
+    else { setGapsError(undefined); setGapsLoading(false); }
+    return () => { ++gapsRequest.current; };
+  }, [reloadGaps, table?.regions?.scanned]);
+  useEffect(() => {
+    if (viewingGaps && table?.regions?.scanned) void reloadGaps();
+  }, [viewingGaps]);
 
   const pushFrom = (tab: ProjectTab, p: Page) => {
     const target = p.kind === "item" || p.kind === "gap" ? tab : pageTab(p);
@@ -247,7 +273,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
 
   const ctx: Ctx = {
-    project, table, tref, map, gaps, go, push, back, setMarks, reloadGaps, refresh, setProject, pickTable,
+    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, setMarks, reloadGaps, refresh, setProject, pickTable,
     view: { ...opts, set: (k, v) => setOpts((o) => ({ ...o, [k]: v })), reset: () => setResetKey((k) => k + 1) },
   };
   const addData = async () => {

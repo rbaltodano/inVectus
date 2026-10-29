@@ -1,6 +1,6 @@
 // The menu beside the data circle. Pages stack: choosing a row replaces the menu with that
 // page, and Back returns. The circle stays in view, so results and gaps show where they sit.
-import { useEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment, type CSSProperties, type FormEvent } from "react";
 import { api, fmt, local, year, KIND_LABEL, verdictLabel, type CheckResult, type GapKind, type Role, type SearchResult, type Weights } from "../api";
 import { ErrorLine, useAction, type Ctx, type Page } from "../App";
 import Link from "../Link";
@@ -44,7 +44,7 @@ export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: 
     </div>}
     {shown.kind === "import" && <Import ctx={ctx} initialPath={shown.path} onCancel={ctx.back} onDone={() => ctx.back()} />}
     {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={shown.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
-    {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={shown.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} /></div>}
+    {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={shown.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} active={active && shown.kind === "gaps"} /></div>}
     {shown.kind === "gap" && <GapDetailView ctx={ctx} id={shown.id} />}
     {shown.kind === "item" && <ItemPage ctx={ctx} page={shown} />}
     </div>
@@ -192,8 +192,8 @@ function ItemPage({ ctx, page }: { ctx: Ctx; page: Extract<Page, { kind: "item" 
   </div>;
 }
 
-function GapsPage({ ctx }: { ctx: Ctx }) {
-  const { table, tref, project, gaps } = ctx;
+function GapsPage({ ctx, active }: { ctx: Ctx; active: boolean }) {
+  const { table, tref, project, gaps, gapsLoading, gapsError } = ctx;
   const [kind, setKind] = useState<GapKind | "">("");
   const [msg, setMsg] = useState<string>();
   const { busy, error, run } = useAction();
@@ -214,15 +214,19 @@ function GapsPage({ ctx }: { ctx: Ctx }) {
   return <>
     <div className="row wrap">
       <span className="section">Gaps{table.regions.scanned ? ` · ${fmt(gaps.length)}` : ""}</span>
-      <button type="button" className="text-btn push" disabled={busy} onClick={scan}>{table.regions.scanned ? "Scan again" : "Scan for gaps"}</button>
+      <button type="button" className="text-btn push" disabled={busy || gapsLoading} onClick={scan}>{table.regions.scanned ? "Scan again" : "Scan for gaps"}</button>
     </div>
     <div role="radiogroup" aria-label="Gap type" className="segmented">
       {(["", "coverage", "stale", "bridge"] as (GapKind | "")[]).map((k) => <button key={k || "all"} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}>{k ? KIND_LABEL[k] : "All"}</button>)}
     </div>
     <ErrorLine error={error} />
+    <ErrorLine error={gapsError} />
+    {gapsLoading && <p className="dim small" role="status">Loading saved gaps…</p>}
+    {gapsError && <button type="button" className="text-btn" disabled={gapsLoading} onClick={() => void ctx.reloadGaps()}>Retry loading saved gaps</button>}
     {!table.regions.scanned && <div className="empty-state"><LineArt kind="venn" /><span className="dim">Not scanned yet. Scanning runs offline in seconds and keeps your decisions.</span></div>}
-    {shown.length > 0 && <div className="result-list" role="group" aria-label="Gaps">
-    {shown.map((g) => <button key={g.gap_id} type="button" className="menu-row rank" onClick={() => ctx.push({ kind: "gap", id: g.gap_id })}>
+    {table.regions.scanned && !gapsLoading && !gapsError && shown.length === 0 && <p className="dim small">{gaps.length ? "No gaps of this type in the saved scan." : "The saved scan found no gaps in this collection."}</p>}
+    {shown.length > 0 && <div className={`result-list${active ? " gap-results" : ""}`} role="group" aria-label="Gaps" key={kind}>
+    {shown.map((g, i) => <button key={g.gap_id} type="button" className="menu-row rank" style={{ "--i": i } as CSSProperties} onClick={() => ctx.push({ kind: "gap", id: g.gap_id })}>
       <span className="score">{g.score.toFixed(2)}</span>
       <span className="rank-title">{g.label}<span className="dim">{gapCode(ctx.gaps.indexOf(g))} · {KIND_LABEL[g.kind]} · {verdictLabel(g.verdict?.verdict)}{g.verification ? ` · ${g.verification.matches ? `${g.verification.matches} outside matches` : "no outside match"}` : ""}</span></span>
     </button>)}

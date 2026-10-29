@@ -1546,3 +1546,19 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Relaunched the standalone app with its existing project history and dev model store;
   live sidebar/Dock appearance remains for owner review. Windows/Linux are unverified;
   no CI dispatched.
+
+## 2026-10-29 — Revised sidebar logo and squircle app icon
+
+- Replaced the branding logo with the owner's new Desktop PNG (593×174), moving the
+  source into src/assets/branding and removing the Desktop copy. Capped the sidebar
+  logo at 175 px wide while retaining responsive width and its natural aspect ratio.
+- Added a 1024 px SVG icon composition: a charcoal gradient continuous squircle with
+  transparent exterior margins and the supplied PNG mark centred inside. The original
+  mark is embedded unchanged; the new surrounding frame is code-defined vector geometry.
+- Regenerated the existing desktop icon formats from app-icon.svg and visually checked
+  the rendered PNG. Bundle and standalone Dock hooks consume the same generated ICNS.
+- Frontend, macOS release executable and .app bundle builds passed with the existing
+  upstream Apple __eh_frame linker warning. Verified the bundled ICNS matches its
+  generated source; diff checks passed. Relaunched the standalone app with its existing
+  project history and dev model store. Live sidebar/Dock review remains with the owner;
+  no CI dispatched.

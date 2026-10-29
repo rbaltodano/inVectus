@@ -32,7 +32,7 @@ interface Props {
   resetKey?: number;
 }
 
-const INK = "#f7f3eb";
+const INK = "#eeeae4";
 const ACCENT = "#6edcaa";
 const SINGLE = 4;         // one item, in screen px
 const MERGED_MAX = 11;    // the largest merged square
@@ -206,7 +206,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     for (const id of outlined) {
       const r = fine.get(id); if (!r) continue;
       const [x, y] = toScreen(r.x, r.y);
-      g.strokeStyle = id === marks.region ? ACCENT : "rgba(247, 243, 235, 0.45)";
+      g.strokeStyle = id === marks.region ? ACCENT : "rgba(238, 234, 228, 0.45)";
       g.beginPath(); g.arc(x, y, Math.max(6, r.radius * fit.k * view.s), 0, Math.PI * 2); g.stroke();
     }
     g.setLineDash([]);
@@ -249,7 +249,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       g.strokeStyle = INK; g.lineWidth = 1.5;
       for (const gp of gaps.slice(0, GAP_MARKS)) {
         const p = gapPos(gp); if (!p || !inside(p[0], p[1], 4)) continue;
-        g.fillStyle = "#121212";
+        g.fillStyle = "#141414";
         g.beginPath(); g.arc(p[0], p[1], 5, 0, Math.PI * 2); g.fill(); g.stroke();
       }
     }

@@ -41,8 +41,8 @@ function Home({ ctx, job }: { ctx: Ctx; job?: JobInfo }) {
     <div className="menu-card project-card">
       <div><div className="card-title">{project.name}</div><div className="path">{project.root.replace(/^\/Users\/[^/]+/, "~")}</div></div>
       <div className="card-foot">
-        <span>{fmt(items)} items</span><span>/</span>
-        <span className={`square ${ready ? "on" : ""}`} title={ready ? "Indexed" : "Not indexed yet"} aria-label={ready ? "Indexed" : "Not indexed yet"} />
+        <span>{fmt(items)} items</span>
+        <span className="index-status"><span className={`square ${ready ? "on" : ""}`} aria-hidden="true" />{ready ? "Indexed" : "Not indexed yet"}</span>
       </div>
     </div>
     {job && <div className="menu-card stack gap-s" aria-live="polite">
@@ -106,7 +106,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
     <form role="search" className="menu-row search-row" onSubmit={go}>
       <img src={searchIcon} alt="" aria-hidden="true" />
       <label htmlFor="panel-q" className="sr-only">Describe an idea</label>
-      <input id="panel-q" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="DESCRIBE AN IDEA" />
+      <input id="panel-q" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Describe an idea" />
       {busy && <span className="dim small">…</span>}
     </form>
     <div className="row wrap small">
@@ -125,6 +125,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
     {result && <>
       <div className="section">Rankings</div>
       <div className="dim small">Cosine similarity (not a probability), against “{table.collection}” only · {result.exhaustive ? "every item checked" : "approximate"}</div>
+      <div className="result-list" role="group" aria-label="Search results">
       {result.hits.map((h, i) => <button key={h.item.item_id} type="button" className="menu-row rank"
         onMouseEnter={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
         onFocus={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
@@ -132,6 +133,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
         <span className={`score ${i === 0 ? "top" : ""}`} aria-label={`similarity ${h.similarity.toFixed(2)}`}>{h.similarity.toFixed(2)}</span>
         <span className="rank-title">{h.item.title ?? h.item.source_id}<span className="dim">{[h.item.role, year(h.item.date)].filter(Boolean).join(" · ")}</span></span>
       </button>)}
+      </div>
     </>}
   </>;
 }
@@ -199,10 +201,12 @@ function GapsPage({ ctx }: { ctx: Ctx }) {
     </div>
     <ErrorLine error={error} />
     {!table.regions.scanned && <div className="menu-card dim small">Not scanned yet. Scanning runs offline in seconds and keeps your decisions.</div>}
+    {shown.length > 0 && <div className="result-list" role="group" aria-label="Gaps">
     {shown.map((g) => <button key={g.gap_id} type="button" className="menu-row rank" onClick={() => ctx.push({ kind: "gap", id: g.gap_id })}>
       <span className="score">{g.score.toFixed(2)}</span>
       <span className="rank-title">{g.label}<span className="dim">{KIND_LABEL[g.kind]} · {verdictLabel(g.verdict?.verdict)}{g.verification ? ` · ${g.verification.matches ? `${g.verification.matches} outside matches` : "no outside match"}` : ""}</span></span>
     </button>)}
+    </div>}
     {shown.length > 0 && <div className="row wrap small">
       <button type="button" className="text-btn" disabled={busy || offline} title={offline ? "Switch the network on to check PubMed and OpenAlex" : undefined} onClick={verifyTop}>{msg ?? "Verify top 5"}</button>
       <button type="button" className="text-btn" disabled={busy} onClick={() => run(async () => setMsg(`Saved to ${await api.exportGaps(tref, "markdown")}`))}>Export Markdown</button>

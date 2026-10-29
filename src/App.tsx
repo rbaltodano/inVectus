@@ -82,7 +82,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         <div className="side-search">
           <Search size={18} strokeWidth={1.5} aria-hidden="true" />
           <label htmlFor="side-q" className="sr-only">Find a project</label>
-          <input id="side-q" placeholder="SEARCH" value={query} onChange={(e) => setQuery(e.target.value)}
+          <input id="side-q" placeholder="Find a project" value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && matches[0]) openRecent(matches[0]); if (e.key === "Escape") setQuery(""); }} />
         </div>
         {query.trim() && <ul className="side-results" aria-label="Matching projects">

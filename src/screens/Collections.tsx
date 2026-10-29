@@ -35,8 +35,10 @@ export default function Collections({ ctx, focus, adding: startAdding }: { ctx: 
       <p className="muted">A collection is a set of items (papers, notes, products) imported from a CSV, Parquet file or folder of text files. It is indexed automatically after import.</p>
       <button type="button" className="btn primary" onClick={() => setAdding(true)}>Add the first collection</button>
     </section>}
+    {project.collections.length > 0 && <div className="collection-list">
     {project.collections.map((c) => <CollectionPanel key={c.collection_id} ctx={ctx} c={c}
       open={open === c.collection_id} onToggle={() => setOpen(open === c.collection_id ? undefined : c.collection_id)} />)}
+    </div>}
   </div>;
 }
 
@@ -63,7 +65,7 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
   const total = c.items + c.chunks;
   const overall: IndexStatus | "none" = indexingHere ? "indexing" : tables.length === 0 ? "none" : tables.some((t) => t.index_status === "indexed" || t.index_status === "imported") ? (tables.every((t) => t.index_status === "indexed" || t.index_status === "imported") ? "indexed" : "outdated") : tables[0].index_status;
 
-  return <section className="panel stack gap" aria-labelledby={`c-${c.collection_id}`}>
+  return <section className="panel collection-row stack gap" data-open={open} aria-labelledby={`c-${c.collection_id}`}>
     <div className="row wrap">
       <StatusMark status={overall} />
       <h3 id={`c-${c.collection_id}`} className="mono">{c.collection_id}</h3>

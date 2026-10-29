@@ -36,8 +36,8 @@ export default function ProjectsPage({ current, recent, job, onPick, onNew, onOp
     <div className="page-head">
       <h1>Projects</h1>
       <div className="row">
-        <button type="button" className="btn" onClick={onOpen} disabled={!!blocking}>Open Project…</button>
-        <button type="button" className="btn primary" onClick={onNew} disabled={!!blocking}><img src={plusIcon} alt="" aria-hidden="true" />New Project</button>
+        <button type="button" className="btn" onClick={onOpen} disabled={!!blocking}>Open project…</button>
+        <button type="button" className="btn primary" onClick={onNew} disabled={!!blocking}><img src={plusIcon} alt="" aria-hidden="true" />New project</button>
       </div>
     </div>
     {blocking && <p className="note">“{blocking.label}” is running; other projects open when it finishes or is cancelled.</p>}
@@ -56,8 +56,8 @@ export default function ProjectsPage({ current, recent, job, onPick, onNew, onOp
           </button>
           <div className="card-foot">
             {open && <span className="rule-line" aria-hidden="true" />}
-            <span>{fmt(r.items)} items</span><span>/</span>
-            <span className={`square ${r.models.length ? "on" : ""}`} title={r.models.length ? "Indexed" : "Not indexed"} aria-label={r.models.length ? "Indexed" : "Not indexed"} />
+            <span>{fmt(r.items)} items</span>
+            <span className="index-status"><span className={`square ${r.models.length ? "on" : ""}`} aria-hidden="true" />{r.models.length ? "Indexed" : "Not indexed"}</span>
           </div>
           <button type="button" className="card-forget" onClick={() => onForget(r.root)} aria-label={`Remove ${r.name} from the list`}>Remove</button>
         </li>;

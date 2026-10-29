@@ -936,3 +936,25 @@ packaging gates are still open. Details, reproducible commands and limitations:
   to the owner as requested; Windows/Linux remain unverified. No GitHub CI dispatched.
 - Decisions and spec conflicts: this changes navigation grouping while retaining the map,
   search, import, collections and gap evidence controls; no new spec conflict identified.
+
+## 2026-10-29 — Approved terminal-inspired visual pass
+
+- Applied all seven owner-approved visual proposals: 24 px page titles; 14 px body and
+  semibold section headings with 1.5 body line height; sentence-case labels; warm charcoal
+  surfaces (#141414/#202020/#292929), off-white text and warm gray metadata; continuous
+  result/collection lists; tighter spacing; and restrained controls with mint primary actions.
+- Main horizontal insets are now 32 px, panels 16 px, and result/collection rows use 12 px
+  vertical padding. Search and gap results share one bordered surface with separators and
+  full-row hover/focus backgrounds. Titles wrap with metadata beneath them. Summary/evidence
+  cards remain distinct; project summary cards are smaller. Corners remain small (4 px).
+- Project/index summary indicators now include visible Indexed/Not indexed text. Updated the
+  canvas ink/background to the same palette. Existing status wording accompanies color in
+  collection tables; keyboard focus indicators remain visible.
+- Frontend build, five existing navigation tests and macOS release
+  `tauri build --no-bundle --ci` passed. Calculated contrast for the principal token pairs:
+  body/panel 13.60:1, secondary/selection 5.93:1, primary button 10.95:1. These are palette
+  calculations, not a full rendered accessibility audit. Existing upstream Apple linker
+  `__eh_frame` warning remains. Relaunched the rebuilt binary with the dev model store;
+  interactive visual review is left to the owner. Windows/Linux remain unverified; no CI run.
+- Decisions and spec conflicts: the owner's approved palette/typography replaces the earlier
+  Angrove/Figma-derived styling. No feature or engine behavior changed; no new spec conflict.

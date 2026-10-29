@@ -175,8 +175,6 @@ function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?
   return <>
     <header className="head"><div><div className="eyebrow">Setup</div><h1>New project</h1></div></header>
     <div className="stage">
-      <DataCircle gaps={[]} marks={{}} showGaps={false} showLabels={false} showOutlines={false} onGap={() => undefined} onItem={() => undefined}
-        empty={{ title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: () => pick(false) }} />
       <aside className="menu" aria-label="New project">
         <div className="menu-card stack gap">
           <label className="field">Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Medical school research topic" /></label>
@@ -188,6 +186,8 @@ function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?
         {blocked && <p className="note">“{blocked.label}” is running; a new project can open when it finishes.</p>}
         {error && <p className="err" role="alert">{error}</p>}
       </aside>
+      <DataCircle gaps={[]} marks={{}} showGaps={false} showLabels={false} showOutlines={false} onGap={() => undefined} onItem={() => undefined}
+        empty={{ title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: () => pick(false) }} />
     </div>
   </>;
 }
@@ -308,13 +308,6 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
     </header>
     <div className="stage project-stage">
-      <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey} focusRegion={mapFocus}
-        gapsActive={activeTab === "gaps"}
-        selectedGapId={currentPage.kind === "gap" ? currentPage.id : undefined}
-        showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
-        empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
-        idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}
-        onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
       <section className="project-console" aria-label="Project workspace">
         {project.warning && <p className="banner">{project.warning}</p>}
         {netError && <p className="banner err">{netError}</p>}
@@ -334,6 +327,13 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
               backToSearch: () => backToSearch(tab.id),
               setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} />)}
       </section>
+      <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey} focusRegion={mapFocus}
+        gapsActive={activeTab === "gaps"}
+        selectedGapId={currentPage.kind === "gap" ? currentPage.id : undefined}
+        showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
+        empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
+        idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns in the import panel" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}
+        onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
     </div>
   </>;
 }

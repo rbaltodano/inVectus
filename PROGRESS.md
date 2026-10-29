@@ -1323,3 +1323,16 @@ packaging gates are still open. Details, reproducible commands and limitations:
   the all-rings-on-Gaps correction, with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app with its existing project history and dev
   model store. Live visual review remains with the owner; no CI dispatched.
+
+## 2026-10-29 — Content left, circle right
+
+- Reordered the project workspace and new-project setup so content comes first and the
+  circle second: content on the left and circle on the right on desktop, content above
+  the circle in the existing narrow stacked layout. DOM and keyboard traversal match
+  that visual order. Existing sizing and scrolling rules are unchanged.
+- Updated the import placeholder to reference the import panel without its former
+  right-pointing direction.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live layout review remains with the owner;
+  no GitHub CI dispatched.

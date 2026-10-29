@@ -1435,3 +1435,18 @@ packaging gates are still open. Details, reproducible commands and limitations:
   existing Search. Helper renamed `returnFromDetail`; navigation test updated.
 - UI tests (28), type check and frontend build pass. Not rebuilt or relaunched as a
   macOS app, at the owner's request; unchecked in the native window. No CI dispatched.
+
+## 2026-10-29 — Uniform tab padding
+
+- Removed the project workspace's inherited stage padding and both toolbar padding
+  declarations. Each tab now owns a uniform 24 px of padding on every side, replacing
+  the former 16/14/14 px tab padding layered over workspace and toolbar insets.
+- Aligned active-tab underline endpoints to the new horizontal padding and left a
+  matching 24 px right inset for the indexing indicator. Content scroll-area padding
+  remains independent. New-project setup retains its existing stage padding.
+- Changed divider margins from 16 px to 48 px so removing workspace padding preserves
+  the requested 48 px endpoints. Pane sizing continues to measure actual available space.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live spacing review remains with the owner;
+  no GitHub CI dispatched.

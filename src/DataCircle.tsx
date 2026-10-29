@@ -34,10 +34,59 @@ interface Props {
 
 const INK = "#f7f3eb";
 const ACCENT = "#6edcaa";
-const CELL = 10;          // screen px per merge cell
-const SINGLE = 4;         // one item
-const MERGED_MAX = 7;     // a merged square stays inside its cell, so the grid reads as squares
+const SINGLE = 4;         // one item, in screen px
+const MERGED_MAX = 11;    // the largest merged square
 const GAP_MARKS = 12;     // the highest-scoring gaps only
+// Navigation follows Angrove's Mac canvas (macOS/Platform/MacCanvasScrollInput.swift and
+// InsightTreeCanvasGestures.swift): two-finger scroll pans with native momentum, Shift pans
+// sideways, Command-scroll zooms at the pointer by exp(delta * 0.012), pinch zooms by
+// magnification^0.72, click-drag pans.
+const ZOOM_PER_DELTA = 0.012;
+const PINCH_DAMPING = 0.72;
+const ZOOM_MIN = 0.6, ZOOM_MAX = 200;
+
+/** A square's side for a group of `n` items. */
+const side = (n: number) => (n === 1 ? SINGLE : Math.min(MERGED_MAX, SINGLE + 1.3 * Math.log2(n)));
+
+/** Merge squares that touch until none do: start from points in a fine grid, then repeatedly
+ *  join groups whose squares overlap or touch (their sides grow as they merge). */
+function mergeTouching(cells: Cell[]): Cell[] {
+  let groups = cells;
+  for (let pass = 0; pass < 6; pass++) {
+    const bucket = MERGED_MAX + 2;
+    const hash = new Map<string, number[]>();
+    groups.forEach((c, i) => {
+      const k = `${Math.floor(c.x / bucket)},${Math.floor(c.y / bucket)}`;
+      (hash.get(k) ?? hash.set(k, []).get(k)!).push(i);
+    });
+    const parent = groups.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    let merged = false;
+    groups.forEach((a, i) => {
+      const bx = Math.floor(a.x / bucket), by = Math.floor(a.y / bucket);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        for (const j of hash.get(`${bx + dx},${by + dy}`) ?? []) {
+          if (j <= i) continue;
+          const b = groups[j], reach = (side(a.n) + side(b.n)) / 2 + 1;
+          if (Math.abs(a.x - b.x) < reach && Math.abs(a.y - b.y) < reach) {
+            const ra = find(i), rb = find(j);
+            if (ra !== rb) { parent[rb] = ra; merged = true; }
+          }
+        }
+      }
+    });
+    if (!merged) break;
+    const joined = new Map<number, Cell>();
+    groups.forEach((c, i) => {
+      const r = find(i), t = joined.get(r);
+      if (!t) { joined.set(r, { ...c, x: c.x * c.n, y: c.y * c.n, regions: new Map(c.regions) }); return; }
+      t.x += c.x * c.n; t.y += c.y * c.n; t.n += c.n;
+      c.regions.forEach((v, k) => t.regions.set(k, (t.regions.get(k) ?? 0) + v));
+    });
+    groups = [...joined.values()].map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n }));
+  }
+  return groups;
+}
 const PLACEHOLDERS = 1400;
 
 interface Cell { x: number; y: number; n: number; first: MapPoint; regions: Map<number, number> }
@@ -123,7 +172,8 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     g.save();
     g.beginPath(); g.arc(R, R, R - 1, 0, Math.PI * 2); g.clip();
 
-    // Merge items per screen cell.
+    // Group items in a fine screen grid, then merge squares that touch.
+    const CELL = SINGLE + 1;
     const grid = new Map<number, Cell>();
     const cols = Math.ceil(size / CELL) + 1;
     if (data && !loading) for (const p of data.points) {
@@ -134,7 +184,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       if (cell) { cell.x += x; cell.y += y; cell.n++; cell.regions.set(p.fine_id, (cell.regions.get(p.fine_id) ?? 0) + 1); }
       else grid.set(k, { x, y, n: 1, first: p, regions: new Map([[p.fine_id, 1]]) });
     }
-    const list = [...grid.values()].map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n }));
+    const list = mergeTouching([...grid.values()].map((c) => ({ ...c, x: c.x / c.n, y: c.y / c.n })));
     cells.current = list;
 
     // Region outlines: hidden until hover (or the toggle / a marked region).
@@ -172,7 +222,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       g.globalAlpha = glide > 0 ? glide : 1;
       const hl = new Set(marks.items ?? []);
       for (const c of list) {
-        const s = c.n === 1 ? SINGLE : Math.min(MERGED_MAX, SINGLE + 0.9 * Math.log2(c.n));
+        const s = side(c.n);
         g.fillStyle = INK;
         g.globalAlpha = (glide > 0 ? glide : 1) * (c.n === 1 ? 0.85 : 1);
         g.fillRect(c.x - s / 2, c.y - s / 2, s, s);
@@ -214,7 +264,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   }, [data, size, view, gaps, marks, showGaps, showOutlines, hover?.cell, loading, frac, glide, fit]);
 
   // Pointer: drag to pan, wheel to zoom, hover to inspect, click to open.
-  const at = (e: PE | React.WheelEvent) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
+  const at = (e: PE) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
   const find = (x: number, y: number) => {
     if (!inside(x, y)) return undefined;
     if (showGaps) for (const gp of gaps.slice(0, GAP_MARKS)) { const p = gapPos(gp); if (p && (p[0] - x) ** 2 + (p[1] - y) ** 2 < 64) return { gap: gp }; }
@@ -223,11 +273,64 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     for (const c of cells.current) { const d = (c.x - x) ** 2 + (c.y - y) ** 2; if (d < bd) { bd = d; best = c; } }
     return best ? { cell: best } : undefined;
   };
-  const zoomAt = (f: number, cx: number, cy: number) => setView((v) => {
-    const s = Math.min(200, Math.max(1, v.s * f)), k = s / v.s;
-    if (s === 1) return { s: 1, x: 0, y: 0 };
-    return { s, x: cx - R - (cx - R - v.x) * k, y: cy - R - (cy - R - v.y) * k };
-  });
+  // Keep some of the data inside the circle however far it is dragged.
+  const clampPan = (v: { s: number; x: number; y: number }) => {
+    const lim = R * Math.max(1, v.s);
+    return { s: v.s, x: Math.max(-lim, Math.min(lim, v.x)), y: Math.max(-lim, Math.min(lim, v.y)) };
+  };
+  const zoomTo = (v: { s: number; x: number; y: number }, next: number, cx: number, cy: number) => {
+    const s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next)), k = s / v.s;
+    return clampPan({ s, x: cx - R - (cx - R - v.x) * k, y: cy - R - (cy - R - v.y) * k });
+  };
+  const zoomAt = (f: number, cx: number, cy: number) => setView((v) => zoomTo(v, v.s * f, cx, cy));
+
+  // Wheel and pinch need non-passive listeners (React's onWheel cannot preventDefault).
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const pinch = useRef<{ s: number; v: typeof view } | null>(null);
+  useEffect(() => {
+    const c = canvas.current;
+    if (!c) return;
+    const local = (e: { clientX: number; clientY: number }) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? size : 1;
+      const dx = e.deltaX * unit, dy = e.deltaY * unit;
+      const [x, y] = local(e);
+      if (e.ctrlKey) {
+        // Trackpad pinch as delivered by Chromium-based webviews.
+        setView((v) => zoomTo(v, v.s * Math.exp(-dy * ZOOM_PER_DELTA), x, y));
+      } else if (e.metaKey) {
+        const vertical = Math.max(-60, Math.min(60, dy === 0 ? dx : dy));
+        setView((v) => zoomTo(v, v.s * Math.exp(-vertical * ZOOM_PER_DELTA), x, y));
+      } else if (e.shiftKey) {
+        setView((v) => clampPan({ ...v, x: v.x - (dy === 0 ? dx : dy) }));
+      } else {
+        setView((v) => clampPan({ ...v, x: v.x - dx, y: v.y - dy }));
+      }
+    };
+    // Trackpad pinch in WebKit (the macOS webview): gesture events carry a scale.
+    type GestureEvt = Event & { scale: number; clientX: number; clientY: number };
+    const gStart = (e: Event) => { e.preventDefault(); pinch.current = { s: viewRef.current.s, v: viewRef.current }; };
+    const gChange = (e: Event) => {
+      e.preventDefault();
+      const g = e as GestureEvt, p = pinch.current;
+      if (!p) return;
+      const [x, y] = local(g);
+      setView(zoomTo(p.v, p.s * Math.pow(g.scale, PINCH_DAMPING), x, y));
+    };
+    const gEnd = (e: Event) => { e.preventDefault(); pinch.current = null; };
+    c.addEventListener("wheel", wheel, { passive: false });
+    c.addEventListener("gesturestart", gStart);
+    c.addEventListener("gesturechange", gChange);
+    c.addEventListener("gestureend", gEnd);
+    return () => {
+      c.removeEventListener("wheel", wheel);
+      c.removeEventListener("gesturestart", gStart);
+      c.removeEventListener("gesturechange", gChange);
+      c.removeEventListener("gestureend", gEnd);
+    };
+  }, [size, R, !!empty]);
 
   if (empty) return <div ref={wrap} className="circle-wrap">
     <button type="button" className="circle empty-circle" style={{ width: size, height: size }} onClick={empty.onPick}>
@@ -247,7 +350,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         onPointerDown={(e) => { const [x, y] = at(e); canvas.current!.setPointerCapture(e.pointerId); drag.current = { x, y, v: view, moved: false }; }}
         onPointerMove={(e) => {
           const [x, y] = at(e); const d = drag.current;
-          if (d) { if (Math.abs(x - d.x) + Math.abs(y - d.y) > 3) d.moved = true; if (d.moved && d.v.s > 1) setView({ ...d.v, x: d.v.x + x - d.x, y: d.v.y + y - d.y }); return; }
+          if (d) { if (Math.abs(x - d.x) + Math.abs(y - d.y) > 3) d.moved = true; if (d.moved) setView(clampPan({ ...d.v, x: d.v.x + x - d.x, y: d.v.y + y - d.y })); return; }
           const f = find(x, y); setHover(f ? { ...f, sx: x, sy: y } : undefined);
         }}
         onPointerUp={(e) => {
@@ -258,8 +361,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
           else if (f?.cell && f.cell.n === 1) onItem(f.cell.first);
           else if (f?.cell) zoomAt(2.5, f.cell.x, f.cell.y);
         }}
-        onPointerLeave={() => setHover(undefined)}
-        onWheel={(e) => { const [x, y] = at(e); zoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, x, y); }} />
+        onPointerLeave={() => setHover(undefined)} />
 
       {showLabels && !loading && [...fine.values()].sort((a, b) => b.size - a.size).slice(0, 16).map((r) => {
         const [x, y] = toScreen(r.x, r.y);
@@ -278,7 +380,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         {c && c.n > 1 && <><b>{fmt(c.n)} items</b><span className="dim">Mostly {regionName(majorityRegion)} · click to zoom</span></>}
       </div>}
 
-      {view.s > 1 && <button type="button" className="circle-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>Reset view</button>}
+      {(view.s !== 1 || view.x !== 0 || view.y !== 0) && <button type="button" className="circle-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>Reset view</button>}
     </div>
   </div>;
 }

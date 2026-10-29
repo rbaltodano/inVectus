@@ -1,7 +1,7 @@
 // The dataset as a circle: every item is a small square at its map position, clipped to the
 // circle; squares that would overlap on screen merge into one larger square that splits up as
 // you zoom. Map positions are for browsing only (SPEC §6.5): nothing here is evidence.
-import { useEffect, useMemo, useRef, useState, type PointerEvent as PE } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as PE } from "react";
 import { fmt, year, KIND_LABEL, type GapView, type JobInfo, type MapData, type MapPoint, type Region } from "./api";
 
 export interface Marks {
@@ -103,6 +103,13 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState(560);
   const [view, setView] = useState({ s: 1, x: 0, y: 0 });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const zoomFrame = useRef<number>();
+  const stopZoom = useCallback(() => {
+    if (zoomFrame.current !== undefined) cancelAnimationFrame(zoomFrame.current);
+    zoomFrame.current = undefined;
+  }, []);
   const [hover, setHover] = useState<{ cell?: Cell; gap?: GapView; query?: boolean; sx: number; sy: number }>();
   const drag = useRef<{ x: number; y: number; v: typeof view; moved: boolean }>();
   const cells = useRef<Cell[]>([]);
@@ -118,7 +125,9 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  useEffect(() => { setView({ s: 1, x: 0, y: 0 }); }, [resetKey, data?.run.run_id]);
+  useEffect(() => { stopZoom(); setView({ s: 1, x: 0, y: 0 }); }, [resetKey, data?.run.run_id, stopZoom]);
+  // A resized canvas changes the zoom anchor; also cancel pending frames on unmount.
+  useEffect(() => stopZoom, [size, stopZoom]);
 
   const R = size / 2;
   const loading = job?.state === "running" && (job.kind === "index" || job.kind === "regions");
@@ -282,11 +291,28 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     const s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next)), k = s / v.s;
     return clampPan({ s, x: cx - R - (cx - R - v.x) * k, y: cy - R - (cy - R - v.y) * k });
   };
-  const zoomAt = (f: number, cx: number, cy: number) => setView((v) => zoomTo(v, v.s * f, cx, cy));
+  const zoomAt = (f: number, cx: number, cy: number) => {
+    stopZoom();
+    const start = viewRef.current;
+    const target = zoomTo(start, start.s * f, cx, cy);
+    setHover(undefined);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setView(target);
+      return;
+    }
+    const t0 = performance.now();
+    const step = (t: number) => {
+      const progress = Math.min(1, (t - t0) / 360);
+      const ease = progress * progress * (3 - 2 * progress);
+      // Geometric scale interpolation keeps the clicked location anchored throughout.
+      setView(zoomTo(start, start.s * Math.pow(target.s / start.s, ease), cx, cy));
+      if (progress < 1) zoomFrame.current = requestAnimationFrame(step);
+      else zoomFrame.current = undefined;
+    };
+    zoomFrame.current = requestAnimationFrame(step);
+  };
 
   // Wheel and pinch need non-passive listeners (React's onWheel cannot preventDefault).
-  const viewRef = useRef(view);
-  viewRef.current = view;
   const pinch = useRef<{ s: number; v: typeof view } | null>(null);
   useEffect(() => {
     const c = canvas.current;
@@ -294,6 +320,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     const local = (e: { clientX: number; clientY: number }) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
+      stopZoom();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? size : 1;
       const dx = e.deltaX * unit, dy = e.deltaY * unit;
       const [x, y] = local(e);
@@ -311,7 +338,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     };
     // Trackpad pinch in WebKit (the macOS webview): gesture events carry a scale.
     type GestureEvt = Event & { scale: number; clientX: number; clientY: number };
-    const gStart = (e: Event) => { e.preventDefault(); pinch.current = { s: viewRef.current.s, v: viewRef.current }; };
+    const gStart = (e: Event) => { e.preventDefault(); stopZoom(); pinch.current = { s: viewRef.current.s, v: viewRef.current }; };
     const gChange = (e: Event) => {
       e.preventDefault();
       const g = e as GestureEvt, p = pinch.current;
@@ -330,7 +357,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       c.removeEventListener("gesturechange", gChange);
       c.removeEventListener("gestureend", gEnd);
     };
-  }, [size, R, !!empty]);
+  }, [size, R, !!empty, stopZoom]);
 
   if (empty) return <div ref={wrap} className="circle-wrap">
     <button type="button" className="circle empty-circle" style={{ width: size, height: size }} onClick={empty.onPick}>
@@ -347,7 +374,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     <div className="circle" style={{ width: size, height: size }}>
       <canvas ref={canvas} style={{ width: size, height: size, cursor: drag.current?.moved ? "grabbing" : hover ? "pointer" : "grab" }}
         role="img" aria-label={data ? `Map of ${fmt(data.points.length)} items; positions are for browsing only` : "Dataset circle"}
-        onPointerDown={(e) => { const [x, y] = at(e); canvas.current!.setPointerCapture(e.pointerId); drag.current = { x, y, v: view, moved: false }; }}
+        onPointerDown={(e) => { stopZoom(); const [x, y] = at(e); canvas.current!.setPointerCapture(e.pointerId); drag.current = { x, y, v: view, moved: false }; }}
         onPointerMove={(e) => {
           const [x, y] = at(e); const d = drag.current;
           if (d) { if (Math.abs(x - d.x) + Math.abs(y - d.y) > 3) d.moved = true; if (d.moved) setView(clampPan({ ...d.v, x: d.v.x + x - d.x, y: d.v.y + y - d.y })); return; }

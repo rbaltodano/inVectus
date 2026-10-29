@@ -61,9 +61,9 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 13px; text-transfo
 .req { color: var(--accent); }
 .big { font-size: 15px; }
 
-/* Shell: sidebar 325 px, as in the frames */
+/* Shell: compact sidebar leaves more room for the map. */
 .shell { display: flex; min-height: 100vh; }
-.sidebar { flex: 0 0 325px; background: var(--surface); border-right: 1px solid var(--line); padding: 28px; display: flex; flex-direction: column; justify-content: space-between; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.sidebar { flex: 0 0 285px; background: var(--surface); border-right: 1px solid var(--line); padding: 28px; display: flex; flex-direction: column; justify-content: space-between; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .side-top, .side-bottom { display: flex; flex-direction: column; gap: 24px; }
 .logo { align-self: flex-start; border: 1px solid rgba(222, 222, 222, 0.5); padding: 8px 12px; font-size: 18px; font-weight: 700; color: var(--text); }
 .side-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 0 20px; }

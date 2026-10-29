@@ -904,3 +904,14 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Fixture regeneration with network disabled and cached originals reproduced every frozen
   checksum/expectation. The task's Python bytecode caches are ignored locally. Benchmark,
   reference and text-model metadata guards continue to match after all tests/builds.
+
+## 2026-10-29 — Sidebar width and click-to-zoom polish
+
+- Reduced the desktop sidebar from 325 px to 285 px, preserving the narrow-window layout.
+- Grouped map-item clicks now ease into the existing 2.5× zoom over 360 ms, anchored at
+  the clicked location. Pan, wheel, pinch, reset, resize and unmount cancel pending motion;
+  reduced-motion users receive the immediate view update.
+- Frontend TypeScript/Vite build and macOS release `tauri build --no-bundle --ci` passed.
+  The existing Apple linker `__eh_frame` warning remains. Relaunched the rebuilt desktop
+  binary with the existing dev model store. Visual verification is left to the owner as
+  requested; no frame-rate measurement or Windows/Linux verification claimed. No CI run.

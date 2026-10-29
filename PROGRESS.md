@@ -1363,3 +1363,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live spacing review remains with the owner;
   no GitHub CI dispatched.
+
+## 2026-10-29 — Source-link hover dimming
+
+- Shared source links now transition to 75% opacity on hover over 150 ms, returning to
+  full opacity over the same duration on pointer exit. The text and offset border dim
+  together. Reduced motion applies the opacity change immediately.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live hover review remains with the owner;
+  no GitHub CI dispatched.

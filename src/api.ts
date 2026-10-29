@@ -177,6 +177,12 @@ export async function pickSource(folder = false): Promise<string | null> {
   return typeof r === "string" ? r : null;
 }
 
+/** The system's folder picker for an existing project (a `.invectus` folder). */
+export async function pickProject(): Promise<string | null> {
+  const r = await openDialog({ directory: true, multiple: false, title: "Open an inVectus project (.invectus folder)" });
+  return typeof r === "string" ? r : null;
+}
+
 /** Per-viewer conveniences kept in browser storage; the app works without them. */
 export const local = {
   get<T>(key: string, fallback: T): T {

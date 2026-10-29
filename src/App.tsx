@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, inTauri, local, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
+import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
 import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
@@ -113,8 +113,13 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
 
     <main className="main">
       {!inTauri && <p className="banner">Browser preview: the engine runs only in the desktop app.</p>}
+      {route.view === "projects" && error && <p className="banner err" role="alert">{error}</p>}
       {route.view === "projects" && <ProjectsPage current={project} recent={recent} job={job}
-        onPick={openRecent} onNew={() => setRoute({ view: "new" })} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
+        onPick={openRecent} onNew={() => setRoute({ view: "new" })}
+        onOpen={async () => {
+          setError(undefined);
+          try { const path = await pickProject(); if (path) opened(await api.open(path, false)); } catch (e) { setError(String(e)); }
+        }} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
       {route.view === "new" && <NewProject onCreated={opened} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
       {route.view === "settings" && <Settings project={project} setProject={setProject} />}
       {route.view === "project" && project && <Workspace key={project.root} project={project} setProject={setProject} refresh={refresh}

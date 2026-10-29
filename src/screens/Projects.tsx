@@ -24,21 +24,25 @@ interface Props {
   job?: JobInfo;
   onPick: (r: Recent) => void;
   onNew: () => void;
+  onOpen: () => void;
   onForget: (root: string) => void;
 }
 
 /** All projects as cards, most recently opened first. */
-export default function ProjectsPage({ current, recent, job, onPick, onNew, onForget }: Props) {
+export default function ProjectsPage({ current, recent, job, onPick, onNew, onOpen, onForget }: Props) {
   // A job in a project blocks switching to another one (the backend refuses); say so up front.
   const blocking = job?.state === "running" && job.project ? job : undefined;
   return <div className="page">
     <div className="page-head">
       <h1>Projects</h1>
-      <button type="button" className="btn primary" onClick={onNew} disabled={!!blocking}><img src={plusIcon} alt="" aria-hidden="true" />New Project</button>
+      <div className="row">
+        <button type="button" className="btn" onClick={onOpen} disabled={!!blocking}>Open Project…</button>
+        <button type="button" className="btn primary" onClick={onNew} disabled={!!blocking}><img src={plusIcon} alt="" aria-hidden="true" />New Project</button>
+      </div>
     </div>
     {blocking && <p className="note">“{blocking.label}” is running; other projects open when it finishes or is cancelled.</p>}
     {recent.length === 0 && <div className="empty-note">
-      <span className="dim">No projects yet. A project is a folder on this computer holding one dataset, its index and map, and your decisions.</span>
+      <span className="dim">No projects yet. Open an existing .invectus folder, or create one. A project is a folder on this computer holding one dataset, its index and map, and your decisions.</span>
     </div>}
     <ul className="cards">
       {recent.map((r) => {

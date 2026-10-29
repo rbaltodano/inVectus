@@ -1216,3 +1216,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Restarted the standalone app with its original project history and dev model
   store; its process is running. No CI dispatched; Windows/Linux remain unverified.
+
+## 2026-10-29 — Horizontal gap-row entrance
+
+- Removed the gap-row opacity flicker and changed the entrance from vertical movement
+  to translateX(-24px) → translateX(0). Kept the 300 ms ease-out duration, 150 ms
+  per-row stagger, reduced-motion fallback and immediate keyboard-focus visibility.
+- Frontend TypeScript/Vite build and diff checks passed.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app with its existing project history and dev model
+  store. Live visual review remains with the owner; no GitHub CI dispatched.

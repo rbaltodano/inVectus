@@ -103,6 +103,7 @@ pub fn run_regions(
         state: "running".into(),
         progress: 0.0,
         checkpoint: serde_json::json!({}),
+        updated_at: None,
     };
     project.store.save_job(&job)?;
     let result = run_inner(project, vectors, table, opts, cancel, progress, &job_id);

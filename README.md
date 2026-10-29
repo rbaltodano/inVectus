@@ -13,9 +13,10 @@ means "already exists" for a collection, and `invectus check` gives the inVectus
 (exists / near / open with P(exists) and the nearest items). Calibration currently uses a no-LLM
 fallback, so P(exists) is approximate; `search` alone is never an absence verdict.
 
-Desktop app: projects, a guided import, indexing with live progress, search verdicts, the region
-map, gap lists and gap detail (descriptions, verdicts, outside-source checks) and settings. The
-screens follow the wireframe and await a style pass; run it with `npm run tauri dev`.
+Desktop app: a project sidebar, and per project an Overview, Search (calibrated assessment plus
+nearest items), Gaps and gap detail (descriptions, decisions, outside-source checks), Collections
+(guided import that indexes automatically, readiness, update from source) and the region Map.
+Background jobs run one at a time and are tied to their project. Run it with `npm run tauri dev`.
 
 ## Development
 

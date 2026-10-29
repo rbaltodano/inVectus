@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { api, fmt, inTauri, ROLES, type ImportForm, type ImportReport, type Preview, type Role, type SourceInfo } from "../api";
+import { api, fmt, inTauri, ROLES, type ImportForm, type ImportOutcome, type Preview, type Role, type SourceInfo } from "../api";
 import { ErrorLine, useAction, type Ctx } from "../App";
+import { JobProgress, isRunning, useJobs } from "../jobs";
+import { DownloadConsent } from "../models";
 
 const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
 type Step = 0 | 1 | 2 | 3;
@@ -16,7 +18,10 @@ function guess(columns: string[], names: string[]) {
   return "";
 }
 
-export default function Import({ ctx }: { ctx: Ctx }) {
+/** Add or update a collection: source → columns → roles → preview → import, then indexing
+ *  starts by itself in the backend. */
+export default function Import({ ctx, onDone, onCancel }: { ctx: Ctx; onDone: (collection: string) => void; onCancel: () => void }) {
+  const jobs = useJobs();
   const [step, setStep] = useState<Step>(0);
   const [collection, setCollection] = useState(ctx.project.collections.length ? "" : "papers");
   const [path, setPath] = useState("");
@@ -28,13 +33,14 @@ export default function Import({ ctx }: { ctx: Ctx }) {
   const [rules, setRules] = useState<Rule[]>([]);
   const [counts, setCounts] = useState<Record<Role, number>>();
   const [preview, setPreview] = useState<Preview>();
-  const [report, setReport] = useState<ImportReport>();
+  const [outcome, setOutcome] = useState<ImportOutcome>();
+  const report = outcome?.report;
   const [dragging, setDragging] = useState(false);
   const { busy, error, setError, run } = useAction();
 
   const look = (p: string) => run(async () => {
     const s = await api.inspect(p);
-    setPath(p); setSource(s); setPreview(undefined); setReport(undefined);
+    setPath(p); setSource(s); setPreview(undefined); setOutcome(undefined);
     const c = s.columns;
     setMap({
       text: guess(c, ["abstract", "text", "body", "content", "description", "summary"]),
@@ -97,7 +103,13 @@ export default function Import({ ctx }: { ctx: Ctx }) {
   }, [source, roleColumn]);
 
   const doPreview = () => run(async () => { setPreview(await api.preview(form, 20)); setStep(2); });
-  const doImport = () => run(async () => { setReport(await api.runImport(form)); setStep(3); await ctx.refresh(); });
+  const doImport = () => run(async () => {
+    const out = await api.importCollection(form);
+    if (out.job) jobs.started(out.job);
+    setOutcome(out); setStep(3);
+    await ctx.refresh();
+  });
+  const indexJob = outcome?.job && (jobs.current?.id === outcome.job.id ? jobs.current : outcome.job);
 
   const pill = (i: number) => {
     const at = step === 0 ? [0] : step === 1 ? [1, 2] : step === 2 ? [3] : [4];
@@ -106,7 +118,7 @@ export default function Import({ ctx }: { ctx: Ctx }) {
   };
 
   return <div className="page narrow">
-    <h1>Import a collection</h1>
+    <div className="title-row"><h2 className="h1">Add collection</h2><span className="label">into {ctx.project.name}</span></div>
     <ol aria-label="Steps" className="steps">{STEPS.map((_, i) => pill(i))}</ol>
     <ErrorLine error={error} />
 
@@ -127,7 +139,7 @@ export default function Import({ ctx }: { ctx: Ctx }) {
           <button type="button" className="btn" disabled={!path.trim() || busy} onClick={() => look(path.trim())}>{busy ? "Reading…" : "Use this path"}</button>
         </div>
       </section>
-      {source && <div className="card row wrap">
+      {source && <div className="panel row wrap">
         <span className="strong">{path.split("/").pop()}</span>
         <span className="muted">{source.kind.toUpperCase()} · {source.rows_read >= 1000 ? "1,000+" : fmt(source.rows_read)} {folder ? "files" : "rows"} · {source.columns.length} columns{source.unreadable ? ` · ${source.unreadable} unreadable` : ""}</span>
       </div>}
@@ -139,20 +151,20 @@ export default function Import({ ctx }: { ctx: Ctx }) {
         </div>
       </section>
       <div className="row end">
-        <button type="button" className="btn" onClick={() => ctx.go({ name: "projects" })}>Cancel</button>
+        <button type="button" className="btn" onClick={onCancel}>Cancel</button>
         <button type="button" className="btn primary" disabled={!source || !validName} onClick={() => setStep(1)}>Next</button>
       </div>
     </>}
 
     {step === 1 && source && <>
-      <div className="card row wrap">
+      <div className="panel row wrap">
         <span className="strong">{path.split("/").pop()}</span>
         <span className="muted">{source.kind.toUpperCase()} · into “{collection}”</span>
         <button type="button" className="link push" onClick={() => setStep(0)}>Change source</button>
       </div>
       {folder
-        ? <section className="card"><h2>Columns</h2><p className="muted">Each file becomes one item: its name is the title, its text is searched, and its path is kept.</p></section>
-        : <section aria-labelledby="cols" className="card stack">
+        ? <section className="panel"><h2>Columns</h2><p className="muted">Each file becomes one item: its name is the title, its text is searched, and its path is kept.</p></section>
+        : <section aria-labelledby="cols" className="panel stack">
           <h2 id="cols">Which column holds what?</h2>
           <div className="muted small">Only Text is required. We guessed from the column names.</div>
           <div className="scroll-x">
@@ -179,7 +191,7 @@ export default function Import({ ctx }: { ctx: Ctx }) {
           </details>
         </section>}
 
-      <section aria-labelledby="roles" className="card stack gap">
+      <section aria-labelledby="roles" className="panel stack gap">
         <div>
           <h2 id="roles">Roles</h2>
           <div className="muted small">Demand = something asking or needing. Coverage = something answering it. Gaps compare the two.</div>
@@ -226,8 +238,8 @@ export default function Import({ ctx }: { ctx: Ctx }) {
     </>}
 
     {step === 2 && preview && <>
-      <section aria-labelledby="pv" className="card flush">
-        <div className="card-head"><h2 id="pv">Preview · first {preview.rows.length} items</h2>
+      <section aria-labelledby="pv" className="panel flush">
+        <div className="panel-head"><h2 id="pv">Preview · first {preview.rows.length} items</h2>
           {Object.keys(preview.skipped).length > 0 && <span className="muted small">skipped: {Object.entries(preview.skipped).map(([k, v]) => `${v} ${k}`).join(", ")}</span>}</div>
         <div className="scroll-x">
           <table className="table">
@@ -248,7 +260,7 @@ export default function Import({ ctx }: { ctx: Ctx }) {
       </div>
     </>}
 
-    {step === 3 && report && <section aria-labelledby="res" className="card stack gap">
+    {step === 3 && report && <section aria-labelledby="res" className="panel stack gap">
       <h2 id="res">Import finished</h2>
       <div className="stats">
         <div className="stat"><b>{fmt(report.inserted)}</b><span>added</span></div>
@@ -259,11 +271,25 @@ export default function Import({ ctx }: { ctx: Ctx }) {
       <div className="muted small">{fmt(report.items)} items in “{report.collection}” · {fmt(report.chunks_written)} chunks written{report.not_in_source ? ` · ${fmt(report.not_in_source)} earlier items not in this source were kept` : ""}</div>
       {Object.keys(report.skipped).length > 0 && <details><summary>Why items were skipped</summary>
         <ul>{Object.entries(report.skipped).map(([k, v]) => <li key={k}>{fmt(v)}: {k}</li>)}</ul></details>}
-      {report.warnings.map((w) => <p key={w} className="warn">{w}</p>)}
-      <div className="muted small">Re-importing the same file later only updates what changed.</div>
+      {report.warnings.map((w) => <p key={w} className="note">{w}</p>)}
+      <div className="muted small">Importing the same source again later only updates what changed.</div>
+      <div className="label">Indexing</div>
+      {indexJob && <div className="activity">
+        <div className="small"><b>{isRunning(indexJob) ? "Indexing" : indexJob.state === "completed" ? "Indexed" : indexJob.state === "cancelled" ? "Indexing cancelled" : "Indexing failed"}</b> with {indexJob.models.join(", ")}</div>
+        {isRunning(indexJob) && <JobProgress job={indexJob} />}
+        {indexJob.state === "failed" && <div className="error small">{indexJob.error}</div>}
+        {isRunning(indexJob) && <div className="muted small">It runs in the background; you can leave this page.</div>}
+      </div>}
+      {outcome!.index_error && <p className="error">Imported, but indexing did not start: {outcome!.index_error}. Retry it from the collection.</p>}
+      {!outcome!.job && !outcome!.index_error && outcome!.plan.missing.length > 0 && <div className="stack gap-s">
+        <p className="note">Imported, but not indexed: no suitable embedding model is installed. Search, regions and gaps need an index.</p>
+        {outcome!.plan.missing.map((m) => <DownloadConsent key={m.key} model={m} project={ctx.project} />)}
+        <div className="muted small">After the download, index it from Collections.</div>
+      </div>}
+      {outcome!.plan.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
       <div className="row end">
-        <button type="button" className="btn" onClick={() => { setStep(0); setSource(undefined); setPath(""); setReport(undefined); setError(undefined); }}>Import another</button>
-        <button type="button" className="btn primary" onClick={() => ctx.go({ name: "index", collection: report.collection })}>Start indexing</button>
+        <button type="button" className="btn" onClick={() => { setStep(0); setSource(undefined); setPath(""); setOutcome(undefined); setError(undefined); }}>Import another</button>
+        <button type="button" className="btn primary" onClick={() => onDone(report.collection)}>Go to the collection</button>
       </div>
     </section>}
   </div>;

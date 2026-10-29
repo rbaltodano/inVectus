@@ -50,17 +50,19 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const saveVerdict = () => save.run(async () => { await api.setVerdict(tref, id, verdict, note); setSaved(true); setTimeout(() => setSaved(false), 2000); });
 
   return <div className="page wide">
-    <button type="button" className="link start" onClick={() => ctx.go({ name: "gaps" })}>← All gaps</button>
+    <button type="button" className="link start" onClick={() => ctx.go({ view: "project", tab: "gaps" })}>← All gaps</button>
     <div className="title-row">
-      <h1>{KIND_LABEL[gap.kind]}: {gap.label}</h1>
-      <span className="score-badge">{gap.score.toFixed(2)}</span>
+      <h2 className="h1">{gap.label}</h2>
+      <span className="tag">{KIND_LABEL[gap.kind]}</span>
+      <span className="score-chip mono">{gap.score.toFixed(2)}</span>
     </div>
     <ErrorLine error={load.error} />
 
     <div className="detail-layout">
       <div className="stack gap">
-        <section aria-labelledby="why" className="card stack gap">
-          <h2 id="why">Why this is a gap</h2>
+        <section aria-labelledby="why" className="panel stack gap">
+          <div className="label">Engine assessment</div>
+          <h2 id="why">Why the engine flags this</h2>
           <p>{gap.explanation}</p>
           <div className="facts-row small muted">
             <span>{fmt(gap.demand)} demand</span><span>{fmt(gap.coverage)} coverage</span>
@@ -70,12 +72,12 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           </div>
           <div className="terms">{gap.terms.filter((x) => x.weight !== 0).map((x) => <div key={x.name} className="term">
             <span>{TERM_LABEL[x.name] ?? x.name}</span>
-            <div className="bar thin" aria-hidden="true"><div className={x.contribution < 0 ? "neg" : ""} style={{ width: `${(Math.abs(x.contribution) / maxContribution) * 100}%` }} /></div>
+            <div className="meter thin" aria-hidden="true"><div className={x.contribution < 0 ? "neg" : ""} style={{ width: `${(Math.abs(x.contribution) / maxContribution) * 100}%` }} /></div>
             <b>{x.contribution >= 0 ? "+" : "−"}{Math.abs(x.contribution).toFixed(2)}</b>
           </div>)}</div>
         </section>
 
-        {gap.timeline.length > 0 && <section aria-labelledby="tl" className="card stack gap">
+        {gap.timeline.length > 0 && <section aria-labelledby="tl" className="panel stack gap">
           <div className="row wrap"><h2 id="tl">Per year</h2><span className="key demand">Demand</span><span className="key coverage">Coverage</span></div>
           <div className="timeline" role="img" aria-label="Demand and coverage items per year">
             {gap.timeline.map((y, i) => <div key={y.year} className="year" title={`${y.year}: ${y.demand} demand, ${y.coverage} coverage`}>
@@ -85,7 +87,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           </div>
         </section>}
 
-        <section aria-labelledby="mid" className="card stack gap">
+        <section aria-labelledby="mid" className="panel stack gap">
           <h2 id="mid">{bridge ? "What would sit in between?" : "What would fill this gap?"}</h2>
           {bridge && <><div className="row">
             <span className="small clip w-160">{nameA}</span>
@@ -108,37 +110,39 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           </div>
         </section>
 
-        <section aria-labelledby="ni" className="card stack gap">
+        <section aria-labelledby="ni" className="panel stack gap">
           <h2 id="ni">Central items</h2>
           <ul className="plain">{gap.core_items.map((i) => <li key={i.item_id}>
             <Link url={i.url}>{i.title ?? `item ${i.item_id}`}</Link>
-            <span className="muted small"> · <span className={`chip role ${i.role}`}>{i.role}</span> {year(i.date)}</span>
+            <span className="muted small"> · <span className={`tag role ${i.role}`}>{i.role}</span> {year(i.date)}</span>
           </li>)}</ul>
-          <div className="row"><button type="button" className="btn" onClick={() => ctx.go({ name: "map", region: gap.region_a })}>Show on map</button></div>
+          <div className="row"><button type="button" className="btn" onClick={() => ctx.go({ view: "project", tab: "map", region: gap.region_a })}>Show on map</button></div>
         </section>
       </div>
 
       <div className="stack gap">
-        <section aria-labelledby="vd" className="card stack gap">
-          <h2 id="vd">Your verdict</h2>
+        <section aria-labelledby="vd" className="panel stack gap">
+          <div className="label">Your decision</div>
+          <h2 id="vd">Decision and note</h2>
+          <div className="muted small">Yours, kept apart from the engine’s score; it carries over when gaps are scanned again.</div>
           <div role="radiogroup" aria-labelledby="vd" className="stack gap-s">
             {VERDICTS.map(([v, label]) => <button key={v} type="button" role="radio" aria-checked={verdict === v} className="option" onClick={() => setVerdict(v)}>{label}</button>)}
           </div>
           <label>Note<textarea rows={4} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did you check? What would you do next?" /></label>
           <div className="row">
-            <button type="button" className="btn primary" disabled={save.busy} onClick={saveVerdict}>{saved ? "Saved" : "Save verdict"}</button>
-            <span className="muted small">Kept when gaps are recomputed.</span>
+            <button type="button" className="btn primary" disabled={save.busy} onClick={saveVerdict}>{saved ? "Saved" : "Save decision"}</button>
+            
           </div>
           <ErrorLine error={save.error} />
         </section>
 
-        <section aria-labelledby="vf" className="card stack gap">
+        <section aria-labelledby="vf" className="panel stack gap">
           <h2 id="vf">Check outside sources</h2>
           <div className="row wrap">
             <button type="button" className="btn" disabled={verify.busy || offline} onClick={() => verify.run(async () => setVerification(await api.verify(tref, id)))}>
               {verify.busy ? "Searching…" : outside ? "Check PubMed and OpenAlex again" : "Check PubMed and OpenAlex"}</button>
           </div>
-          {offline && <div className="muted small">Offline mode is on. Turn it off at the top right to search outside sources; results are cached in the project.</div>}
+          {offline && <div className="note small">Offline: switch the network on (top right) to search outside sources. Results are cached in the project.</div>}
           <ErrorLine error={verify.error} />
           {outside && <>
             <div>{outside.summary}</div>

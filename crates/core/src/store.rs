@@ -101,6 +101,9 @@ pub struct CollectionSummary {
     pub chunks: i64,
     pub by_role: HashMap<String, i64>,
     pub source: serde_json::Value,
+    /// When the collection was last imported (any import updates it, changed or not).
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -134,6 +137,9 @@ pub struct JobRecord {
     pub state: String,
     pub progress: f64,
     pub checkpoint: serde_json::Value,
+    /// Set by the store when read back.
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 /// A fitted similarity → P(same thing) curve for one collection and vector space (SPEC §6.2).
@@ -278,6 +284,14 @@ pub struct Store {
 }
 
 impl Store {
+    /// Another connection to the same database, for a background job that runs while the
+    /// session keeps serving reads (DuckDB connections of one database share its state).
+    pub fn try_clone(&self) -> Result<Self> {
+        Ok(Self {
+            conn: self.conn.try_clone()?,
+        })
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open_with_flags(
             path,
@@ -389,12 +403,18 @@ impl Store {
             let by_role = st
                 .query_map([&id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
                 .collect::<std::result::Result<_, _>>()?;
+            let updated_at: Option<String> = self.conn.query_row(
+                "SELECT CAST(updated_at AS VARCHAR) FROM collections WHERE collection_id = ?",
+                [&id],
+                |r| r.get(0),
+            )?;
             out.push(CollectionSummary {
                 collection_id: id,
                 items,
                 chunks,
                 by_role,
                 source: c.source,
+                updated_at,
             });
         }
         Ok(out)
@@ -1199,7 +1219,8 @@ impl Store {
     pub fn job(&self, job_id: &str) -> Result<Option<JobRecord>> {
         self.conn
             .query_row(
-                "SELECT job_id, kind, params::VARCHAR, state, progress, checkpoint::VARCHAR
+                "SELECT job_id, kind, params::VARCHAR, state, progress, checkpoint::VARCHAR,
+                        CAST(updated_at AS VARCHAR)
                  FROM jobs WHERE job_id = ?",
                 [job_id],
                 |r| {
@@ -1210,11 +1231,12 @@ impl Store {
                         r.get::<_, String>(3)?,
                         r.get::<_, f64>(4)?,
                         r.get::<_, String>(5)?,
+                        r.get::<_, Option<String>>(6)?,
                     ))
                 },
             )
             .optional()?
-            .map(|(job_id, kind, p, state, progress, c)| {
+            .map(|(job_id, kind, p, state, progress, c, updated_at)| {
                 Ok(JobRecord {
                     job_id,
                     kind,
@@ -1222,6 +1244,7 @@ impl Store {
                     state,
                     progress,
                     checkpoint: serde_json::from_str(&c)?,
+                    updated_at,
                 })
             })
             .transpose()
@@ -1307,6 +1330,7 @@ mod tests {
             state: "running".into(),
             progress: 0.5,
             checkpoint: serde_json::json!({"done": 10}),
+            updated_at: None,
         };
         s.save_job(&j).unwrap();
         j.state = "completed".into();

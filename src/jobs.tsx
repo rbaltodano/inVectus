@@ -1,78 +1,62 @@
-// Background jobs (embed, calibrate, regions, model download): one place listens to the
-// backend's events so the sidebar and every screen see the same state.
+// Background jobs live in the backend (one at a time, tied to a project). This mirrors them:
+// it reads the backend's list on start and follows `job-event`, so every screen sees the same
+// state, and nothing is lost when a screen closes.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { inTauri } from "./api";
-
-export type JobKind = "embed" | "calibrate" | "regions" | "download";
-export interface Job {
-  kind: JobKind;
-  label: string;
-  status: "running" | "finished" | "failed";
-  done: number;
-  total: number;
-  phase?: string;
-  startedAt: number;
-  /** Items per second over the run so far (embed only). */
-  rate?: number;
-  message?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  report?: any;
-}
+import { api, inTauri, type JobInfo } from "./api";
 
 interface Jobs {
-  current?: Job;
-  begin: (kind: JobKind, label: string) => void;
-  clear: () => void;
+  current?: JobInfo;
+  history: JobInfo[];
+  /** Record a job the backend just accepted (its first event may arrive after the reply). */
+  started: (j: JobInfo) => void;
 }
 
-const Ctx = createContext<Jobs>({ begin: () => undefined, clear: () => undefined });
+const Ctx = createContext<Jobs>({ history: [], started: () => undefined });
 export const useJobs = () => useContext(Ctx);
 
-type Payload =
-  | { status: "progress"; done: number; total: number; phase?: string }
-  | { status: "finished"; report: unknown }
-  | { status: "failed"; error: string }
-  | { status: "log"; line: string; model: string };
-
-export function JobsProvider({ children, onFinished }: { children: ReactNode; onFinished: () => void }) {
-  const [current, setCurrent] = useState<Job>();
+export function JobsProvider({ children, onFinished }: { children: ReactNode; onFinished: (j: JobInfo) => void }) {
+  const [current, setCurrent] = useState<JobInfo>();
+  const [history, setHistory] = useState<JobInfo[]>([]);
   const finished = useRef(onFinished);
   finished.current = onFinished;
 
+  const apply = (j: JobInfo) => {
+    setCurrent((c) => {
+      // A newer job replaces the shown one; the old one moves to history.
+      if (c && c.id !== j.id) setHistory((h) => [c, ...h.filter((x) => x.id !== c.id)].slice(0, 30));
+      return c && c.id > j.id ? c : j;
+    });
+    if (j.state !== "running") finished.current(j);
+  };
+
   useEffect(() => {
     if (!inTauri) return;
-    const on = (kind: JobKind, event: string) => listen<Payload>(event, ({ payload: p }) => {
-      setCurrent((j) => {
-        const base: Job = j?.kind === kind ? j : { kind, label: kind, status: "running", done: 0, total: 0, startedAt: Date.now() };
-        switch (p.status) {
-          case "progress": {
-            const secs = (Date.now() - base.startedAt) / 1000;
-            return { ...base, status: "running", done: p.done, total: p.total, phase: p.phase, rate: secs > 1 ? p.done / secs : undefined };
-          }
-          case "log": return { ...base, message: p.line };
-          case "finished": return { ...base, status: "finished", report: p.report, done: base.total || base.done };
-          case "failed": return { ...base, status: "failed", message: p.error };
-        }
-      });
-      if (p.status === "finished" || p.status === "failed") finished.current();
-    });
-    const subs = [on("embed", "embed-event"), on("calibrate", "calibrate-event"), on("regions", "regions-event"), on("download", "download-event")];
-    return () => { subs.forEach((s) => s.then((f) => f())); };
+    api.jobs().then((v) => { if (v.current) setCurrent(v.current); setHistory(v.history); }).catch(() => undefined);
+    const un = listen<JobInfo>("job-event", (e) => apply(e.payload));
+    return () => { un.then((f) => f()); };
   }, []);
 
-  const begin = (kind: JobKind, label: string) =>
-    setCurrent({ kind, label, status: "running", done: 0, total: 0, startedAt: Date.now() });
-  return <Ctx.Provider value={{ current, begin, clear: () => setCurrent(undefined) }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ current, history, started: apply }}>{children}</Ctx.Provider>;
 }
 
-export function JobProgress({ job }: { job: Job }) {
+export const isRunning = (j?: JobInfo) => j?.state === "running";
+
+export function JobProgress({ job }: { job: JobInfo }) {
   const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
-  const left = job.rate && job.total ? Math.max(0, (job.total - job.done) / job.rate) : undefined;
+  const secs = (Date.now() - job.started_ms) / 1000;
+  const rate = secs > 2 && job.done > 0 ? job.done / secs : undefined;
+  const left = rate && job.total ? (job.total - job.done) / rate : undefined;
   return <div className="job-progress">
-    <div className="spread"><span>{job.phase ?? job.label}</span><span>{job.total ? `${job.done.toLocaleString()} / ${job.total.toLocaleString()}` : ""}</span></div>
-    <div className="bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={job.label}><div style={{ width: `${pct}%` }} /></div>
-    {left !== undefined && <div className="muted small">{job.rate!.toFixed(0)}/s · ~{left < 90 ? `${Math.ceil(left)} s` : `${Math.ceil(left / 60)} min`} left</div>}
-    {job.message && job.status === "running" && <div className="muted small clip">{job.message}</div>}
+    <div className="spread mono small"><span className="clip">{job.phase ?? "Starting"}</span><span>{job.total ? `${job.done.toLocaleString()} / ${job.total.toLocaleString()}` : ""}</span></div>
+    {job.total > 0 && <div className="meter" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={job.label}><div style={{ width: `${pct}%` }} /></div>}
+    {left !== undefined && left > 1 && <div className="muted small mono">{rate!.toFixed(0)}/s · ~{left < 90 ? `${Math.ceil(left)} s` : `${Math.ceil(left / 60)} min`} left</div>}
   </div>;
+}
+
+export function jobStateLabel(j: JobInfo) {
+  if (j.state === "running") return "running";
+  if (j.state === "failed") return "failed";
+  if (j.state === "cancelled") return "cancelled";
+  return "done";
 }

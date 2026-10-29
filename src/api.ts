@@ -7,16 +7,31 @@ export const inTauri = "__TAURI_INTERNALS__" in window;
 export type Role = "demand" | "coverage" | "neutral";
 export const ROLES: Role[] = ["neutral", "demand", "coverage"];
 
-export interface Collection { collection_id: string; items: number; chunks: number; by_role: Record<string, number> }
+export interface Collection {
+  collection_id: string; items: number; chunks: number; by_role: Record<string, number>; updated_at: string | null;
+  source_kind: string | null; source_path: string | null; reimportable: boolean;
+}
 export interface CalibrationStatus { method: string; sample: number; vectors: number; fitted_at: string | null; holdout_auc: number | null }
 export interface RegionsStatus { run_id: string; created_at: string | null; stats: Record<string, unknown>; scanned: boolean }
 export interface TableInfo {
   collection: string; space_id: string; model_key: string; runtime: string; dimensions: number; origin: string;
   vectors: number; ann_partitions: number | null; calibration: CalibrationStatus | null; regions: RegionsStatus | null;
+  index_status: IndexStatus; indexed_at: string | null; index_error: string | null;
 }
+export type IndexStatus = "indexing" | "indexed" | "outdated" | "interrupted" | "failed" | "cancelled" | "not_indexed" | "imported" | "unknown";
+export interface JobRecord { job_id: string; kind: string; params: Record<string, unknown>; state: string; progress: number; checkpoint: Record<string, unknown>; updated_at: string | null }
+export interface JobInfo {
+  id: number; kind: "index" | "calibrate" | "regions" | "download"; project: string | null; collection: string | null; space: string | null;
+  models: string[]; label: string; phase: string | null; done: number; total: number;
+  state: "running" | "completed" | "cancelled" | "failed"; error: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  report: any; started_ms: number; finished_ms: number | null;
+}
+export interface MissingModel { key: string; repo: string; megabytes: number }
+export interface IndexPlan { models: string[]; missing: MissingModel[]; notes: string[] }
 export interface ProjectInfo {
   root: string; name: string; warning: string | null; network_enabled: boolean; offline_env: boolean;
-  collections: Collection[]; tables: TableInfo[];
+  collections: Collection[]; tables: TableInfo[]; activity: JobRecord[]; running: JobInfo | null;
 }
 export interface ModelInfo { key: string; repo: string; dimensions: number; megabytes: number; installed: boolean; default: boolean; note: string }
 export interface LlmInfo { key: string; repo: string; megabytes: number; installed: boolean; default: boolean; note: string }
@@ -28,6 +43,7 @@ export interface ImportForm {
 }
 export interface MappedRow { source_id: string; title: string | null; text: string; date: string | null; unparsed_date: string | null; role: Role }
 export interface Preview { columns: string[]; rows: MappedRow[]; skipped: Record<string, number> }
+export interface ImportOutcome { report: ImportReport; plan: IndexPlan; job: JobInfo | null; index_error: string | null }
 export interface ImportReport {
   collection: string; source_rows: number; items: number; inserted: number; updated: number; unchanged: number;
   chunks_written: number; items_chunked: number; skipped: Record<string, number>; not_in_source: number; warnings: string[];
@@ -94,13 +110,16 @@ export const api = {
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
   inspect: (path: string) => invoke<SourceInfo>("inspect_source", { path }),
   preview: (form: ImportForm, rows = 20) => invoke<Preview>("preview_import", { form, rows }),
-  runImport: (form: ImportForm) => invoke<ImportReport>("run_import", { form }),
+  importCollection: (form: ImportForm) => invoke<ImportOutcome>("import_collection", { form }),
+  reimport: (collection: string) => invoke<ImportOutcome>("reimport_collection", { collection }),
+  indexPlan: (collection: string) => invoke<IndexPlan>("index_plan", { collection }),
+  startIndex: (collection: string, models: string[] | null) => invoke<JobInfo>("start_index", { collection, models }),
+  jobs: () => invoke<{ current: JobInfo | null; history: JobInfo[] }>("jobs"),
   models: () => invoke<ModelInfo[]>("list_models"),
   llms: () => invoke<LlmInfo[]>("list_llms"),
-  installModel: (model: string) => invoke<void>("install_model", { model }),
-  startEmbed: (collection: string, model: string) => invoke<void>("start_embed", { collection, model }),
-  startCalibration: (t: TableRef, llm: boolean) => invoke<void>("start_calibration", { collection: t.collection, space: t.space, llm }),
-  startRegions: (t: TableRef) => invoke<void>("start_regions", { collection: t.collection, space: t.space }),
+  installModel: (model: string) => invoke<JobInfo>("install_model", { model }),
+  startCalibration: (t: TableRef, llm: boolean) => invoke<JobInfo>("start_calibration", { collection: t.collection, space: t.space, llm }),
+  startRegions: (t: TableRef) => invoke<JobInfo>("start_regions", { collection: t.collection, space: t.space }),
   cancel: () => invoke<void>("cancel_job"),
   search: (t: TableRef, query: string, role: Role | null, exhaustive: boolean) =>
     invoke<SearchResult>("search", { form: { collection: t.collection, space: t.space, query, k: 10, role, exhaustive } }),
@@ -130,6 +149,17 @@ export function webLink(url: string | null | undefined): string | undefined {
 export const openLink = (url: string) => invoke<void>("open_url", { url });
 
 export const fmt = (n: number) => n.toLocaleString();
+/** A DuckDB timestamp ("2026-10-29 07:15:00.123") or epoch ms, shown in local time. */
+export function when(t: string | number | null | undefined): string {
+  if (t === null || t === undefined) return "";
+  const d = typeof t === "number" ? new Date(t) : new Date(t.replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? String(t) : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+export const STATUS_LABEL: Record<IndexStatus, string> = {
+  indexing: "Indexing", indexed: "Indexed", outdated: "Imported since last index", interrupted: "Interrupted",
+  failed: "Indexing failed", cancelled: "Indexing cancelled", not_indexed: "Not indexed",
+  imported: "Imported vectors (query-only)", unknown: "Index state unknown",
+};
 export const year = (d: string | null) => d?.slice(0, 4) ?? "";
 export const KIND_LABEL: Record<GapKind, string> = { coverage: "Coverage gap", stale: "Stale coverage", bridge: "Bridge" };
 export const VERDICTS: [string, string][] = [

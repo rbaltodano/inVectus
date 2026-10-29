@@ -82,6 +82,7 @@ pub fn run_embed(
         state: "running".into(),
         progress: 0.0,
         checkpoint: serde_json::json!({}),
+        updated_at: None,
     };
     project.store.save_job(&job)?;
 

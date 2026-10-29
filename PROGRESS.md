@@ -637,9 +637,92 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
   desktop build compiles; the native window was not driven by an agent. Gap weights and the
   recent-projects list live in per-machine browser storage.
 
+## 2026-10-29 — Project-centred UI, automatic indexing, backend job orchestration
+
+Owner's brief: consolidate navigation around projects, index automatically after import, keep
+evidence, scope and background status visible, monochrome mission-control look.
+
+### Changes
+- **Navigation.** The sidebar holds a project filter, the projects list (alphabetical, so
+  opening one never moves the list under the pointer; the landing page keeps recency order),
+  New / Open, an Activity box (the running job, its project, progress, Cancel) and Settings.
+  Import, Index, Search, Map and Gaps are no longer global. A project opens a workspace with
+  Overview, Search, Gaps, Collections and Map, plus a scope picker (collection · model) and the
+  network switch. Creating a project lands on an Overview that offers the first collection;
+  an empty project stays usable.
+- **Collections** replaces Index: per collection the items, roles, source kind/path, last
+  import, and per vector space the model, vectors and a recorded index state; Add collection
+  opens the existing import wizard; "Update from source" re-imports the stored source,
+  mapping and chunking (source files are not watched, and the UI says so). Details keep
+  calibration (with or without the LLM), regions and indexing with another model.
+- **Automatic indexing.** `import_collection` / `reimport_collection` import, then plan and
+  start indexing in the backend: each embedded space is updated with its own model; a new
+  collection gets the default model or the first installed one; a missing model is reported,
+  never downloaded (the consent panel keeps size, source, pinned revision and checksum, and
+  is disabled while offline). Imported (gapmap) vectors are query-only and not updated.
+- **Job orchestration (backend).** A job board in `src-tauri/src/jobs.rs`: one job at a time,
+  each tagged with its project, collection, space and models; progress, cancel, failure and a
+  session history; one `job-event` stream carries the whole job. Jobs run on a second DuckDB
+  connection (`Store::try_clone`, `Project::try_clone`) and their own LanceDB handle, so the
+  project keeps answering reads while indexing (before, every view errored "busy"). Imports
+  and scans are refused while a job runs in the same project; switching projects is refused
+  while a project job runs (model downloads do not block). A panicking job is recorded as
+  failed. Calibration borrows the session's loaded language model instead of loading a copy.
+- **Readiness from records only.** `index_status` per space: indexing, indexed (last embed job
+  completed after the last import), outdated (imported since), interrupted (a job record left
+  "running" by a restart or crash), failed (with the recorded error), cancelled, not indexed,
+  imported (query-only) or unknown (vectors without a job record). Resume/Retry re-run the
+  resumable embed job. Project info also returns the recorded job log (survives restarts).
+- **Views.** Search shows the assessment (verdict, P(exists) dial with the engine's 0.3/0.7
+  lines, calibration quality, regions) apart from the results; each result has its title
+  (linked), role, date, source id, matched chunk and a labelled cosine similarity, with a note
+  that similarity is not a probability and covers this collection only; exhaustive/approximate
+  and partial-index warnings stay. Gaps holds the scan controls and offers "Find regions" when
+  regions are missing; Gap detail separates the engine's assessment from your decision. The map
+  is monochrome: region circles from the layout's centres and radii, grey shades for role,
+  date and gap score. Settings splits app-wide (models, local LLM) from project (network,
+  weights, calibration, embedding details).
+- **Style.** Black on white, square corners, monospace labels, thin rules, circular status
+  marks (ring/half/full/cross), a pipeline diagram drawn from the scope's recorded state.
+
+### Checks (arm64 macOS only)
+- New Rust tests: planner (default, fallback, missing, existing spaces keep their models),
+  status rules, board (one job at a time, stale ids), **end to end against the installed
+  bge-small model**: import a 30-row CSV → plan → index on a second connection while the
+  session stays free → "indexed" with 30 vectors → re-import → "outdated" → re-index embeds 0
+  → a job with an unknown model fails with its error → retry completes; every event carries
+  the project root. A guard test: a running project job blocks imports and switching; a
+  download does not.
+- Browser checks with a stub backend (real demo JSON for search, gaps, gap detail and the
+  5,000-point map; simulated job events): import → automatic indexing → progress in the page
+  and sidebar → indexed → search; failure → Retry; no model → consent panel, nothing
+  downloaded, disabled offline; switching blocked during a job; Overview, Gaps, Gap detail,
+  Map and Settings. No console errors. Found and fixed: the sidebar re-sorted under the
+  pointer.
+- `cargo fmt`, clippy (`-D warnings`), the workspace tests and `npm run build` pass.
+
+### Unverified / limitations
+- The native window was not driven by an agent; the end-to-end path was tested through the
+  backend functions, not the webview. Timestamps assume DuckDB stores `now()` in local time.
+- One job at a time: a second request is refused with the running job's name (no queue).
+- While indexing, reads run concurrently on DuckDB/LanceDB; writes other than verdicts,
+  descriptions and verification are refused. Search during indexing sees a partial index and
+  says so.
+- Session job history is in memory; after a restart only the recorded job log remains.
+
+### Decisions and spec conflicts to review
+- SPEC §4 lists "Index" as a user step and §8 an "Import wizard … → index" screen: indexing is
+  now automatic after import, and calibration, regions and scans moved into Collections,
+  Gaps and context prompts rather than a separate screen.
+- SPEC §7.6 lists import, cluster, scan and verify as jobs: on the desktop, index, calibrate,
+  regions and model download are board jobs; import, scan and verify remain request/response
+  (seconds on the dev data) and are refused while a job runs.
+- SPEC §8 asks for a WebGL map coloured by region: the canvas map is monochrome by the
+  owner's design direction; regions are circles rather than colours.
+
 ## Next
-1. Owner's style pass over the wireframe UI; native file pickers (Tauri dialog plugin, needs
-   approval to download); region LLM labels in gap lists.
+1. Owner review of the project-centred UI in the native window; native file pickers (Tauri
+   dialog plugin, needs approval to download); region LLM labels in gap lists; a job queue.
 2. **Full benchmark and term ablation are complete** (owner-approved read-only copy; results
    above). The model still loses to the baselines. Future tuning needs cached cutoff terms and
    a held-out-cutoff protocol; multimodal work must not rerun or re-embed this benchmark.

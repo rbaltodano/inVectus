@@ -215,6 +215,7 @@ pub fn run_calibration(
         state: "running".into(),
         progress: 0.0,
         checkpoint: serde_json::json!({}),
+        updated_at: None,
     };
     project.store.save_job(&job)?;
     let result = calibrate_inner(

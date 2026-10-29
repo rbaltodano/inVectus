@@ -83,6 +83,15 @@ impl Project {
         write_json_atomic(&self.root.join("project.json"), &self.config)
     }
 
+    /// The same project on a second database connection, for a background job.
+    pub fn try_clone(&self) -> Result<Self> {
+        Ok(Self {
+            root: self.root.clone(),
+            config: self.config.clone(),
+            store: self.store.try_clone()?,
+        })
+    }
+
     pub fn vectors_dir(&self) -> PathBuf {
         self.root.join("vectors")
     }

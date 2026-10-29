@@ -1,24 +1,26 @@
 //! Desktop shell: Tauri commands over the same engine crates as the `invectus` CLI.
 
-use invectus_core::store::{CollectionSummary, VectorTableRecord};
+mod jobs;
+
+use invectus_core::store::{CollectionSummary, JobRecord, VectorTableRecord};
 use invectus_core::{CancelToken, Project, Role};
 use invectus_embed::{EmbedOptions, ModelStore, OnnxEmbedder, query_encoder, registry};
 use invectus_gaps::{GapDetail, GapList, GapView, ScanOptions, ScanReport};
 use invectus_index::{
-    EmbedJobOptions, EmbedReport, SearchMode, SearchOptions, SearchResult, VectorStore, run_embed,
+    EmbedJobOptions, SearchMode, SearchOptions, SearchResult, VectorStore, run_embed,
     search as engine_search, select_table,
 };
 use invectus_ingest::{
     ChunkPolicy, ImportReport, ImportRequest, Mapping, MetaMapping, Preview, RoleMapping, Source,
 };
-use invectus_regions::{MapData, RegionOptions, RegionReport, map_data, run_regions};
-use invectus_unsearch::{
-    CalibrateOptions, CalibrationReport, CheckOptions, CheckResult, check, run_calibration,
-};
+use invectus_regions::{MapData, RegionOptions, map_data, run_regions};
+use invectus_unsearch::{CalibrateOptions, CheckOptions, CheckResult, check, run_calibration};
+use jobs::{Board, ExistingSpace, IndexPlan, JobInfo, JobsView};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, State};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, State};
 
 struct Session {
     project: Project,
@@ -32,8 +34,11 @@ struct Session {
 #[derive(Default)]
 struct AppState {
     session: Shared,
-    cancel: Mutex<Option<CancelToken>>,
+    /// The background job (one at a time) and this session's finished jobs.
+    board: SharedBoard,
 }
+
+type SharedBoard = Arc<Mutex<Board>>;
 
 type CmdResult<T> = Result<T, String>;
 
@@ -83,6 +88,12 @@ struct TableInfo {
     ann_partitions: Option<u64>,
     calibration: Option<CalibrationStatus>,
     regions: Option<RegionsStatus>,
+    /// `indexing`, `indexed`, `outdated`, `interrupted`, `failed`, `cancelled`, `not_indexed`,
+    /// `imported` (query-only vectors) or `unknown` (see `jobs::index_status`).
+    index_status: String,
+    /// When the last embed job of this space was recorded, and its error if it failed.
+    indexed_at: Option<String>,
+    index_error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -105,6 +116,17 @@ struct RegionsStatus {
 }
 
 #[derive(Serialize)]
+struct CollectionInfo {
+    #[serde(flatten)]
+    summary: CollectionSummary,
+    /// `csv`, `parquet`, `folder` or another importer's kind, and the source path when known.
+    source_kind: Option<String>,
+    source_path: Option<String>,
+    /// The stored source can be imported again (`reimport_collection`).
+    reimportable: bool,
+}
+
+#[derive(Serialize)]
 struct ProjectInfo {
     root: String,
     name: String,
@@ -112,18 +134,29 @@ struct ProjectInfo {
     network_enabled: bool,
     /// `INVECTUS_OFFLINE=1`: every network use is refused whatever the project switch says.
     offline_env: bool,
-    collections: Vec<CollectionSummary>,
+    collections: Vec<CollectionInfo>,
     tables: Vec<TableInfo>,
+    /// Recorded jobs of this project, newest first (they survive restarts).
+    activity: Vec<JobRecord>,
+    /// The job running in this project now, if any.
+    running: Option<JobInfo>,
 }
 
-fn info(s: &Session) -> anyhow::Result<ProjectInfo> {
-    let tables = s
-        .project
-        .store
+fn info(s: &Session, board: &SharedBoard) -> anyhow::Result<ProjectInfo> {
+    let root = s.project.root.display().to_string();
+    let running = board.lock().unwrap().running_in(&root).cloned();
+    let store = &s.project.store;
+    let summaries = store.collection_summaries()?;
+    let updated = |c: &str| {
+        summaries
+            .iter()
+            .find(|x| x.collection_id == c)
+            .and_then(|x| x.updated_at.clone())
+    };
+    let tables = store
         .vector_tables(None)?
         .into_iter()
         .map(|t| {
-            let store = &s.project.store;
             let calibration = store
                 .latest_calibration(&t.collection_id, &t.space_id)?
                 .map(|c| CalibrationStatus {
@@ -142,10 +175,33 @@ fn info(s: &Session) -> anyhow::Result<ProjectInfo> {
                 }),
                 None => None,
             };
+            let vectors = s.vectors.count(&t)?;
+            let job = store.job(&invectus_index::embed_job::job_id(
+                &t.collection_id,
+                &t.space_id,
+            ))?;
+            let indexing_now = running.as_ref().is_some_and(|j| {
+                j.kind == "index"
+                    && j.collection.as_deref() == Some(t.collection_id.as_str())
+                    && j.models.contains(&t.identity.model_key)
+            });
+            let status = jobs::index_status(
+                &t.origin,
+                job.as_ref()
+                    .map(|j| (j.state.as_str(), j.updated_at.as_deref())),
+                updated(&t.collection_id).as_deref(),
+                vectors,
+                indexing_now,
+            );
             Ok(TableInfo {
                 calibration,
                 regions,
-                vectors: s.vectors.count(&t)?,
+                vectors,
+                index_status: status.into(),
+                indexed_at: job.as_ref().and_then(|j| j.updated_at.clone()),
+                index_error: job
+                    .as_ref()
+                    .and_then(|j| j.checkpoint["error"].as_str().map(String::from)),
                 collection: t.collection_id,
                 space_id: t.space_id,
                 model_key: t.identity.model_key,
@@ -156,14 +212,27 @@ fn info(s: &Session) -> anyhow::Result<ProjectInfo> {
             })
         })
         .collect::<anyhow::Result<_>>()?;
+    let collections = summaries
+        .into_iter()
+        .map(|summary| CollectionInfo {
+            source_kind: summary.source["kind"].as_str().map(String::from),
+            source_path: summary.source["path"].as_str().map(String::from),
+            reimportable: serde_json::from_value::<Source>(summary.source.clone()).is_ok(),
+            summary,
+        })
+        .collect();
+    let mut activity = store.jobs()?;
+    activity.truncate(12);
     Ok(ProjectInfo {
-        root: s.project.root.display().to_string(),
+        root,
         name: s.project.config.name.clone(),
         warning: s.project.storage_warning(),
         network_enabled: s.project.config.network_enabled,
         offline_env: invectus_core::net::offline(),
-        collections: s.project.store.collection_summaries()?,
+        collections,
         tables,
+        activity,
+        running,
     })
 }
 
@@ -181,7 +250,8 @@ async fn open_project(
     create: bool,
 ) -> CmdResult<ProjectInfo> {
     let session = state.session.clone();
-    off_thread(move || open_project_blocking(&session, path, create)).await
+    let board = state.board.clone();
+    off_thread(move || open_project_blocking(&session, &board, path, create)).await
 }
 
 /// A typed path with a leading `~` expanded to the home folder.
@@ -194,8 +264,29 @@ fn user_path(path: &str) -> PathBuf {
     }
 }
 
-fn open_project_blocking(session: &Shared, path: String, create: bool) -> CmdResult<ProjectInfo> {
+fn open_project_blocking(
+    session: &Shared,
+    board: &SharedBoard,
+    path: String,
+    create: bool,
+) -> CmdResult<ProjectInfo> {
     let path = user_path(&path);
+    let mut guard = session
+        .try_lock()
+        .map_err(|_| "busy: the open project is answering a request; try again".to_string())?;
+    // A job keeps working in its own project; switching would hide it, so refuse instead.
+    if let Some(j) = board
+        .lock()
+        .unwrap()
+        .running()
+        .filter(|j| j.project.is_some())
+    {
+        return Err(format!(
+            "{} is running in {}; wait for it or cancel it before switching projects",
+            j.label,
+            j.project.as_deref().unwrap_or_default()
+        ));
+    }
     let project = if create {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(err)?;
@@ -206,22 +297,20 @@ fn open_project_blocking(session: &Shared, path: String, create: bool) -> CmdRes
     }
     .map_err(err)?;
     let vectors = VectorStore::open(&project).map_err(err)?;
-    let mut guard = session
-        .try_lock()
-        .map_err(|_| "busy: a job is running".to_string())?;
     *guard = Some(Session {
         project,
         vectors,
         encoder: None,
         llm: None,
     });
-    info(guard.as_ref().unwrap()).map_err(err)
+    info(guard.as_ref().unwrap(), board).map_err(err)
 }
 
 #[tauri::command]
 async fn project_info(state: State<'_, AppState>) -> CmdResult<ProjectInfo> {
     let session = state.session.clone();
-    off_thread(move || with_session(&session, |s| info(s))).await
+    let board = state.board.clone();
+    off_thread(move || with_session(&session, |s| info(s, &board))).await
 }
 
 #[derive(Deserialize)]
@@ -292,14 +381,135 @@ async fn preview_import(form: ImportForm, rows: Option<usize>) -> CmdResult<Prev
     .await
 }
 
+/// Refuse project writes while a job works in the same project.
+fn ensure_idle(board: &SharedBoard, project: &Project) -> anyhow::Result<()> {
+    let root = project.root.display().to_string();
+    if let Some(j) = board.lock().unwrap().running_in(&root) {
+        anyhow::bail!("{} is running; wait for it or cancel it first", j.label);
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct ImportOutcome {
+    report: ImportReport,
+    /// Which models indexing uses, or what is missing.
+    plan: IndexPlan,
+    /// The indexing job started after the import, if the plan had models.
+    job: Option<JobInfo>,
+    /// Why indexing could not start (the import itself succeeded).
+    index_error: Option<String>,
+}
+
+/// Import a collection, then start indexing it with the plan's installed models.
 #[tauri::command]
-async fn run_import(state: State<'_, AppState>, form: ImportForm) -> CmdResult<ImportReport> {
+async fn import_collection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    form: ImportForm,
+) -> CmdResult<ImportOutcome> {
+    let req = request(form).map_err(err)?;
+    import_then_index(app, state.session.clone(), state.board.clone(), req).await
+}
+
+/// Import a collection again from its stored source, mapping and chunking, then index it.
+/// Source files are not watched: this is how changes in them reach the collection.
+#[tauri::command]
+async fn reimport_collection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    collection: String,
+) -> CmdResult<ImportOutcome> {
     let session = state.session.clone();
-    off_thread(move || {
-        let req = request(form).map_err(err)?;
-        with_session(&session, |s| invectus_ingest::import(&mut s.project, &req))
+    let req = off_thread(move || {
+        with_session(&session, |s| {
+            let c = s.project.store.require_collection(&collection)?;
+            let source: Source = serde_json::from_value(c.source).map_err(|_| {
+                anyhow::anyhow!(
+                    "{collection:?} was not imported from a file or folder; import it again with \
+                     the CLI"
+                )
+            })?;
+            Ok(ImportRequest {
+                collection,
+                source,
+                mapping: serde_json::from_value(c.mapping)?,
+                chunking: serde_json::from_value(c.chunking)?,
+                limit: None,
+            })
+        })
     })
-    .await
+    .await?;
+    import_then_index(app, state.session.clone(), state.board.clone(), req).await
+}
+
+async fn import_then_index(
+    app: AppHandle,
+    session: Shared,
+    board: SharedBoard,
+    req: ImportRequest,
+) -> CmdResult<ImportOutcome> {
+    let collection = req.collection.clone();
+    let (s2, b2) = (session.clone(), board.clone());
+    let (report, plan) = off_thread(move || {
+        with_session(&s2, |s| {
+            ensure_idle(&b2, &s.project)?;
+            let report = invectus_ingest::import(&mut s.project, &req)?;
+            let plan = plan_for(s, &req.collection)?;
+            Ok((report, plan))
+        })
+    })
+    .await?;
+    let (job, index_error) = if plan.models.is_empty() {
+        (None, None)
+    } else {
+        match start_index_job(
+            &emitter(&app),
+            &session,
+            &board,
+            collection,
+            plan.models.clone(),
+        ) {
+            Ok(j) => (Some(j), None),
+            Err(e) => (None, Some(e)),
+        }
+    };
+    Ok(ImportOutcome {
+        report,
+        plan,
+        job,
+        index_error,
+    })
+}
+
+fn plan_for(s: &Session, collection: &str) -> anyhow::Result<IndexPlan> {
+    let tables = s.project.store.vector_tables(Some(collection))?;
+    let existing: Vec<ExistingSpace> = tables
+        .iter()
+        .map(|t| ExistingSpace {
+            model_key: &t.identity.model_key,
+            origin: &t.origin,
+        })
+        .collect();
+    let store = ModelStore::new(ModelStore::default_root()?);
+    let catalogue: Vec<(String, String, u64)> = registry::MODELS
+        .iter()
+        .map(|m| (m.key.into(), m.repo.into(), m.total_bytes() / 1_000_000))
+        .collect();
+    let installed = |k: &str| registry::spec(k).is_ok_and(|m| store.is_installed(m));
+    Ok(jobs::plan_index(
+        &existing,
+        &installed,
+        registry::DEFAULT_MODEL,
+        &catalogue,
+    ))
+}
+
+/// Which installed models indexing a collection would use, and which are missing.
+#[tauri::command]
+async fn index_plan(state: State<'_, AppState>, collection: String) -> CmdResult<IndexPlan> {
+    let session = state.session.clone();
+    off_thread(move || with_session(&session, |s| plan_for(s, &collection))).await
 }
 
 #[derive(Serialize)]
@@ -342,10 +552,11 @@ async fn inspect_source(path: String) -> CmdResult<SourceInfo> {
 #[tauri::command]
 async fn set_network(state: State<'_, AppState>, enabled: bool) -> CmdResult<ProjectInfo> {
     let session = state.session.clone();
+    let board = state.board.clone();
     off_thread(move || {
         with_session(&session, |s| {
             s.project.set_network_enabled(enabled)?;
-            info(s)
+            info(s, &board)
         })
     })
     .await
@@ -377,19 +588,12 @@ fn list_llms() -> CmdResult<Vec<LlmInfo>> {
         .collect())
 }
 
-#[derive(Clone, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-enum DownloadEvent {
-    Log { model: String, line: String },
-    Finished { model: String },
-    Failed { model: String, error: String },
-}
-
-/// Download an embedding model at its pinned revision (explicit network use; checksums are
-/// verified). Progress lines arrive as `download-event` events.
+/// Download an embedding model at its pinned revision: explicit network use, refused while the
+/// open project is offline; checksums are verified. Runs as a job (`job-event`).
 #[tauri::command]
-fn install_model(app: tauri::AppHandle, state: State<AppState>, model: String) -> CmdResult<()> {
+fn install_model(app: AppHandle, state: State<AppState>, model: String) -> CmdResult<JobInfo> {
     let spec = registry::spec(&model).map_err(err)?;
+    invectus_core::net::ensure_online(&format!("downloading model {}", spec.key)).map_err(err)?;
     if let Ok(guard) = state.session.try_lock()
         && guard
             .as_ref()
@@ -397,33 +601,18 @@ fn install_model(app: tauri::AppHandle, state: State<AppState>, model: String) -
     {
         return Err("offline mode is on for this project: turn it off to download a model".into());
     }
-    invectus_core::net::ensure_online(&format!("downloading model {}", spec.key)).map_err(err)?;
-    std::thread::spawn(move || {
-        let app2 = app.clone();
-        let key = model.clone();
-        let result = ModelStore::default_root().and_then(|root| {
-            ModelStore::new(root).download(spec, &mut |line| {
-                let _ = app2.emit(
-                    "download-event",
-                    DownloadEvent::Log {
-                        model: key.clone(),
-                        line: line.into(),
-                    },
-                );
-            })
-        });
-        let _ = app.emit(
-            "download-event",
-            match result {
-                Ok(_) => DownloadEvent::Finished { model },
-                Err(e) => DownloadEvent::Failed {
-                    model,
-                    error: format!("{e:#}"),
-                },
-            },
-        );
-    });
-    Ok(())
+    let mut info = JobInfo::new("download", None, format!("Downloading {}", spec.key));
+    info.models = vec![spec.key.into()];
+    spawn_job(
+        &emitter(&app),
+        &state.board,
+        info,
+        Box::new(move |_cancel, tick| {
+            let store = ModelStore::new(ModelStore::default_root()?);
+            store.download(spec, &mut |line| tick(line, 0, 0))?;
+            Ok((serde_json::json!({"model": spec.key}), false))
+        }),
+    )
 }
 
 #[derive(Serialize)]
@@ -454,75 +643,157 @@ fn list_models() -> CmdResult<Vec<ModelInfo>> {
         .collect())
 }
 
-#[derive(Clone, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-enum EmbedEvent {
-    Progress { done: usize, total: usize },
-    Finished { report: EmbedReport },
-    Failed { error: String },
+type Work = Box<
+    dyn FnOnce(
+            &CancelToken,
+            &mut dyn FnMut(&str, usize, usize),
+        ) -> anyhow::Result<(serde_json::Value, bool)>
+        + Send,
+>;
+
+/// Where job changes go: the window's `job-event` in the app, a recorder in tests.
+type Emit = Arc<dyn Fn(&JobInfo) + Send + Sync>;
+
+fn emitter(app: &AppHandle) -> Emit {
+    let app = app.clone();
+    Arc::new(move |j: &JobInfo| {
+        let _ = app.emit("job-event", j);
+    })
 }
 
-/// Start an embed job on a worker thread; progress arrives as `embed-event` events.
+/// Register a job on the board and run it on its own thread. Every change is emitted as a
+/// `job-event` carrying the whole job, including the project it belongs to.
+fn spawn_job(emit: &Emit, board: &SharedBoard, info: JobInfo, work: Work) -> CmdResult<JobInfo> {
+    let (info, cancel) = board.lock().unwrap().begin(info)?;
+    emit(&info);
+    let (emit, board, id) = (emit.clone(), board.clone(), info.id);
+    std::thread::spawn(move || {
+        let mut last: Option<Instant> = None;
+        let mut tick = |phase: &str, done: usize, total: usize| {
+            // At most ten updates a second, but always the last one of a phase.
+            if done < total && last.is_some_and(|t| t.elapsed() < Duration::from_millis(100)) {
+                return;
+            }
+            last = Some(Instant::now());
+            if let Some(j) = board.lock().unwrap().progress(id, phase, done, total) {
+                emit(&j);
+            }
+        };
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(&cancel, &mut tick)))
+                .map_err(|_| "the job stopped unexpectedly (internal error)".to_string())
+                .and_then(|r| r.map_err(|e| format!("{e:#}")));
+        if let Some(j) = board.lock().unwrap().finish(id, result) {
+            emit(&j);
+        }
+    });
+    Ok(info)
+}
+
+/// A second handle on the open project for a job, taken without waiting.
+fn job_project(session: &Shared) -> CmdResult<Project> {
+    let guard = session
+        .try_lock()
+        .map_err(|_| "busy: the open project is answering a request; try again".to_string())?;
+    let s = guard.as_ref().ok_or("no project is open")?;
+    s.project.try_clone().map_err(err)
+}
+
+fn start_index_job(
+    emit: &Emit,
+    session: &Shared,
+    board: &SharedBoard,
+    collection: String,
+    models: Vec<String>,
+) -> CmdResult<JobInfo> {
+    let project = job_project(session)?;
+    project.store.require_collection(&collection).map_err(err)?;
+    let mut info = JobInfo::new(
+        "index",
+        Some(project.root.display().to_string()),
+        format!("Indexing {collection}"),
+    );
+    info.collection = Some(collection.clone());
+    info.models = models.clone();
+    spawn_job(
+        emit,
+        board,
+        info,
+        Box::new(move |cancel, tick| {
+            let vectors = VectorStore::open(&project)?;
+            let store = ModelStore::new(ModelStore::default_root()?);
+            let mut reports = Vec::new();
+            for model in &models {
+                let mut embedder = OnnxEmbedder::load(&store, model, &EmbedOptions::default())?;
+                let phase = format!("Embedding with {model}");
+                let report = run_embed(
+                    &project,
+                    &vectors,
+                    &collection,
+                    &mut embedder,
+                    &EmbedJobOptions::default(),
+                    cancel,
+                    &mut |p| tick(&phase, p.done, p.total),
+                )?;
+                let cancelled = report.cancelled;
+                reports.push(report);
+                if cancelled {
+                    return Ok((serde_json::to_value(&reports)?, true));
+                }
+            }
+            Ok((serde_json::to_value(&reports)?, false))
+        }),
+    )
+}
+
+/// Index (embed) a collection. With no `models`, the collection's plan decides: its own spaces'
+/// models, else the default. Resumable: items already embedded are skipped.
 #[tauri::command]
-fn start_embed(
-    app: tauri::AppHandle,
+fn start_index(
+    app: AppHandle,
     state: State<AppState>,
     collection: String,
-    model: String,
-) -> CmdResult<()> {
-    let session = state.session.clone();
-    if session
-        .try_lock()
-        .map_err(|_| "busy: a job is running")?
-        .is_none()
-    {
-        return Err("no project is open".into());
+    models: Option<Vec<String>>,
+) -> CmdResult<JobInfo> {
+    let models = match models {
+        Some(m) if !m.is_empty() => m,
+        _ => {
+            let guard = state.session.try_lock().map_err(|_| "busy; try again")?;
+            let s = guard.as_ref().ok_or("no project is open")?;
+            let plan = plan_for(s, &collection).map_err(err)?;
+            if plan.models.is_empty() {
+                return Err(match plan.missing.first() {
+                    Some(m) => format!("no embedding model is installed; {} is needed", m.key),
+                    None => "no embedding model to use".into(),
+                });
+            }
+            plan.models
+        }
+    };
+    for m in &models {
+        let spec = registry::spec(m).map_err(err)?;
+        if !ModelStore::new(ModelStore::default_root().map_err(err)?).is_installed(spec) {
+            return Err(format!("{m} is not installed"));
+        }
     }
-    let cancel = CancelToken::default();
-    *state.cancel.lock().unwrap() = Some(cancel.clone());
-    std::thread::spawn(move || {
-        let result = (|| -> anyhow::Result<EmbedReport> {
-            let mut guard = session.lock().unwrap();
-            let s = guard
-                .as_mut()
-                .ok_or_else(|| anyhow::anyhow!("no project is open"))?;
-            let store = ModelStore::new(ModelStore::default_root()?);
-            let mut embedder = OnnxEmbedder::load(&store, &model, &EmbedOptions::default())?;
-            let app2 = app.clone();
-            run_embed(
-                &s.project,
-                &s.vectors,
-                &collection,
-                &mut embedder,
-                &EmbedJobOptions::default(),
-                &cancel,
-                &mut |p| {
-                    let _ = app2.emit(
-                        "embed-event",
-                        EmbedEvent::Progress {
-                            done: p.done,
-                            total: p.total,
-                        },
-                    );
-                },
-            )
-        })();
-        let event = match result {
-            Ok(report) => EmbedEvent::Finished { report },
-            Err(e) => EmbedEvent::Failed {
-                error: format!("{e:#}"),
-            },
-        };
-        let _ = app.emit("embed-event", event);
-    });
-    Ok(())
+    start_index_job(
+        &emitter(&app),
+        &state.session,
+        &state.board,
+        collection,
+        models,
+    )
 }
 
 #[tauri::command]
 fn cancel_job(state: State<AppState>) {
-    if let Some(c) = state.cancel.lock().unwrap().as_ref() {
-        c.cancel();
-    }
+    state.board.lock().unwrap().cancel();
+}
+
+/// The running job (if any) and this session's finished ones.
+#[tauri::command]
+fn jobs(state: State<AppState>) -> JobsView {
+    state.board.lock().unwrap().view()
 }
 
 #[derive(Deserialize)]
@@ -588,84 +859,86 @@ fn search_blocking(session: &Shared, form: SearchForm) -> CmdResult<SearchResult
     })
 }
 
-#[derive(Clone, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-enum CalibrateEvent {
-    Progress { done: usize, total: usize },
-    Finished { report: Box<CalibrationReport> },
-    Failed { error: String },
-}
-
-/// Calibrate a collection's vector space on a worker thread; progress arrives as
-/// `calibrate-event` events and `cancel_job` stops it (nothing is saved when cancelled).
+/// Calibrate a collection's vector space as a job; cancelling saves nothing.
 #[tauri::command]
 fn start_calibration(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<AppState>,
     collection: String,
     space: Option<String>,
     // Paraphrase queries with the local language model (SPEC §6.2) instead of titles.
     llm: Option<bool>,
-) -> CmdResult<()> {
+) -> CmdResult<JobInfo> {
+    let project = job_project(&state.session)?;
+    let table = select_table(&project, &collection, space.as_deref()).map_err(err)?;
+    let use_llm = llm.unwrap_or(false);
+    // Borrow the session's loaded language model rather than loading a second copy.
+    let borrowed = if use_llm {
+        state
+            .session
+            .try_lock()
+            .ok()
+            .and_then(|mut g| g.as_mut().and_then(|s| s.llm.take()))
+    } else {
+        None
+    };
+    let mut info = JobInfo::new(
+        "calibrate",
+        Some(project.root.display().to_string()),
+        format!("Calibrating {collection}"),
+    );
+    info.collection = Some(collection);
+    info.space = Some(table.space_id.clone());
+    info.models = vec![table.identity.model_key.clone()];
     let session = state.session.clone();
-    if session
-        .try_lock()
-        .map_err(|_| "busy: a job is running")?
-        .is_none()
-    {
-        return Err("no project is open".into());
-    }
-    let cancel = CancelToken::default();
-    *state.cancel.lock().unwrap() = Some(cancel.clone());
-    std::thread::spawn(move || {
-        let result = (|| -> anyhow::Result<CalibrationReport> {
-            let mut guard = session.lock().unwrap();
-            let s = guard
-                .as_mut()
-                .ok_or_else(|| anyhow::anyhow!("no project is open"))?;
-            let table = select_table(&s.project, &collection, space.as_deref())?;
-            encoder_for(s, &table)?;
-            let encoder = &mut s.encoder.as_mut().unwrap().1;
-            let app2 = app.clone();
-            let mut generator = if llm.unwrap_or(false) {
-                let store = ModelStore::new(ModelStore::default_root()?);
-                let spec = invectus_llm::registry::spec(invectus_llm::DEFAULT_LLM)?;
-                Some(invectus_llm::LlamaGenerator::load(&store.root, spec, 8)?)
-            } else {
-                None
+    spawn_job(
+        &emitter(&app),
+        &state.board,
+        info,
+        Box::new(move |cancel, tick| {
+            let vectors = VectorStore::open(&project)?;
+            let store = ModelStore::new(ModelStore::default_root()?);
+            let mut encoder = query_encoder(
+                &store,
+                &table.identity,
+                &EmbedOptions {
+                    threads: 4,
+                    batch_size: 1,
+                },
+            )?;
+            let mut generator = match (use_llm, borrowed) {
+                (_, Some(g)) => Some(g),
+                (true, None) => {
+                    let spec = invectus_llm::registry::spec(invectus_llm::DEFAULT_LLM)?;
+                    Some(invectus_llm::LlamaGenerator::load(&store.root, spec, 8)?)
+                }
+                (false, None) => None,
             };
-            run_calibration(
-                &s.project,
-                &s.vectors,
+            let result = run_calibration(
+                &project,
+                &vectors,
                 &table,
-                encoder,
+                &mut encoder,
                 generator
                     .as_mut()
                     .map(|g| g as &mut dyn invectus_llm::TextGenerator),
                 &CalibrateOptions::default(),
-                &cancel,
-                &mut |p| {
-                    let _ = app2.emit(
-                        "calibrate-event",
-                        CalibrateEvent::Progress {
-                            done: p.done,
-                            total: p.total,
-                        },
-                    );
-                },
-            )
-        })();
-        let event = match result {
-            Ok(report) => CalibrateEvent::Finished {
-                report: Box::new(report),
-            },
-            Err(e) => CalibrateEvent::Failed {
-                error: format!("{e:#}"),
-            },
-        };
-        let _ = app.emit("calibrate-event", event);
-    });
-    Ok(())
+                cancel,
+                &mut |p| tick("Calibrating", p.done, p.total),
+            );
+            // Hand the model back to the session if it still has the same project open.
+            if let (Some(g), Ok(mut guard)) = (generator, session.lock())
+                && let Some(s) = guard.as_mut()
+                && s.project.root == project.root
+                && s.llm.is_none()
+            {
+                s.llm = Some(g);
+            }
+            let report = result?;
+            let cancelled = report.cancelled;
+            Ok((serde_json::to_value(&report)?, cancelled))
+        }),
+    )
 }
 
 #[derive(Deserialize)]
@@ -710,78 +983,42 @@ async fn check_idea(state: State<'_, AppState>, form: CheckForm) -> CmdResult<Ch
     .await
 }
 
-#[derive(Clone, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-enum RegionsEvent {
-    Progress {
-        phase: String,
-        done: usize,
-        total: usize,
-    },
-    Finished {
-        report: Box<RegionReport>,
-    },
-    Failed {
-        error: String,
-    },
-}
-
-/// Find regions and lay out the map on a worker thread; progress arrives as `regions-event`
-/// events and `cancel_job` stops it (the previous regions are kept when cancelled).
+/// Find regions and lay out the map as a job; cancelling keeps the previous regions.
 #[tauri::command]
 fn start_regions(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<AppState>,
     collection: String,
     space: Option<String>,
-) -> CmdResult<()> {
-    let session = state.session.clone();
-    if session
-        .try_lock()
-        .map_err(|_| "busy: a job is running")?
-        .is_none()
-    {
-        return Err("no project is open".into());
-    }
-    let cancel = CancelToken::default();
-    *state.cancel.lock().unwrap() = Some(cancel.clone());
-    std::thread::spawn(move || {
-        let result = (|| -> anyhow::Result<RegionReport> {
-            let mut guard = session.lock().unwrap();
-            let s = guard
-                .as_mut()
-                .ok_or_else(|| anyhow::anyhow!("no project is open"))?;
-            let table = select_table(&s.project, &collection, space.as_deref())?;
-            let app2 = app.clone();
-            run_regions(
-                &mut s.project,
-                &s.vectors,
+) -> CmdResult<JobInfo> {
+    let mut project = job_project(&state.session)?;
+    let table = select_table(&project, &collection, space.as_deref()).map_err(err)?;
+    let mut info = JobInfo::new(
+        "regions",
+        Some(project.root.display().to_string()),
+        format!("Finding regions in {collection}"),
+    );
+    info.collection = Some(collection);
+    info.space = Some(table.space_id.clone());
+    info.models = vec![table.identity.model_key.clone()];
+    spawn_job(
+        &emitter(&app),
+        &state.board,
+        info,
+        Box::new(move |cancel, tick| {
+            let vectors = VectorStore::open(&project)?;
+            let report = run_regions(
+                &mut project,
+                &vectors,
                 &table,
                 &RegionOptions::default(),
-                &cancel,
-                &mut |p| {
-                    let _ = app2.emit(
-                        "regions-event",
-                        RegionsEvent::Progress {
-                            phase: p.phase.clone(),
-                            done: p.done,
-                            total: p.total,
-                        },
-                    );
-                },
-            )
-        })();
-        let event = match result {
-            Ok(report) => RegionsEvent::Finished {
-                report: Box::new(report),
-            },
-            Err(e) => RegionsEvent::Failed {
-                error: format!("{e:#}"),
-            },
-        };
-        let _ = app.emit("regions-event", event);
-    });
-    Ok(())
+                cancel,
+                &mut |p| tick(&p.phase, p.done, p.total),
+            )?;
+            let cancelled = report.cancelled;
+            Ok((serde_json::to_value(&report)?, cancelled))
+        }),
+    )
 }
 
 /// Regions and one point per item for the map view.
@@ -815,8 +1052,10 @@ async fn scan_gaps(
     weights: Option<invectus_gaps::scan::Weights>,
 ) -> CmdResult<ScanReport> {
     let session = state.session.clone();
+    let board = state.board.clone();
     off_thread(move || {
         with_session(&session, |s| {
+            ensure_idle(&board, &s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             let mut opts = ScanOptions::default();
             if let Some(w) = weights {
@@ -1033,10 +1272,13 @@ pub fn run() {
             export_gaps,
             open_url,
             preview_import,
-            run_import,
+            import_collection,
+            reimport_collection,
+            index_plan,
             list_models,
-            start_embed,
+            start_index,
             cancel_job,
+            jobs,
             search,
             start_calibration,
             check_idea,
@@ -1055,9 +1297,197 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn wait_for_job(board: &SharedBoard) -> JobInfo {
+        let start = Instant::now();
+        loop {
+            let v = board.lock().unwrap().view();
+            if let Some(c) = v.current.filter(|c| !c.running()) {
+                return c;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(300),
+                "job did not finish"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    fn session_for(path: &std::path::Path) -> Shared {
+        let project = Project::create(path).unwrap();
+        let vectors = VectorStore::open(&project).unwrap();
+        Arc::new(Mutex::new(Some(Session {
+            project,
+            vectors,
+            encoder: None,
+            llm: None,
+        })))
+    }
+
+    /// Import → automatic model choice → indexing on its own connection → readiness, then a
+    /// re-import (outdated until re-indexed), a failed job and its retry. Uses the dev model
+    /// store (INVECTUS_MODELS_DIR); skipped when the default model is not installed.
+    #[test]
+    fn import_then_index_end_to_end() {
+        let installed = ModelStore::default_root().ok().is_some_and(|r| {
+            ModelStore::new(r).is_installed(registry::spec(registry::DEFAULT_MODEL).unwrap())
+        });
+        if !installed {
+            eprintln!("skipped: {} is not installed", registry::DEFAULT_MODEL);
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let csv = dir.path().join("notes.csv");
+        let mut rows = String::from("id,title,text\n");
+        for i in 0..30 {
+            rows.push_str(&format!(
+                "{i},Note {i},Observation number {i} about topic {}\n",
+                i % 4
+            ));
+        }
+        std::fs::write(&csv, rows).unwrap();
+        let session = session_for(&dir.path().join("p"));
+        let board = SharedBoard::default();
+        let events: Arc<Mutex<Vec<JobInfo>>> = Arc::default();
+        let ev = events.clone();
+        let emit: Emit = Arc::new(move |j: &JobInfo| ev.lock().unwrap().push(j.clone()));
+        let form = || -> ImportForm {
+            serde_json::from_value(serde_json::json!({
+                "collection": "notes", "source_path": csv, "text": ["text"], "title": "title",
+                "id": "id", "date": null, "url": null, "role": "neutral", "role_column": null,
+                "role_rules": null, "chunk_chars": 2000, "chunk_overlap": 200, "limit": null
+            }))
+            .unwrap()
+        };
+        let import = || {
+            let mut g = session.lock().unwrap();
+            let s = g.as_mut().unwrap();
+            ensure_idle(&board, &s.project).unwrap();
+            invectus_ingest::import(&mut s.project, &request(form()).unwrap()).unwrap();
+            plan_for(s, "notes").unwrap()
+        };
+        let status = || {
+            let g = session.lock().unwrap();
+            let i = info(g.as_ref().unwrap(), &board).unwrap();
+            i.tables
+                .iter()
+                .map(|t| (t.index_status.clone(), t.vectors))
+                .collect::<Vec<_>>()
+        };
+
+        let plan = import();
+        assert_eq!(plan.models, vec![registry::DEFAULT_MODEL.to_string()]);
+        assert!(status().is_empty(), "nothing indexed yet");
+        start_index_job(&emit, &session, &board, "notes".into(), plan.models.clone()).unwrap();
+        // The session keeps answering while the job runs on its own connection.
+        assert!(session.try_lock().is_ok());
+        let done = wait_for_job(&board);
+        assert_eq!(done.state, "completed", "{:?}", done.error);
+        assert_eq!(status(), vec![("indexed".to_string(), 30)]);
+        let root = session
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .project
+            .root
+            .display()
+            .to_string();
+        assert!(
+            events
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|j| j.project.as_deref() == Some(root.as_str()))
+        );
+
+        // Importing again changes the collection's import time: the index is outdated until
+        // the next run, which embeds nothing new (resumable by input hash).
+        let plan = import();
+        assert_eq!(status()[0].0, "outdated");
+        start_index_job(&emit, &session, &board, "notes".into(), plan.models.clone()).unwrap();
+        let done = wait_for_job(&board);
+        assert_eq!(done.report.as_ref().unwrap()[0]["embedded"], 0);
+        assert_eq!(status()[0].0, "indexed");
+
+        // A failing job is reported with its error, and a retry works.
+        start_index_job(
+            &emit,
+            &session,
+            &board,
+            "notes".into(),
+            vec!["no-such-model".into()],
+        )
+        .unwrap();
+        let failed = wait_for_job(&board);
+        assert_eq!(failed.state, "failed");
+        assert!(failed.error.unwrap().contains("no-such-model"));
+        start_index_job(&emit, &session, &board, "notes".into(), plan.models).unwrap();
+        assert_eq!(wait_for_job(&board).state, "completed");
+    }
+
+    /// A running job blocks project writes and switching, in its project only.
+    #[test]
+    fn running_jobs_block_writes_and_switching() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = session_for(&dir.path().join("a"));
+        let other = dir.path().join("b");
+        Project::create(&other).unwrap();
+        let board = SharedBoard::default();
+        let root = session
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .project
+            .root
+            .display()
+            .to_string();
+        let (job, _) = board
+            .lock()
+            .unwrap()
+            .begin(JobInfo::new(
+                "regions",
+                Some(root),
+                "Finding regions".into(),
+            ))
+            .unwrap();
+        {
+            let g = session.lock().unwrap();
+            assert!(ensure_idle(&board, &g.as_ref().unwrap().project).is_err());
+        }
+        let e = open_project_blocking(&session, &board, other.display().to_string(), false)
+            .err()
+            .unwrap();
+        assert!(e.contains("before switching"), "{e}");
+        // Still on the first project.
+        assert!(
+            session
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .project
+                .root
+                .ends_with("a.invectus")
+        );
+        board.lock().unwrap().finish(job.id, Err("x".into()));
+        assert!(
+            open_project_blocking(&session, &board, other.display().to_string(), false).is_ok()
+        );
+        // A model download (no project) never blocks switching.
+        board
+            .lock()
+            .unwrap()
+            .begin(JobInfo::new("download", None, "d".into()))
+            .unwrap();
+        let first = dir.path().join("a").display().to_string();
+        assert!(open_project_blocking(&session, &board, first, false).is_ok());
+    }
     #[test]
     fn shell_uses_core() {
-        assert_eq!(super::engine_version(), "0.1.0");
+        assert_eq!(engine_version(), "0.1.0");
     }
 
     #[test]
@@ -1065,14 +1495,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let csv = dir.path().join("x.csv");
         std::fs::write(&csv, "id,t\n1,a\n").unwrap();
-        let form: super::ImportForm = serde_json::from_value(serde_json::json!({
+        let form: ImportForm = serde_json::from_value(serde_json::json!({
             "collection": "c", "source_path": csv, "text": ["t", ""], "title": "",
             "id": "id", "date": null, "url": null, "role": "neutral",
             "role_column": "t", "role_rules": "a=coverage",
             "chunk_chars": 2000, "chunk_overlap": 200, "limit": null
         }))
         .unwrap();
-        let req = super::request(form).unwrap();
+        let req = request(form).unwrap();
         assert_eq!(req.mapping.text, vec!["t"]);
         assert_eq!(req.mapping.title, None);
         let pv = invectus_ingest::preview(&req, 5).unwrap();

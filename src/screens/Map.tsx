@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as PE } from "react";
 import { api, fmt, year, KIND_LABEL, type GapView, type MapData, type MapPoint } from "../api";
-import { ErrorLine, Needs, useAction, type Ctx } from "../App";
+import { ErrorLine, Needs, useAction, useStartJob, type Ctx } from "../App";
+import { JobProgress } from "../jobs";
 import Link from "../Link";
 
 type ColourBy = "region" | "role" | "date" | "gap";
-const PALETTE = ["#2F5BD3", "#D9822B", "#1E8A4C", "#7B4BC2", "#B03A6A", "#2A8C99", "#8C6D1F", "#C2463A", "#5470A8", "#6A9A2E", "#9C4FB0", "#3E7C5A"];
-const ROLE_COLOUR = { demand: "#D9822B", coverage: "#7B4BC2", neutral: "#A3A39C" };
+// Monochrome: regions are drawn as circles (centre and radius from the layout), and roles,
+// dates and gap scores as shades of grey.
+const ROLE_COLOUR = { coverage: "#000000", demand: "#7a7a7a", neutral: "#c8c8c8" };
 const GRID = 128;
 const PAD = 28;
 const MARKERS = 15;
@@ -29,6 +31,7 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
   const drag = useRef<{ x: number; y: number; view: View; moved: boolean }>();
   const [size, setSize] = useState({ w: 800, h: 560 });
   const { busy, error, run } = useAction();
+  const regionsJob = useStartJob();
 
   useEffect(() => {
     if (!tref || !table?.regions) return;
@@ -62,8 +65,6 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
   const fine = useMemo(() => (data?.regions ?? []).filter((r) => r.level === "fine"), [data]);
   const bySize = useMemo(() => [...fine].sort((a, b) => b.size - a.size), [fine]);
   const byRegion = useMemo(() => new Map(fine.map((r) => [r.region_id, r])), [fine]);
-  // Largest regions get distinct colours; the rest cycle through the palette.
-  const colourOfRegion = useMemo(() => new Map(bySize.map((r, i) => [r.region_id, PALETTE[i % PALETTE.length]])), [bySize]);
   const gapScore = useMemo(() => {
     const m = new Map<number, number>();
     const max = gaps.reduce((a, g) => Math.max(a, g.score), 1e-9);
@@ -78,15 +79,15 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
 
   const colour = (p: MapPoint) => {
     switch (colourBy) {
-      case "region": return p.noise ? "#C9C9C4" : colourOfRegion.get(p.fine_id) ?? "#A3A39C";
+      case "region": return p.noise ? "#bdbdbd" : focus !== undefined && p.fine_id === focus ? "#000000" : "#4a4a4a";
       case "role": return ROLE_COLOUR[p.role] ?? "#A3A39C";
       case "date": {
         const y = Number(year(p.date));
         if (!y || !years) return "#DADAD6";
         const t = (y - years.min) / Math.max(1, years.max - years.min);
-        return `hsl(${220 - t * 190}, 65%, ${55 - t * 10}%)`;
+        return `hsl(0, 0%, ${82 - t * 76}%)`;
       }
-      case "gap": { const s = gapScore.get(p.fine_id) ?? 0; return s > 0 ? `rgba(194, 70, 58, ${0.25 + s * 0.75})` : "#DADAD6"; }
+      case "gap": { const s = gapScore.get(p.fine_id) ?? 0; return s > 0 ? `rgba(0, 0, 0, ${0.3 + s * 0.7})` : "#dcdcdc"; }
     }
   };
 
@@ -124,6 +125,14 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
     const g = c.getContext("2d")!;
     g.scale(dpr, dpr);
     g.clearRect(0, 0, size.w, size.h);
+    // Region outlines: thin circles at each fine region's layout centre and radius.
+    if (colourBy === "region") {
+      g.strokeStyle = "rgba(0, 0, 0, 0.28)"; g.lineWidth = 1;
+      for (const r of fine) {
+        const [x, y] = toScreen(r.x, r.y);
+        g.beginPath(); g.arc(x, y, Math.max(2, r.radius * fit.k * view.scale), 0, Math.PI * 2); g.stroke();
+      }
+    }
     const n = data.points.length;
     const dot = (n > 100_000 ? 1.4 : n > 20_000 ? 2.2 : 3.5) * Math.min(2, Math.sqrt(view.scale));
     for (const p of data.points) {
@@ -133,13 +142,13 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
       g.fillRect(x - dot / 2, y - dot / 2, dot, dot);
     }
     const sel = new Set(selection.map((p) => p.item_id));
-    g.strokeStyle = "#1C1C1A"; g.lineWidth = 1.5;
+    g.strokeStyle = "#000"; g.lineWidth = 1.5;
     for (const p of data.points) if (sel.has(p.item_id)) { const [x, y] = toScreen(p.x, p.y); g.strokeRect(x - 4, y - 4, 8, 8); }
     const r = focus !== undefined ? byRegion.get(focus) : undefined;
     if (r) {
       const [x, y] = toScreen(r.x, r.y);
       g.beginPath(); g.arc(x, y, Math.max(16, r.radius * fit.k * view.scale), 0, Math.PI * 2);
-      g.strokeStyle = "#1C1C1A"; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]);
+      g.strokeStyle = "#000"; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.stroke(); g.setLineDash([]);
     }
   }, [data, size, view, colourBy, selection, gapScore, focus, fit]);
 
@@ -161,8 +170,11 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
     return out;
   }, [bySize, showLabels, view, fit, size]);
 
-  if (!table || !tref) return <div className="page narrow"><Needs title="No map yet" body="Embed a collection first." action="Go to Index" onAction={() => ctx.go({ name: "index" })} /></div>;
-  if (!table.regions) return <div className="page narrow"><Needs title="No regions yet" body="Find regions to group items by topic and lay out the map." action="Go to Index" onAction={() => ctx.go({ name: "index", collection: table.collection })} /></div>;
+  if (!table || !tref) return <div className="page"><Needs title="No map yet" body="The map shows an indexed collection's regions. Add and index a collection first." action="Go to Collections" onAction={() => ctx.go({ view: "project", tab: "collections" })} /></div>;
+  if (!table.regions) return <div className="page"><Needs title="Regions come first" body={`The map lays out regions (groups of related items). “${table.collection}” has none for ${table.model_key} yet.`}
+    action={regionsJob.current?.state === "running" ? undefined : "Find regions"} busy={regionsJob.busy} onAction={() => regionsJob.start(() => api.startRegions(tref))} />
+    {regionsJob.current?.state === "running" && <div className="panel"><JobProgress job={regionsJob.current} /></div>}
+    <ErrorLine error={regionsJob.error} /></div>;
 
   const local = (e: PE) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
   const down = (e: PE) => {
@@ -231,9 +243,9 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
             onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={() => setHover(undefined)}
             onWheel={(e) => { const r = canvas.current!.getBoundingClientRect(); zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top); }} />
           {labels.map((l) => <button key={l.id} type="button" className="map-label" style={{ left: l.x, top: l.y }} title={l.title}
-            onClick={() => ctx.go({ name: "search", query: byRegion.get(l.id)!.terms.slice(0, 5).join(" ") })}>{l.text}</button>)}
+            onClick={() => ctx.go({ view: "project", tab: "search", query: byRegion.get(l.id)!.terms.slice(0, 5).join(" ") })}>{l.text}</button>)}
           {markers.map(({ g, x, y }) => <button key={g.gap_id} type="button" className="gap-marker" style={{ left: x, top: y }}
-            aria-label={`Gap: ${KIND_LABEL[g.kind]} · ${g.label}`} title={`${KIND_LABEL[g.kind]} · ${g.label}`} onClick={() => ctx.go({ name: "gap", id: g.gap_id })} />)}
+            aria-label={`Gap: ${KIND_LABEL[g.kind]} · ${g.label}`} title={`${KIND_LABEL[g.kind]} · ${g.label}`} onClick={() => ctx.go({ view: "project", tab: "gaps", gap: g.gap_id })} />)}
           {box && <div className="box" style={{ left: Math.min(box.x0, box.x1), top: Math.min(box.y0, box.y1), width: Math.abs(box.x1 - box.x0), height: Math.abs(box.y1 - box.y0) }} />}
           {hover && !box && <div className="tooltip" style={{ left: Math.min(hover.x + 12, size.w - 240), top: hover.y + 12 }}>
             <b>{hover.p.title ?? `item ${hover.p.item_id}`}</b><div className="muted small">{name(hover.p.fine_id)} · {hover.p.role}{hover.p.date ? ` · ${year(hover.p.date)}` : ""}</div></div>}
@@ -244,16 +256,15 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
           </div>
         </div>
         <div className="legend">
-          {colourBy === "region" && <><b>Largest regions</b>{bySize.slice(0, 8).map((r) =>
-            <span key={r.region_id}><i style={{ background: colourOfRegion.get(r.region_id) }} />{(r.llm_label ?? r.label).slice(0, 40)}</span>)}</>}
+          {colourBy === "region" && <><b>Regions</b><span><i className="ring-swatch" />circle = a region (layout centre and radius)</span><span><i style={{ background: "#4a4a4a" }} />item</span><span><i style={{ background: "#bdbdbd" }} />loosely attached item</span></>}
           {colourBy === "role" && <><b>Role</b>{Object.entries(ROLE_COLOUR).map(([k, c]) => <span key={k}><i style={{ background: c }} />{k}</span>)}</>}
-          {colourBy === "date" && years && <><b>Year</b><span><i style={{ background: "hsl(220,65%,55%)" }} />{years.min}</span><span><i style={{ background: "hsl(30,65%,45%)" }} />{years.max}</span></>}
-          {colourBy === "gap" && <><b>Gap score</b><span><i style={{ background: "rgba(194,70,58,1)" }} />highest</span><span><i style={{ background: "#DADAD6" }} />no gap</span></>}
+          {colourBy === "date" && years && <><b>Year</b><span><i style={{ background: "hsl(0,0%,82%)" }} />{years.min}</span><span><i style={{ background: "hsl(0,0%,6%)" }} />{years.max}</span></>}
+          {colourBy === "gap" && <><b>Gap score</b><span><i style={{ background: "#000" }} />highest</span><span><i style={{ background: "#dcdcdc" }} />no gap</span></>}
           {markers.length > 0 && <span><i className="gap-dot" />Gap</span>}
         </div>
       </div>
 
-      <aside aria-labelledby="sel" className="card stack gap">
+      <aside aria-labelledby="sel" className="panel stack gap">
         <h2 id="sel">Selection · {fmt(selection.length)} items</h2>
         <div className="muted small">Click a point; ⌘-click adds. Shift-drag or Box select picks an area. Scroll to zoom, drag to pan.</div>
         <ul className="plain">{selection.slice(0, 50).map((p) => <li key={p.item_id}>
@@ -262,7 +273,7 @@ export default function MapView({ ctx, focus }: { ctx: Ctx; focus?: number }) {
         </li>)}</ul>
         {selection.length > 50 && <div className="muted small">+ {fmt(selection.length - 50)} more</div>}
         {selection.length > 0 && <div className="row wrap">
-          <button type="button" className="btn" onClick={() => ctx.go({ name: "search", query: selection[0].title ?? "" })}>Search near {selection.length > 1 ? "the first" : "this"}</button>
+          <button type="button" className="btn" onClick={() => ctx.go({ view: "project", tab: "search", query: selection[0].title ?? "" })}>Search near {selection.length > 1 ? "the first" : "this"}</button>
           <button type="button" className="btn" onClick={() => setSelection([])}>Clear</button>
         </div>}
         <div className="muted small">{data.note}</div>

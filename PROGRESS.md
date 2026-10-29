@@ -1247,3 +1247,12 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app using its existing project history and dev
   model store. No CI dispatched; Windows/Linux remain unverified.
+
+## 2026-10-29 — Shorter gap-row stagger and slide
+
+- Reduced the gap-row entrance stagger to 50 ms per row and the horizontal starting
+  offset to -8 px. The smooth fade and 300 ms ease-out duration remain unchanged.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live visual review remains with the owner.
+  No CI dispatched.

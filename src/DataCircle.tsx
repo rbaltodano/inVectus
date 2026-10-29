@@ -2,6 +2,7 @@
 // circle; squares that would overlap on screen merge into one larger square that splits up as
 // you zoom. Map positions are for browsing only (SPEC §6.5): nothing here is evidence.
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as PE } from "react";
+import LineArt from "./LineArt";
 import { fmt, year, KIND_LABEL, type GapView, type JobInfo, type MapData, type MapPoint, type Region } from "./api";
 import { DotFlicker } from "./dot-flicker";
 
@@ -12,6 +13,8 @@ export interface Marks {
   items?: number[];
   /** A region to outline, e.g. from "sits between". */
   region?: number;
+  /** Short labels for marked items, e.g. their similarity ("0.83"). */
+  labels?: Record<number, string>;
 }
 
 interface Props {
@@ -36,6 +39,10 @@ interface Props {
 const INK = "#eeeae4";
 const ACCENT = "#6edcaa";
 const SINGLE = 4;         // one item, in screen px
+const LABEL_FONT = `500 9.5px "Martian Mono Variable", ui-monospace, monospace`;
+const white = (a: number) => `rgba(255, 255, 255, ${a})`;
+/** A gap's code, shared by the map and the gap list (rank by score, 1-based). */
+export const gapCode = (rank: number) => `G-${String(rank + 1).padStart(2, "0")}`;
 const MERGED_MAX = 11;    // the largest merged square
 const GAP_MARKS = 12;     // the highest-scoring gaps only
 // Navigation follows Angrove's Mac canvas (macOS/Platform/MacCanvasScrollInput.swift and
@@ -215,6 +222,13 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     g.save();
     g.beginPath(); g.arc(R, R, R - 1, 0, Math.PI * 2); g.clip();
 
+    // Instrument backdrop, fixed to the circle (not the data): dashed axes and range rings.
+    g.strokeStyle = white(0.1); g.lineWidth = 1; g.setLineDash([2, 5]);
+    g.beginPath(); g.moveTo(0, R); g.lineTo(size, R); g.moveTo(R, 0); g.lineTo(R, size); g.stroke();
+    g.setLineDash([]);
+    g.strokeStyle = white(0.06);
+    for (const f of [1 / 3, 2 / 3]) { g.beginPath(); g.arc(R, R, R * f, 0, Math.PI * 2); g.stroke(); }
+
     const list = renderedCells;
     cells.current = list;
     const now = performance.now();
@@ -256,43 +270,59 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       for (const c of list) {
         const s = side(c.n);
         g.fillStyle = INK;
-        g.globalAlpha = (c.n === 1 ? 0.85 : 1) * opacity(`item:${data?.run.run_id}:${c.first.item_id}`);
+        g.globalAlpha = (c.n === 1 ? 0.62 : 0.88) * opacity(`item:${data?.run.run_id}:${c.first.item_id}`);
         g.fillRect(c.x - s / 2, c.y - s / 2, s, s);
-        if (hl.size && hl.has(c.first.item_id)) { g.strokeStyle = ACCENT; g.lineWidth = 1.5; g.strokeRect(c.x - s / 2 - 3, c.y - s / 2 - 3, s + 6, s + 6); }
-      }
-      if (hl.size) {
-        g.globalAlpha = 1;
-        g.strokeStyle = ACCENT; g.lineWidth = 1.5;
-        for (const p of data?.points ?? []) if (hl.has(p.item_id)) { const [x, y] = toScreen(p.x, p.y); g.strokeRect(x - 5, y - 5, 10, 10); }
       }
       g.globalAlpha = 1;
-    }
-
-    // Gap marks: small rings.
-    if (showGaps && !loading) {
-      g.strokeStyle = INK; g.lineWidth = 1.5;
-      for (const gp of gaps.slice(0, GAP_MARKS)) {
-        const p = gapPos(gp); if (!p || !inside(p[0], p[1], 4)) continue;
-        g.fillStyle = "#141414";
-        g.beginPath(); g.arc(p[0], p[1], 5, 0, Math.PI * 2); g.fill(); g.stroke();
+      // Marked items (search results): an accent × with a short label, like a plotting board.
+      if (hl.size) {
+        g.strokeStyle = ACCENT; g.fillStyle = ACCENT; g.lineWidth = 1.25; g.font = LABEL_FONT; g.textBaseline = "middle";
+        for (const p of data?.points ?? []) if (hl.has(p.item_id)) {
+          const [x, y] = toScreen(p.x, p.y);
+          g.beginPath(); g.moveTo(x - 5, y - 5); g.lineTo(x + 5, y + 5); g.moveTo(x + 5, y - 5); g.lineTo(x - 5, y + 5); g.stroke();
+          const label = marks.labels?.[p.item_id];
+          if (label) g.fillText(label, x + 9, y - 7);
+        }
       }
     }
 
-    // The searched idea: an accent square with a glow.
+    // Gap marks: small rings with their codes.
+    if (showGaps && !loading) {
+      g.lineWidth = 1.25; g.font = LABEL_FONT; g.textBaseline = "middle";
+      gaps.slice(0, GAP_MARKS).forEach((gp, i) => {
+        const p = gapPos(gp); if (!p || !inside(p[0], p[1], 4)) return;
+        g.strokeStyle = INK; g.fillStyle = "#0e0f10";
+        g.beginPath(); g.arc(p[0], p[1], 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
+        // Codes on the strongest few only; the rest show theirs on hover.
+        if (i < 6) { g.fillStyle = white(0.55); g.fillText(gapCode(i), p[0] + 8, p[1]); }
+      });
+    }
+
+    // The searched idea: an accent crosshair with a glow, labelled.
     if (marks.query && !loading) {
       const [x, y] = toScreen(marks.query.x, marks.query.y);
-      g.shadowColor = ACCENT; g.shadowBlur = 24; g.fillStyle = ACCENT;
-      g.fillRect(x - 5.6, y - 5.6, 11.2, 11.2);
+      g.shadowColor = ACCENT; g.shadowBlur = 16; g.strokeStyle = ACCENT; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(x - 8, y); g.lineTo(x + 8, y); g.moveTo(x, y - 8); g.lineTo(x, y + 8); g.stroke();
       g.shadowBlur = 0;
+      g.fillStyle = ACCENT; g.font = LABEL_FONT; g.textBaseline = "middle";
+      g.fillText("QUERY", x + 11, y + 9);
     }
     g.restore();
 
-    // The rim, and in loading state A the progress arc along it.
-    g.strokeStyle = INK; g.lineWidth = 1;
+    // The rim with dial ticks (every 3°, longer every 30°). While loading, ticks light up
+    // clockwise from the top as progress (loading state A).
+    g.strokeStyle = white(0.85); g.lineWidth = 1;
     g.beginPath(); g.arc(R, R, R - 1, 0, Math.PI * 2); g.stroke();
-    if (loading && frac > 0) {
-      g.lineWidth = 3;
-      g.beginPath(); g.arc(R, R, R - 2, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); g.stroke();
+    for (let t = 0; t < 120; t++) {
+      const a = -Math.PI / 2 + (t / 120) * Math.PI * 2, major = t % 10 === 0;
+      const lit = loading && t / 120 < frac;
+      const len = major ? 9 : 4;
+      g.strokeStyle = lit ? white(1) : white(major ? 0.5 : 0.22);
+      g.lineWidth = lit ? 1.5 : 1;
+      g.beginPath();
+      g.moveTo(R + Math.cos(a) * (R - 3), R + Math.sin(a) * (R - 3));
+      g.lineTo(R + Math.cos(a) * (R - 3 - len), R + Math.sin(a) * (R - 3 - len));
+      g.stroke();
     }
     if (!reducedMotion && flicker.pending(now)) {
       const frame = requestAnimationFrame(setFlickerFrame);
@@ -389,6 +419,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
 
   if (empty) return <div ref={wrap} className="circle-wrap">
     <button type="button" className="circle empty-circle" style={{ width: size, height: size }} onClick={empty.onPick}>
+      <LineArt kind="sphere" size={Math.round(size * 0.22)} />
       <span className="circle-title">{empty.title}</span>
       <span className="circle-sub">{empty.hint}</span>
     </button>
@@ -429,7 +460,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       </div>}
 
       {hover && !drag.current?.moved && <div className="circle-tip" style={{ left: Math.min(hover.sx + 14, size - 230), top: hover.sy + 14 }}>
-        {g && <><b>{KIND_LABEL[g.kind]}</b><span>{g.label}</span><span className="dim">Score {g.score.toFixed(2)} · click to open</span></>}
+        {g && <><b>{gapCode(gaps.indexOf(g))} · {KIND_LABEL[g.kind]}</b><span>{g.label}</span><span className="dim">Score {g.score.toFixed(2)} · click to open</span></>}
         {hover.query && <><b>Your search</b><span className="dim">Approximate position: {marks.query?.label}</span></>}
         {c && c.n === 1 && <><b>{c.first.title ?? `item ${c.first.item_id}`}</b><span className="dim">{regionName(fine.get(c.first.fine_id))}{c.first.date ? ` · ${year(c.first.date)}` : ""}</span></>}
         {c && c.n > 1 && <><b>{fmt(c.n)} items</b><span className="dim">Mostly {regionName(majorityRegion)} · click to zoom</span></>}

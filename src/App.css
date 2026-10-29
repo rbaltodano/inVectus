@@ -402,3 +402,123 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 @media (max-width: 760px) { .project-toolbar { flex-wrap: wrap; } .search-command, .search-content, .project-console .menu:not(.search-menu) { padding: 16px; } }
 
 @media (max-width: 760px) { .project-toolbar .project-tabs { flex: 1 0 220px; } }
+
+/* ── Instrument theme ─────────────────────────────────────────────────────────────────────
+   Retro mission-control direction (owner references, 2026-10-29): near-black, white line work
+   at four strengths, a sans for reading and monospace only for codes, numbers and small tracked
+   labels; open panels separated by hairlines instead of boxes; mint only for "your search". */
+:root {
+  --bg: #0e0f10;
+  --surface: #151618;
+  --surface-2: #1c1d20;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-2: rgba(255, 255, 255, 0.2);
+  --ink: #f4f4f2;
+  --text: #e8e8e5;
+  --text-2: #c4c4bf;
+  --dim: #8f8f8a;
+  --dim-2: #8f8f8a;
+  --r: 2px;
+  --sans: -apple-system, "SF Pro Text", "Helvetica Neue", Inter, system-ui, sans-serif;
+  font-family: var(--sans);
+  font-size: 13px;
+  letter-spacing: 0.005em;
+}
+h1 { font-family: var(--sans); font-size: 30px; font-weight: 300; letter-spacing: -0.015em; line-height: 1.1; }
+h2, .h1, .h2 { font-family: var(--sans); font-weight: 400; font-size: 15px; letter-spacing: 0; }
+.eyebrow, .tab-code, .search-rankings h2, .assessment-details summary, .section, .step, .mapping .th,
+.table th, .facts dt, .key, .index-status, .circle-sub, .circle-tip .dim, .verdict {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.eyebrow { color: var(--dim); margin-bottom: 6px; }
+.score, .stat b, .big-num, .indexing-percent { font-family: var(--sans); font-variant-numeric: tabular-nums; }
+code, .path, .mono { font-family: var(--mono); }
+.head .path { font-size: 11px; color: var(--dim); margin-top: 6px; }
+
+/* Sidebar: same ground as the page, one hairline. */
+.sidebar { background: var(--bg); border-right: 1px solid var(--line); }
+.logo { border-color: var(--line-2); font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; padding: 6px 10px; }
+.side-search { border-color: var(--line); border-radius: var(--r); }
+.sidebar .side-link, .project-link { border-radius: var(--r); }
+.side-link[aria-current="page"], .project-link[aria-current="page"], .project-link:hover:not(:disabled) { background: var(--surface); }
+.job-line { border-color: var(--line); border-radius: var(--r); }
+
+/* Header */
+.head { border-bottom: 1px solid var(--line); align-items: flex-end; }
+.net { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; border-color: var(--line-2); border-radius: 999px; padding: 5px 12px; }
+
+/* Working panel: one open surface; tabs are coded labels with a tick under the active one. */
+.project-console { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.project-toolbar { border-bottom: 1px solid var(--line); padding: 0 8px; }
+.project-tabs { gap: 0; }
+.project-tabs button { position: relative; padding: 16px 14px 14px; font-family: var(--sans); font-size: 13px; color: var(--dim); background: none !important; }
+.project-tabs button .tab-code { margin-right: 8px; color: var(--dim); opacity: 0.7; letter-spacing: 0.08em; }
+.project-tabs button[aria-selected="true"] { color: var(--ink); font-weight: 400; }
+.project-tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 1px; background: var(--ink); }
+.indexing-indicator { border-color: var(--line); font-family: var(--mono); font-size: 10.5px; }
+.indexing-bar { height: 2px; width: 44px; background: var(--line-2); }
+
+/* Search */
+.search-command { padding: 20px 24px; }
+.search-command input { font-family: var(--sans); font-size: 15px; font-weight: 300; }
+.search-scope select { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; }
+.search-assessment { gap: 14px; }
+.verdict, .search-assessment .verdict { display: inline-flex; align-items: center; gap: 8px; border: none !important; background: none !important; padding: 0 !important; color: var(--text-2); }
+.verdict::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.verdict.open, .search-assessment .verdict.open { color: var(--accent); }
+.verdict.near { color: var(--ink); }
+.verdict.exists, .search-assessment .verdict.exists { color: var(--ink); }
+.verdict.exists::before { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15); }
+.verdict.unassessed { color: var(--dim); }
+.search-rankings { margin-top: 12px; gap: 16px; }
+.search-rankings h2 { color: var(--dim); }
+.search-results { gap: 0; }
+.search-result-divider { display: none; }
+.search-hit { align-items: baseline; gap: 20px; padding: 16px 0; border-top: 1px solid var(--line); font-family: var(--sans); font-size: 13.5px; color: var(--text); }
+.search-hit:hover, .search-hit:focus-visible { background: none; color: var(--ink); }
+.search-hit:hover .score, .search-hit:focus-visible .score { color: var(--ink); }
+.search-hit .score, .rank .score { flex: 0 0 64px; font-size: 24px; font-weight: 200; line-height: 1; color: var(--text-2); }
+.search-hit .score.top, .score.top { color: var(--accent); }
+.search-hit .rank-title { gap: 8px; line-height: 1.45; }
+.rank-title .dim, .search-hit .rank-title .dim { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.assessment-details { border-top: 1px solid var(--line); }
+
+/* Lists and cards lose their boxes. */
+.menu-card, .panel, .result-list, .collection-list, .project-console .menu-card, .project-console .panel { background: transparent; border: none; border-radius: 0; }
+.project-console .result-list .rank, .rank { border-bottom: none; border-top: 1px solid var(--line); align-items: baseline; gap: 20px; }
+.project-console .result-list .rank:hover, .project-console .result-list .rank:focus-visible, .menu-row:hover:not(:disabled), .menu-row:focus-visible { background: none; color: var(--ink); }
+.menu-row { background: none; border-top: 1px solid var(--line); border-radius: 0; }
+.collection-list .collection-row, .project-console .collection-row { border-bottom: none; border-top: 1px solid var(--line); }
+
+/* Empty states carry a line diagram. */
+.empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 24px 0; max-width: 46ch; line-height: 1.55; }
+.line-art { color: var(--text-2); opacity: 0.85; flex: none; }
+.empty-circle { border: 1px solid var(--line-2); gap: 14px; background: var(--bg); }
+.empty-circle .line-art { color: var(--text-2); margin-bottom: 6px; }
+.empty-circle:hover, .empty-circle:focus-visible { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line-2); border-color: var(--ink); }
+.circle-title { font-family: var(--sans); font-weight: 300; font-size: 15px; color: var(--text); }
+.circle-center .circle-title, .circle-center .circle-sub { background: rgba(14, 15, 16, 0.85); }
+.circle-tip { background: var(--bg); border-color: var(--line-2); border-radius: var(--r); font-size: 12px; }
+.circle-reset { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 999px; background: var(--bg); }
+
+/* Controls */
+.btn { border-color: var(--line-2); border-radius: var(--r); font-family: var(--sans); }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 500; }
+.btn.primary:hover:not(:disabled) { background: #fff; border-color: #fff; color: var(--bg); }
+input, select, textarea { border-color: var(--line-2); border-radius: var(--r); font-family: var(--sans); }
+.tag, .chip { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border-color: var(--line-2); }
+
+/* Charts become line work: thin meters, one-pixel year bars. */
+.meter { height: 2px; background: var(--line); }
+.meter > div { background: var(--ink); }
+.term .meter > div, .term .bar > div { background: var(--text-2); }
+.timeline { border-bottom-color: var(--line-2); gap: 0; }
+.timeline .bars { justify-content: center; gap: 3px; }
+.timeline .bars div { flex: 0 0 1px; }
+.timeline .demand, .key.demand::before { background: var(--dim); }
+.timeline .coverage, .key.coverage::before { background: var(--ink); }
+
+/* Projects page cards: large, quiet, rounded like the reference cards. */
+.card { background: var(--surface); border: none; border-radius: 10px; padding: 20px; }
+.card-title { font-family: var(--sans); font-size: 15px; font-weight: 400; color: var(--text); }
+.empty-note { background: transparent; border: 1px solid var(--line); border-radius: 10px; }

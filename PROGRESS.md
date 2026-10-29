@@ -796,6 +796,26 @@ one circle per project, Martian Mono, dark mode only for now.
   engine, not a chatbot. §14.3 (which local LLM by default) narrows: the agent edition has
   none, and a small model for the full app needs measuring against Gemma 12B first.
 
+## 2026-10-29 — Instrument visual direction (retro mission control)
+
+- Owner's references (radial charts, technical cards with dials, line-diagram icons, an annotated
+  orbital plot, wireframe geometry) replace the terminal look with an instrument-panel one.
+  Added a final theme layer in `src/App.css`: near-black ground, white line work at a few
+  strengths, a system sans for reading and Martian Mono only for codes, numbers and small
+  tracked labels; open panels with hairlines instead of boxes; coded tabs (`01 Search`) with a
+  tick under the active one; verdicts as a dot and label; similarity as large light numerals;
+  thin meters and one-pixel year bars; rounded project cards.
+- The data circle is drawn as an instrument: dial ticks on the rim (every 3°, long every 30°)
+  that light clockwise as progress while loading, dashed axes and two range rings fixed to the
+  circle, fainter item squares, the search as an accent crosshair labelled QUERY, marked results
+  as accent × with their similarity, and gap rings with codes (`G-01`…; labels on the top six,
+  all in the tooltip) that match the gap list.
+- `src/LineArt.tsx`: thin SVG diagrams (sphere, Venn, rings, orbit, grid) for empty states; they
+  name a concept and show no data.
+- Checked in the browser with the stub backend (workspace, search, gaps); TypeScript and Vite
+  build pass; the desktop app was rebuilt and relaunched. Not reviewed in the native window by
+  an agent.
+
 ## Next
 1. Agent interface, roadmap A1–A3 in [docs/target-product.md](docs/target-product.md): shared
    orchestration crate, `invectus mcp` read tools, then write tools with single-writer handling.

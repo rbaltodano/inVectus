@@ -169,7 +169,7 @@ function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?
     if (path) create(path);
   };
   return <>
-    <header className="head"><h1>New project</h1></header>
+    <header className="head"><div><div className="eyebrow">Setup</div><h1>New project</h1></div></header>
     <div className="stage">
       <DataCircle gaps={[]} marks={{}} showGaps={false} showLabels={false} showOutlines={false} onGap={() => undefined} onItem={() => undefined}
         empty={{ title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: () => pick(false) }} />
@@ -263,7 +263,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
 
   return <>
     <header className="head">
-      <div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
+      <div><div className="eyebrow">Project</div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
       <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
         onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
         title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
@@ -285,7 +285,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
               onClick={() => selectTab(tab.id)} onKeyDown={(e) => {
                 const next = tabKeyIndex(e.key, i);
                 if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
-              }}>{tab.label}</button>)}
+              }}><span className="tab-code">{String(i + 1).padStart(2, "0")}</span>{tab.label}</button>)}
           </div>
         <IndexingIndicator job={job} preview />
         </div>

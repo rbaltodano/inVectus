@@ -8,6 +8,8 @@ import Import from "./Import";
 import Collections from "./Collections";
 import GapDetailView from "./GapDetail";
 import { assessmentCopy } from "../search-presentation";
+import { gapCode } from "../DataCircle";
+import LineArt from "../LineArt";
 import { weightsKey } from "./Settings";
 import backIcon from "../assets/icons/back.svg";
 import filterChevron from "../assets/figma/search-filter-chevron.svg?no-inline";
@@ -77,7 +79,8 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
       if (near.length) pos = { x: near.reduce((s, p) => s + p!.x, 0) / near.length, y: near.reduce((s, p) => s + p!.y, 0) / near.length, label: "near its closest items" };
     }
     setQueryPos(pos);
-    ctx.setMarks({ query: pos, items: result.hits.slice(0, 1).map((h) => h.item.item_id) });
+    const top = result.hits[0];
+    ctx.setMarks({ query: pos, items: top ? [top.item.item_id] : [], labels: top ? { [top.item.item_id]: top.similarity.toFixed(2) } : {} });
   }, [result, map, active]);
 
   if (!table || !tref) return <div className="menu-card dim small">Search needs an indexed collection. Add a dataset first.</div>;
@@ -113,6 +116,8 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
     </form>
     <div className="search-content">
       <ErrorLine error={error} />
+      {!result && !busy && <div className="empty-state"><LineArt kind="rings" />
+        <span className="dim">Describe an idea. inVectus compares it with every item in “{table.collection}” and says whether something close already exists there.</span></div>}
       {assessment && <div className="search-assessment" aria-live="polite">
         <span className={`verdict ${check!.calibration.stale || !check!.search.hits.length ? "unassessed" : check!.verdict}`}>{assessment.label}</span>
         <span>{assessment.message}</span>
@@ -124,8 +129,8 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
           {result.hits.map((h, i) => <Fragment key={h.item.item_id}>
             {i > 0 && <img className="search-result-divider" src={resultDivider} alt="" aria-hidden="true" />}
             <button type="button" className="search-hit"
-              onMouseEnter={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
-              onFocus={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
+              onMouseEnter={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id], labels: { [h.item.item_id]: h.similarity.toFixed(2) } })}
+              onFocus={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id], labels: { [h.item.item_id]: h.similarity.toFixed(2) } })}
               onClick={() => { const p = points.get(h.item.item_id); if (p) ctx.push({ kind: "item", point: p }); }}>
               <span className={`score ${i === 0 ? "top" : ""}`} aria-label={`similarity ${h.similarity.toFixed(2)}`}>{h.similarity.toFixed(2)}</span>
               <span className="rank-title">{h.item.title ?? h.item.source_id}
@@ -198,11 +203,11 @@ function GapsPage({ ctx }: { ctx: Ctx }) {
       {(["", "coverage", "stale", "bridge"] as (GapKind | "")[]).map((k) => <button key={k || "all"} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}>{k ? KIND_LABEL[k] : "All"}</button>)}
     </div>
     <ErrorLine error={error} />
-    {!table.regions.scanned && <div className="menu-card dim small">Not scanned yet. Scanning runs offline in seconds and keeps your decisions.</div>}
+    {!table.regions.scanned && <div className="empty-state"><LineArt kind="venn" /><span className="dim">Not scanned yet. Scanning runs offline in seconds and keeps your decisions.</span></div>}
     {shown.length > 0 && <div className="result-list" role="group" aria-label="Gaps">
     {shown.map((g) => <button key={g.gap_id} type="button" className="menu-row rank" onClick={() => ctx.push({ kind: "gap", id: g.gap_id })}>
       <span className="score">{g.score.toFixed(2)}</span>
-      <span className="rank-title">{g.label}<span className="dim">{KIND_LABEL[g.kind]} · {verdictLabel(g.verdict?.verdict)}{g.verification ? ` · ${g.verification.matches ? `${g.verification.matches} outside matches` : "no outside match"}` : ""}</span></span>
+      <span className="rank-title">{g.label}<span className="dim">{gapCode(ctx.gaps.indexOf(g))} · {KIND_LABEL[g.kind]} · {verdictLabel(g.verdict?.verdict)}{g.verification ? ` · ${g.verification.matches ? `${g.verification.matches} outside matches` : "no outside match"}` : ""}</span></span>
     </button>)}
     </div>}
     {shown.length > 0 && <div className="row wrap small">

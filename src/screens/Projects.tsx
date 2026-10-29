@@ -1,5 +1,6 @@
 import { fmt, local, type JobInfo, type ProjectInfo } from "../api";
 import plusIcon from "../assets/icons/plus.svg";
+import LineArt from "../LineArt";
 
 export interface Recent { root: string; name: string; collections: number; items: number; models: string[]; warning: string | null; opened: number }
 const KEY = "invectus.recent";
@@ -41,7 +42,7 @@ export default function ProjectsPage({ current, recent, job, onPick, onNew, onOp
       </div>
     </div>
     {blocking && <p className="note">“{blocking.label}” is running; other projects open when it finishes or is cancelled.</p>}
-    {recent.length === 0 && <div className="empty-note">
+    {recent.length === 0 && <div className="empty-note empty-state"><LineArt kind="orbit" />
       <span className="dim">No projects yet. Open an existing .invectus folder, or create one. A project is a folder on this computer holding one dataset, its index and map, and your decisions.</span>
     </div>}
     <ul className="cards">

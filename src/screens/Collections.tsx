@@ -52,7 +52,7 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
   const [consent, setConsent] = useState<string>();
   const [reimported, setReimported] = useState<string>();
 
-  const index = (models: string[] | null) => start(() => api.startIndex(c.collection_id, models));
+  const index = (models: string[] | null, map = false) => start(() => api.startIndex(c.collection_id, models, map));
   const reimport = () => run(async () => {
     const out = await api.reimport(c.collection_id);
     if (out.job) jobs.started(out.job);
@@ -78,7 +78,7 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     {indexingHere && <div className="activity"><div className="small"><b>Indexing</b> with {job!.models.join(", ")}</div><JobProgress job={job!} />
       <button type="button" className="btn small start" onClick={() => api.cancel()}>Cancel</button></div>}
     {lastHere?.state === "failed" && <div className="error stack gap-s"><span>Indexing failed: {lastHere.error}</span>
-      <button type="button" className="btn small start" disabled={busy || isRunning(job)} onClick={() => index(lastHere.models)}>Retry</button></div>}
+      <button type="button" className="btn small start" disabled={busy || isRunning(job)} onClick={() => index(lastHere.models, true)}>Retry</button></div>}
     {lastHere?.state === "cancelled" && <div className="note small">Indexing was cancelled. Finished batches were kept; indexing again resumes where it stopped.</div>}
 
     <table className="table compact">
@@ -97,7 +97,7 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     {plan?.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
 
     <div className="row wrap">
-      {tables.length === 0 && plan && plan.models.length > 0 && <button type="button" className="btn primary" disabled={busy || isRunning(job)} onClick={() => index(null)}>Index with {plan.models.join(", ")}</button>}
+      {tables.length === 0 && plan && plan.models.length > 0 && <button type="button" className="btn primary" disabled={busy || isRunning(job)} onClick={() => index(null, true)}>Index and map with {plan.models.join(", ")}</button>}
       {c.reimportable && <button type="button" className="btn" disabled={busy || isRunning(job)} onClick={reimport}
         title={c.source_path ? `Imports ${c.source_path} again with the same columns and roles` : undefined}>Update from source</button>}
       {tables.some((t) => t.origin === "embedded") && <button type="button" className="btn" onClick={() => { const t = tables[0]; ctx.pickTable(t); ctx.go({ view: "project", tab: "search" }); }}>Search this collection</button>}

@@ -720,8 +720,67 @@ evidence, scope and background status visible, monochrome mission-control look.
 - SPEC §8 asks for a WebGL map coloured by region: the canvas map is monochrome by the
   owner's design direction; regions are circles rather than colours.
 
+## 2026-10-29 — Data-circle UI from the owner's Figma frames (dark)
+
+Owner's frames (Figma JBM9BM0Zo6JHgj7NCjxcRt, node 1214:805) and answers: dataset as a circle,
+empty circle opens a native picker, points as little squares that merge when they overlap,
+clipped with zoom and pan, labels off by default, region outlines on hover, gaps as marks in the
+circle, menus to the right of the circle that swap in place with Back, the old sidebar kept,
+one circle per project, Martian Mono, dark mode only for now.
+
+### Changes
+- **Shell.** Sidebar as in the frames: logo, project search, Projects, Import, Index, Map,
+  Settings, plus the running job. Projects is a card grid with New Project. A project opens
+  the circle with a 414 px menu beside it; Import, Index and Map (sidebar or menu) replace the
+  menu with their page and a Back button; Search, Gaps, gap detail and item detail stack the
+  same way.
+- **Data circle** (`src/DataCircle.tsx`, canvas). Items are 4 px squares at their map
+  positions; squares within one 10 px screen cell merge into one larger square (log-sized,
+  capped inside the cell) that splits as you zoom; clicking a merged square zooms to it,
+  a single one opens the item. Clipped to the circle; wheel zoom, drag pan, reset. Region
+  outlines and names are hidden by default (outline on hover; toggles in Map). The top 12 gaps
+  are rings; a search places an accent square at an estimated position (between its two
+  nearest regions weighted by similarity, else the mean of its nearest items) and says so.
+- **Loading (both A and B).** While a job runs the rim fills as a progress arc with the real
+  phase and counts in the centre; placeholder squares appear in proportion to progress and are
+  labelled as placeholders; when the map arrives they glide to real positions.
+- **Empty and new project.** The empty circle is the add-dataset button; it opens the system's
+  file dialog (`tauri-plugin-dialog`, owner-approved download; CSV/TSV/Parquet filter, or a
+  folder). On the New Project page, picking a dataset creates the project (named after the
+  file unless named) and goes straight to the column step in the menu.
+- **Pipeline.** A fresh import now runs index → map (regions) → gap scan → title calibration
+  in one job, so the circle fills and search has a verdict. Mapping, scanning and calibration
+  failures are reported in the job's report, not fatal (small collections may not form
+  regions); mapping and calibration are skipped when nothing changed and they exist.
+- **Type and colour.** Martian Mono (variable, bundled from `@fontsource-variable`, OFL);
+  tokens from the frames: #121212, #1e1e1e, #f7f3eb, #dedede, #c1c1c1, accent #6edcaa. Icons
+  are the frames' SVGs in `src/assets/icons/`.
+- Removed the standalone Overview, Search, Gaps and Map screens (their behaviour moved into the
+  menu pages and the circle). Batch verification is now "Verify top 5" of the shown gaps.
+
+### Checks (arm64 macOS only)
+- The end-to-end Rust test now imports 240 items and asserts regions, a gap scan and a
+  calibration after the pipeline, besides the earlier re-import, failure and retry steps.
+- Browser checks with the stub backend: Projects grid, New Project → circle click (stubbed
+  dialog) → columns → import → progress arc and placeholders → glide to the map; demo project
+  home menu, search (verdict above rankings, accent query square, top item outlined), Index,
+  Gaps → gap detail, Settings. No console errors.
+- `cargo fmt`, clippy, workspace tests, `npm run build` and the release app build pass.
+
+### Unverified / limitations
+- Not driven in the native window: the real file dialog, drag-and-drop and canvas performance
+  on 591k points are untested by an agent. Merging is per frame over all points (O(n)).
+- Region names come from the LLM labels when present, else c-TF-IDF terms.
+- Light mode is not implemented (owner will design it).
+
+### Decisions and spec conflicts to review
+- SPEC §8 lists a WebGL scatter with colour by region/role/date: the circle is monochrome
+  squares on a canvas, with colour reserved for the search accent.
+- The import pipeline now also maps, scans and calibrates automatically (SPEC §4 lists these
+  as separate user steps).
+
 ## Next
-1. Owner review of the project-centred UI in the native window; native file pickers (Tauri
+1. Owner review of the data-circle UI in the native window, and the light-mode design; native file pickers (Tauri
    dialog plugin, needs approval to download); region LLM labels in gap lists; a job queue.
 2. **Full benchmark and term ablation are complete** (owner-approved read-only copy; results
    above). The model still loses to the baselines. Future tuning needs cached cutoff terms and

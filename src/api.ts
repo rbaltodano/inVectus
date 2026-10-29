@@ -1,6 +1,7 @@
 // Types and calls for the desktop backend (src-tauri/src/lib.rs). Shapes mirror the engine's
 // serialized structs; only the fields the screens read are listed.
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 export const inTauri = "__TAURI_INTERNALS__" in window;
 
@@ -113,7 +114,7 @@ export const api = {
   importCollection: (form: ImportForm) => invoke<ImportOutcome>("import_collection", { form }),
   reimport: (collection: string) => invoke<ImportOutcome>("reimport_collection", { collection }),
   indexPlan: (collection: string) => invoke<IndexPlan>("index_plan", { collection }),
-  startIndex: (collection: string, models: string[] | null) => invoke<JobInfo>("start_index", { collection, models }),
+  startIndex: (collection: string, models: string[] | null, map = false) => invoke<JobInfo>("start_index", { collection, models, map }),
   jobs: () => invoke<{ current: JobInfo | null; history: JobInfo[] }>("jobs"),
   models: () => invoke<ModelInfo[]>("list_models"),
   llms: () => invoke<LlmInfo[]>("list_llms"),
@@ -167,6 +168,14 @@ export const VERDICTS: [string, string][] = [
   ["not_viable", "Not viable"], ["selected", "Selected to work on"],
 ];
 export const verdictLabel = (v: string | undefined) => VERDICTS.find(([id]) => id === v)?.[1].replace(": not decided", "") ?? "Not decided";
+
+/** The system's own file or folder picker (never a web upload form). Returns a path or null. */
+export async function pickSource(folder = false): Promise<string | null> {
+  const r = await openDialog(folder
+    ? { directory: true, multiple: false, title: "Choose a folder of .txt or .md files" }
+    : { directory: false, multiple: false, title: "Choose a dataset", filters: [{ name: "Datasets", extensions: ["csv", "tsv", "parquet", "pq"] }] });
+  return typeof r === "string" ? r : null;
+}
 
 /** Per-viewer conveniences kept in browser storage; the app works without them. */
 export const local = {

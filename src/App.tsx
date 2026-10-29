@@ -1,42 +1,51 @@
-import { useEffect, useState } from "react";
-import { api, inTauri, local, type JobInfo, type ProjectInfo, type TableInfo, type TableRef } from "./api";
-import { JobProgress, JobsProvider, isRunning, jobStateLabel, useJobs } from "./jobs";
-import Home, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
-import Overview from "./screens/Overview";
-import Collections from "./screens/Collections";
-import Search from "./screens/Search";
-import MapView from "./screens/Map";
-import Gaps from "./screens/Gaps";
-import GapDetailView from "./screens/GapDetail";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, inTauri, local, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
+import { JobsProvider, isRunning, useJobs } from "./jobs";
+import DataCircle, { type Marks } from "./DataCircle";
+import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
+import Panel from "./screens/Panel";
 import Settings from "./screens/Settings";
+import searchIcon from "./assets/icons/search.svg";
+import projectsIcon from "./assets/icons/projects.svg";
+import documentIcon from "./assets/icons/document.svg";
+import mapIcon from "./assets/icons/map.svg";
+import settingsIcon from "./assets/icons/settings.svg";
 import "./App.css";
 
-export type Tab = "overview" | "search" | "gaps" | "collections" | "map";
-export type Route =
-  | { view: "home"; mode?: "create" | "open" }
-  | { view: "settings" }
-  | { view: "project"; tab: Tab; gap?: number; region?: number; query?: string; collection?: string; adding?: boolean };
+/** A page of the menu beside the circle; pages stack, and Back pops one. */
+export type Page =
+  | { kind: "home" } | { kind: "search"; query?: string } | { kind: "import"; path?: string }
+  | { kind: "index"; collection?: string } | { kind: "map" } | { kind: "gaps" }
+  | { kind: "gap"; id: number } | { kind: "item"; point: MapPoint };
 
-const TABS: [Tab, string][] = [["overview", "Overview"], ["search", "Search"], ["gaps", "Gaps"], ["collections", "Collections"], ["map", "Map"]];
+export type Route = { view: "projects" } | { view: "new" } | { view: "settings" } | { view: "project" };
 
-/** What every project view gets from the shell. */
+/** Older views navigate with these; `go` turns them into menu pages. */
+type Legacy = { view: "project"; tab: "overview" | "search" | "gaps" | "collections" | "map"; gap?: number; region?: number; query?: string; collection?: string; adding?: boolean };
+
 export interface Ctx {
   project: ProjectInfo;
-  /** The vector space the views work on (a collection embedded with one model), if any. */
   table?: TableInfo;
   tref?: TableRef;
-  go: (r: Route) => void;
+  map?: MapData;
+  gaps: GapView[];
+  go: (r: Route | Legacy) => void;
+  push: (p: Page) => void;
+  back: () => void;
+  setMarks: (m: Marks) => void;
+  reloadGaps: () => Promise<void>;
   refresh: () => Promise<void>;
   setProject: (p: ProjectInfo) => void;
   pickTable: (t: TableInfo) => void;
+  view: { showGaps: boolean; showLabels: boolean; showOutlines: boolean; set: (k: "showGaps" | "showLabels" | "showOutlines", v: boolean) => void; reset: () => void };
 }
 
 export const tableKey = (t: TableInfo) => `${t.collection}\u0000${t.space_id}`;
+const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 
 export default function App() {
   const [project, setProject] = useState<ProjectInfo>();
   const refresh = async () => { try { setProject(await api.info()); } catch { /* no project open */ } };
-  // A finished job changes readiness: reload the open project (its own jobs only change it).
   const onFinished = (j: JobInfo) => { if (j.project) refresh(); };
   return <JobsProvider onFinished={onFinished}>
     <Shell project={project} setProject={setProject} refresh={refresh} />
@@ -44,145 +53,216 @@ export default function App() {
 }
 
 function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void> }) {
-  const [route, setRoute] = useState<Route>({ view: "home" });
-  const [selected, setSelected] = useState<string>();
-  const [version, setVersion] = useState<string>();
-  const [filter, setFilter] = useState("");
+  const [route, setRoute] = useState<Route>({ view: "projects" });
   const [recent, setRecent] = useState<Recent[]>(recentProjects);
-  const [switchError, setSwitchError] = useState<string>();
-  const [switching, setSwitching] = useState<string>();
+  const [stack, setStack] = useState<Page[]>([{ kind: "home" }]);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState<string>();
   const jobs = useJobs();
   const job = jobs.current;
 
-  useEffect(() => { if (inTauri) api.version().then(setVersion).catch(() => undefined); }, []);
   useEffect(() => { if (project) { remember(project); setRecent(recentProjects()); } }, [project]);
-  useEffect(() => { if (project) setSelected(local.get<string | undefined>(`invectus.scope.${project.root}`, undefined)); }, [project?.root]);
 
-  const tables = project?.tables ?? [];
-  const table = tables.find((t) => tableKey(t) === selected) ?? tables.find((t) => t.origin === "embedded") ?? tables[0];
-  const tref = table ? { collection: table.collection, space: table.space_id } : undefined;
-  const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); if (project) local.set(`invectus.scope.${project.root}`, tableKey(t)); };
-
-  const opened = (p: ProjectInfo, created = false) => {
-    setProject(p); setSwitchError(undefined);
-    setRoute({ view: "project", tab: created || p.collections.length === 0 ? "overview" : "search" });
+  const opened = (p: ProjectInfo, first?: Page) => {
+    setProject(p); setError(undefined);
+    setStack(first ? [{ kind: "home" }, first] : [{ kind: "home" }]);
+    setRoute({ view: "project" });
   };
-  const switchTo = async (r: Recent) => {
-    if (project?.root === r.root) { setRoute({ view: "project", tab: "overview" }); return; }
-    setSwitchError(undefined); setSwitching(r.root);
-    try { opened(await api.open(r.root, false)); } catch (e) { setSwitchError(String(e)); } finally { setSwitching(undefined); }
+  const openRecent = async (r: Recent) => {
+    setQuery(""); setError(undefined);
+    if (project?.root === r.root) { setRoute({ view: "project" }); return; }
+    try { opened(await api.open(r.root, false)); } catch (e) { setError(String(e)); }
   };
-  const toggleOffline = async () => {
-    if (!project) return;
-    try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setSwitchError(String(e)); }
+  // Sidebar Import / Index / Map open their menu beside the circle.
+  const openPage = (p: Page) => {
+    if (!project) { setRoute({ view: p.kind === "import" ? "new" : "projects" }); return; }
+    setRoute({ view: "project" });
+    setStack([{ kind: "home" }, p]);
   };
-
-  const ctx: Ctx | undefined = project && { project, table, tref, go: setRoute, refresh, setProject, pickTable };
-  // Alphabetical, so opening a project never moves the list under the pointer.
-  const shown = recent.filter((r) => r.name.toLowerCase().includes(filter.trim().toLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name) || a.root.localeCompare(b.root));
-  // A job in another project blocks switching (the backend refuses); say so before a click fails.
-  const blocking = isRunning(job) && job!.project ? job : undefined;
-  const jobProject = (j: JobInfo) => recent.find((r) => r.root === j.project)?.name ?? j.project?.split("/").pop();
+  const matches = query.trim() ? recent.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 8) : [];
+  const nav = (label: string, icon: string, current: boolean, onClick: () => void) =>
+    <button type="button" className="side-link" aria-current={current ? "page" : undefined} onClick={onClick}>
+      <img src={icon} alt="" aria-hidden="true" /><span>{label}</span></button>;
+  const top = stack[stack.length - 1];
 
   return <div className="shell">
-    <nav aria-label="Projects" className="sidebar">
-      <div className="brand"><span className="brand-mark" aria-hidden="true" /><span>inVectus</span></div>
-      <label className="sr-only" htmlFor="project-filter">Filter projects</label>
-      <input id="project-filter" type="search" className="filter" placeholder="Filter projects" value={filter} onChange={(e) => setFilter(e.target.value)} />
-      <div className="label">Projects</div>
-      <ul className="project-list">
-        {shown.map((r) => <li key={r.root}>
-          <button type="button" className="project-link" aria-current={project?.root === r.root && route.view === "project" ? "page" : undefined}
-            disabled={!!switching || (!!blocking && blocking.project !== r.root)} onClick={() => switchTo(r)} title={r.root}>
-            <span className="dot" aria-hidden="true" data-on={project?.root === r.root} />
-            <span className="clip">{r.name}</span>
-            {switching === r.root && <span className="muted small"> opening…</span>}
-          </button>
-        </li>)}
-        {recent.length === 0 && <li className="muted small pad-s">No projects yet.</li>}
-        {recent.length > 0 && shown.length === 0 && <li className="muted small pad-s">No project matches “{filter}”.</li>}
-      </ul>
-      {blocking && <p className="note small">Switching is paused while “{blocking.label}” runs in {jobProject(blocking)}.</p>}
-      {switchError && <p className="error small" role="alert">{switchError}</p>}
-      <div className="stack gap-s">
-        <button type="button" className="btn block" onClick={() => setRoute({ view: "home", mode: "create" })}>+ New project</button>
-        <button type="button" className="btn block" onClick={() => setRoute({ view: "home", mode: "open" })}>Open existing…</button>
+    <nav aria-label="Main" className="sidebar">
+      <div className="side-top">
+        <div className="logo">inVectus</div>
+        <div className="side-search">
+          <img src={searchIcon} alt="" aria-hidden="true" />
+          <label htmlFor="side-q" className="sr-only">Find a project</label>
+          <input id="side-q" placeholder="SEARCH" value={query} onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && matches[0]) openRecent(matches[0]); if (e.key === "Escape") setQuery(""); }} />
+        </div>
+        {query.trim() && <ul className="side-results" aria-label="Matching projects">
+          {matches.map((r) => <li key={r.root}><button type="button" onClick={() => openRecent(r)}>{r.name}<span>{tilde(r.root)}</span></button></li>)}
+          {matches.length === 0 && <li className="dim small">No project matches.</li>}
+        </ul>}
+        {nav("Projects", projectsIcon, route.view === "projects" || route.view === "new", () => setRoute({ view: "projects" }))}
+        {nav("Import", documentIcon, route.view === "project" && top.kind === "import", () => openPage({ kind: "import" }))}
+        {nav("Index", documentIcon, route.view === "project" && top.kind === "index", () => openPage({ kind: "index" }))}
+        {nav("Map", mapIcon, route.view === "project" && top.kind === "map", () => openPage({ kind: "map" }))}
+        {error && <p className="side-error" role="alert">{error}</p>}
       </div>
-
-      <section aria-label="Background activity" className="activity-box">
-        <div className="label">Activity</div>
-        {!job && <div className="muted small">Idle</div>}
-        {job && <>
-          <div className="small"><b>{job.label}</b></div>
-          <div className="muted small mono">{job.project ? jobProject(job) : "all projects"} · {jobStateLabel(job)}</div>
-          {isRunning(job) && <JobProgress job={job} />}
-          {job.state === "failed" && <div className="error small">{job.error}</div>}
-          {isRunning(job) && job.kind !== "download" && <button type="button" className="btn small" onClick={() => api.cancel()}>Cancel</button>}
-        </>}
-      </section>
-
-      <div className="sidebar-foot">
-        <button type="button" className="nav-link" aria-current={route.view === "settings" ? "page" : undefined} onClick={() => setRoute({ view: "settings" })}>Settings</button>
-        <div className="muted small mono">engine {version ?? "—"}</div>
+      <div className="side-bottom">
+        {job && <JobLine job={job} recent={recent} />}
+        {nav("Settings", settingsIcon, route.view === "settings", () => setRoute({ view: "settings" }))}
       </div>
     </nav>
 
     <main className="main">
-      {!inTauri && <p className="note banner">Browser preview: the engine runs only in the desktop app.</p>}
-      {route.view === "home" && <Home mode={route.mode} current={project} onOpened={opened}
-        recent={recent} onForget={(root) => { forget(root); setRecent(recentProjects()); }} onPick={switchTo} />}
-      {route.view === "settings" && <Settings ctx={ctx} />}
-      {route.view === "project" && ctx && <>
-        <header className="workspace-head">
-          <div className="title-row">
-            <h1>{project!.name}</h1>
-            <span className="muted small mono clip path" title={project!.root}>{project!.root}</span>
-            <div className="push row wrap">
-              {tables.length > 1 && <label className="inline small"><span className="label">Scope</span>
-                <select value={table ? tableKey(table) : ""} onChange={(e) => { const t = tables.find((x) => tableKey(x) === e.target.value); if (t) pickTable(t); }}>
-                  {tables.map((t) => <option key={tableKey(t)} value={tableKey(t)}>{t.collection} · {t.model_key}</option>)}
-                </select></label>}
-              <button type="button" className="pill" aria-pressed={!project!.network_enabled || project!.offline_env} onClick={toggleOffline}
-                title={project!.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network use: model downloads and outside-source checks only"}>
-                {project!.network_enabled && !project!.offline_env ? "Network on" : "Offline"}
-              </button>
-            </div>
-          </div>
-          {project!.warning && <p className="note">{project!.warning}</p>}
-          <nav aria-label="Project views" className="tabs">
-            {TABS.map(([t, label]) => <button key={t} type="button" aria-current={route.tab === t ? "page" : undefined}
-              onClick={() => setRoute({ view: "project", tab: t })}>{label}</button>)}
-          </nav>
-        </header>
-        <div className="content">
-          {route.tab === "overview" && <Overview ctx={ctx} />}
-          {route.tab === "collections" && <Collections ctx={ctx} focus={route.collection} adding={route.adding} />}
-          {route.tab === "search" && <Search ctx={ctx} initial={route.query} />}
-          {route.tab === "map" && <MapView ctx={ctx} focus={route.region} />}
-          {route.tab === "gaps" && route.gap === undefined && <Gaps ctx={ctx} />}
-          {route.tab === "gaps" && route.gap !== undefined && <GapDetailView ctx={ctx} id={route.gap} />}
-        </div>
-      </>}
+      {!inTauri && <p className="banner">Browser preview: the engine runs only in the desktop app.</p>}
+      {route.view === "projects" && <ProjectsPage current={project} recent={recent} job={job}
+        onPick={openRecent} onNew={() => setRoute({ view: "new" })} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
+      {route.view === "new" && <NewProject onCreated={opened} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
+      {route.view === "settings" && <Settings project={project} setProject={setProject} />}
+      {route.view === "project" && project && <Workspace key={project.root} project={project} setProject={setProject} refresh={refresh}
+        stack={stack} setStack={setStack} goRoute={setRoute} />}
     </main>
   </div>;
 }
 
-/** Shown when a view needs something the scope lacks yet; says what and offers the fix. */
+function JobLine({ job, recent }: { job: JobInfo; recent: Recent[] }) {
+  const name = job.project ? recent.find((r) => r.root === job.project)?.name ?? job.project.split("/").pop() : "all projects";
+  const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
+  return <div className="job-line" aria-live="polite">
+    <span>{job.label}</span>
+    <span className="dim">{name} · {job.state === "running" ? `${job.phase ?? "starting"} ${job.total ? `${pct}%` : ""}` : job.state === "completed" ? "done" : job.state}</span>
+    {job.state === "failed" && <span className="err">{job.error}</span>}
+    {isRunning(job) && job.kind !== "download" && <button type="button" className="text-btn" onClick={() => api.cancel()}>Cancel</button>}
+  </div>;
+}
+
+/** New project: name and place on the right; the empty circle picks the dataset. */
+function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?: Page) => void; blocked?: JobInfo }) {
+  const [name, setName] = useState("");
+  const [dir, setDir] = useState("");
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (inTauri) api.defaultDir().then(setDir).catch(() => undefined); }, []);
+  const create = async (source?: string) => {
+    setError(undefined); setBusy(true);
+    try {
+      const stem = source?.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+      const n = name.trim() || stem;
+      if (!n) { setError("Name the project, or pick a dataset to name it after."); return; }
+      const p = await api.open(`${dir.replace(/\/$/, "")}/${n}`, true);
+      onCreated(p, source ? { kind: "import", path: source } : undefined);
+    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+  };
+  const pick = async (folder = false) => {
+    if (blocked) return;
+    const path = await pickSource(folder).catch((e) => { setError(String(e)); return null; });
+    if (path) create(path);
+  };
+  return <>
+    <header className="head"><h1>New project</h1></header>
+    <div className="stage">
+      <DataCircle gaps={[]} marks={{}} showGaps={false} showLabels={false} showOutlines={false} onGap={() => undefined} onItem={() => undefined}
+        empty={{ title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: () => pick(false) }} />
+      <aside className="menu" aria-label="New project">
+        <div className="menu-card stack gap">
+          <label className="field">Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Medical school research topic" /></label>
+          <label className="field">Location<input value={dir} onChange={(e) => setDir(e.target.value)} /></label>
+          <span className="dim small">{name.trim() ? `${tilde(dir.replace(/\/$/, ""))}/${name.trim()}.invectus` : "Everything stays on this computer. Avoid iCloud, Dropbox and OneDrive folders."}</span>
+        </div>
+        <button type="button" className="menu-row" onClick={() => pick(true)} disabled={busy || !!blocked}>Choose a folder instead</button>
+        <button type="button" className="menu-row" onClick={() => create()} disabled={busy || !name.trim() || !!blocked}>Create without data</button>
+        {blocked && <p className="note">“{blocked.label}” is running; a new project can open when it finishes.</p>}
+        {error && <p className="err" role="alert">{error}</p>}
+      </aside>
+    </div>
+  </>;
+}
+
+function Workspace({ project, setProject, refresh, stack, setStack, goRoute }: {
+  project: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void>;
+  stack: Page[]; setStack: (s: Page[] | ((s: Page[]) => Page[])) => void; goRoute: (r: Route) => void;
+}) {
+  const jobs = useJobs();
+  const [selected, setSelected] = useState(() => local.get<string | undefined>(`invectus.scope.${project.root}`, undefined));
+  const [map, setMap] = useState<MapData>();
+  const [gaps, setGaps] = useState<GapView[]>([]);
+  const [marks, setMarks] = useState<Marks>({});
+  const [opts, setOpts] = useState({ showGaps: true, showLabels: false, showOutlines: false });
+  const [resetKey, setResetKey] = useState(0);
+  const [mapError, setMapError] = useState<string>();
+  const [netError, setNetError] = useState<string>();
+
+  const tables = project.tables;
+  const table = tables.find((t) => tableKey(t) === selected) ?? tables.find((t) => t.origin === "embedded" && t.regions) ?? tables.find((t) => t.origin === "embedded") ?? tables[0];
+  const tref = useMemo(() => table ? { collection: table.collection, space: table.space_id } : undefined, [table?.collection, table?.space_id]);
+  const job = jobs.current && jobs.current.project === project.root ? jobs.current : undefined;
+
+  useEffect(() => {
+    setMap(undefined); setMapError(undefined);
+    if (tref && table?.regions) api.map(tref).then(setMap).catch((e) => setMapError(String(e)));
+  }, [tref?.collection, tref?.space, table?.regions?.run_id]);
+  const reloadGaps = async () => { if (tref && table?.regions?.scanned) setGaps((await api.gaps(tref)).gaps); else setGaps([]); };
+  useEffect(() => { reloadGaps().catch(() => setGaps([])); }, [tref?.collection, tref?.space, table?.regions?.run_id, table?.regions?.scanned]);
+
+  const push = (p: Page) => setStack((s) => [...s, p]);
+  const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+  const go = (r: Route | Legacy) => {
+    if (!("tab" in r)) { if (r.view !== "project") goRoute(r); return; }
+    if (r.tab === "overview") setStack([{ kind: "home" }]);
+    else if (r.tab === "search") push({ kind: "search", query: r.query });
+    else if (r.tab === "gaps") push(r.gap !== undefined ? { kind: "gap", id: r.gap } : { kind: "gaps" });
+    else if (r.tab === "collections") push(r.adding ? { kind: "import" } : { kind: "index", collection: r.collection });
+    else if (r.tab === "map") { if (r.region !== undefined) setMarks((m) => ({ ...m, region: r.region })); push({ kind: "map" }); }
+  };
+  const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
+
+  const ctx: Ctx = {
+    project, table, tref, map, gaps, go, push, back, setMarks, reloadGaps, refresh, setProject, pickTable,
+    view: { ...opts, set: (k, v) => setOpts((o) => ({ ...o, [k]: v })), reset: () => setResetKey((k) => k + 1) },
+  };
+  const addData = async () => {
+    const path = await pickSource(false).catch(() => null);
+    if (path) setStack([{ kind: "home" }, { kind: "import", path }]);
+  };
+  const importing = stack[stack.length - 1].kind === "import";
+  const noData = project.collections.length === 0 && !isRunning(job) && !importing;
+  const anyIndex = tables.some((t) => t.origin === "embedded");
+  // A finished job reloads the project, which reloads the map; the circle glides to it.
+  const prevJob = useRef<number>();
+  useEffect(() => { if (job && job.state !== "running" && prevJob.current === job.id) refresh(); prevJob.current = job?.id; }, [job?.state]);
+
+  return <>
+    <header className="head">
+      <div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
+      <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
+        onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
+        title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
+        {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
+    </header>
+    {project.warning && <p className="banner">{project.warning}</p>}
+    {netError && <p className="banner err">{netError}</p>}
+    <div className="stage">
+      <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey}
+        showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
+        empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
+        idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Index" : map ? undefined : "Loading map…"}
+        onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
+      <Panel ctx={ctx} stack={stack} job={job} />
+    </div>
+  </>;
+}
+
+/** Shown when a page needs something the scope lacks yet; says what and offers the fix. */
 export function Needs({ title, body, action, onAction, busy }: { title: string; body: string; action?: string; onAction?: () => void; busy?: boolean }) {
-  return <section className="panel empty">
-    <span className="ring" aria-hidden="true" />
-    <h2>{title}</h2>
-    <p className="muted">{body}</p>
-    {action && <button type="button" className="btn primary" disabled={busy} onClick={onAction}>{action}</button>}
-  </section>;
+  return <div className="menu-card stack gap-s">
+    <b>{title}</b>
+    <span className="dim small">{body}</span>
+    {action && <button type="button" className="btn primary start" disabled={busy} onClick={onAction}>{action}</button>}
+  </div>;
 }
 
 export function ErrorLine({ error }: { error?: string }) {
-  return error ? <p className="error" role="alert">{error}</p> : null;
+  return error ? <p className="err" role="alert">{error}</p> : null;
 }
 
-/** Run an async action with an error slot and a busy flag. */
 export function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -193,7 +273,6 @@ export function useAction() {
   return { busy, error, setError, run };
 }
 
-/** Start a backend job and show it at once. */
 export function useStartJob() {
   const jobs = useJobs();
   const action = useAction();

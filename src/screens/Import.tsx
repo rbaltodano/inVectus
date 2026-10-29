@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { api, fmt, inTauri, ROLES, type ImportForm, type ImportOutcome, type Preview, type Role, type SourceInfo } from "../api";
+import { api, fmt, inTauri, pickSource, ROLES, type ImportForm, type ImportOutcome, type Preview, type Role, type SourceInfo } from "../api";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
@@ -20,10 +20,10 @@ function guess(columns: string[], names: string[]) {
 
 /** Add or update a collection: source → columns → roles → preview → import, then indexing
  *  starts by itself in the backend. */
-export default function Import({ ctx, onDone, onCancel }: { ctx: Ctx; onDone: (collection: string) => void; onCancel: () => void }) {
+export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ctx; onDone: (collection: string) => void; onCancel: () => void; initialPath?: string }) {
   const jobs = useJobs();
   const [step, setStep] = useState<Step>(0);
-  const [collection, setCollection] = useState(ctx.project.collections.length ? "" : "papers");
+  const [collection, setCollection] = useState("");
   const [path, setPath] = useState("");
   const [source, setSource] = useState<SourceInfo>();
   const [map, setMap] = useState({ text: "", title: "", id: "", date: "", url: "" });
@@ -51,7 +51,14 @@ export default function Import({ ctx, onDone, onCancel }: { ctx: Ctx; onDone: (c
     });
     setRoleColumn(guess(c, ["pub_types", "publication_types", "type", "kind", "role"]));
     if (!collection) setCollection(p.split("/").pop()!.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase());
+    return true;
   });
+  // A dataset picked from the circle goes straight to the column step.
+  useEffect(() => { if (initialPath) look(initialPath).then((ok) => { if (ok) setStep(1); }); }, [initialPath]);
+  const choose = async (folder: boolean) => {
+    const p = await pickSource(folder).catch((e) => { setError(String(e)); return null; });
+    if (p) look(p);
+  };
 
   // Paths of files dropped on the window (Tauri's native drag and drop).
   useEffect(() => {
@@ -133,6 +140,10 @@ export default function Import({ ctx, onDone, onCancel }: { ctx: Ctx; onDone: (c
         <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
         <div className="strong big">Drop a file or folder here</div>
         <div className="muted">CSV or TSV, Parquet, or a folder of .txt / .md files</div>
+        <div className="row wrap center">
+          <button type="button" className="btn primary" disabled={busy} onClick={() => choose(false)}>Choose file…</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => choose(true)}>Choose folder…</button>
+        </div>
         <div className="row wrap center w-full">
           <input aria-label="Path to a file or folder" className="grow" value={path} onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && path.trim() && look(path.trim())} placeholder="/Users/you/data/papers.csv" />
@@ -169,14 +180,14 @@ export default function Import({ ctx, onDone, onCancel }: { ctx: Ctx; onDone: (c
           <div className="muted small">Only Text is required. We guessed from the column names.</div>
           <div className="scroll-x">
             <div className="mapping">
-              <div className="th">Field</div><div className="th">Column</div><div className="th">Sample from row 1</div>
+              <div className="th">Field</div><div className="th">Column</div><div className="th sample">Sample from row 1</div>
               {([["text", "Text"], ["title", "Title"], ["id", "ID"], ["date", "Date"], ["url", "URL"]] as const).map(([k, label]) => <Fragment key={k}>
                 <label htmlFor={`m-${k}`} className="strong">{label}{k === "text" && <span className="req"> *</span>}</label>
                 <select id={`m-${k}`} value={map[k]} onChange={(e) => setMap({ ...map, [k]: e.target.value })}>
                   <option value="">{k === "text" ? "Choose a column" : k === "id" ? "Row number" : "None"}</option>
                   {source.columns.map((c) => <option key={c}>{c}</option>)}
                 </select>
-                <div className="muted clip">{map[k] ? sampleOf(map[k]) || "(empty)" : ""}</div>
+                <div className="muted clip sample">{map[k] ? sampleOf(map[k]) || "(empty)" : ""}</div>
               </Fragment>)}
             </div>
           </div>

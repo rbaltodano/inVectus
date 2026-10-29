@@ -469,6 +469,7 @@ async fn import_then_index(
             &board,
             collection,
             plan.models.clone(),
+            true,
         ) {
             Ok(j) => (Some(j), None),
             Err(e) => (None, Some(e)),
@@ -699,12 +700,17 @@ fn job_project(session: &Shared) -> CmdResult<Project> {
     s.project.try_clone().map_err(err)
 }
 
+/// Index a collection with `models`; with `map`, then lay it out (regions, for the map) and
+/// fit a title-based calibration on the first model's space, so a fresh import ends ready to
+/// explore and search. Mapping is skipped when nothing changed and regions already exist; a
+/// calibration failure (e.g. too few titled items) is reported, not fatal.
 fn start_index_job(
     emit: &Emit,
     session: &Shared,
     board: &SharedBoard,
     collection: String,
     models: Vec<String>,
+    map: bool,
 ) -> CmdResult<JobInfo> {
     let project = job_project(session)?;
     project.store.require_collection(&collection).map_err(err)?;
@@ -720,6 +726,7 @@ fn start_index_job(
         board,
         info,
         Box::new(move |cancel, tick| {
+            let mut project = project;
             let vectors = VectorStore::open(&project)?;
             let store = ModelStore::new(ModelStore::default_root()?);
             let mut reports = Vec::new();
@@ -738,10 +745,81 @@ fn start_index_job(
                 let cancelled = report.cancelled;
                 reports.push(report);
                 if cancelled {
-                    return Ok((serde_json::to_value(&reports)?, true));
+                    return Ok((serde_json::json!({ "embed": reports }), true));
                 }
             }
-            Ok((serde_json::to_value(&reports)?, false))
+            let mut out = serde_json::json!({ "embed": reports });
+            let Some(first) = reports.first().filter(|_| map) else {
+                return Ok((out, false));
+            };
+            let table = select_table(&project, &collection, Some(&first.space_id))?;
+            let changed = reports
+                .iter()
+                .any(|r| r.embedded > 0 || r.removed_stale > 0);
+            let has_regions = project
+                .store
+                .latest_region_run(&table.collection_id, &table.space_id)?
+                .is_some();
+            if changed || !has_regions {
+                // Small or uniform collections may not form regions; the index still stands.
+                match run_regions(
+                    &mut project,
+                    &vectors,
+                    &table,
+                    &RegionOptions::default(),
+                    cancel,
+                    &mut |p| tick(&format!("Mapping: {}", p.phase), p.done, p.total),
+                ) {
+                    Ok(r) if r.cancelled => return Ok((out, true)),
+                    Ok(r) => {
+                        out["regions"] =
+                            serde_json::json!({ "fine": r.fine, "seconds": r.seconds_total });
+                        // Score gaps on the new regions (seconds, offline) so the map shows them.
+                        out["gaps"] = match invectus_gaps::scan(
+                            &mut project,
+                            &vectors,
+                            &table,
+                            &ScanOptions::default(),
+                        ) {
+                            Ok(g) => serde_json::json!({ "found": g.gaps.len() }),
+                            Err(e) => serde_json::json!({ "skipped": format!("{e:#}") }),
+                        };
+                    }
+                    Err(e) => out["regions"] = serde_json::json!({ "skipped": format!("{e:#}") }),
+                }
+            }
+            let calibrated = project
+                .store
+                .latest_calibration(&table.collection_id, &table.space_id)?
+                .is_some();
+            if changed || !calibrated {
+                let cal = query_encoder(
+                    &store,
+                    &table.identity,
+                    &EmbedOptions {
+                        threads: 4,
+                        batch_size: 1,
+                    },
+                )
+                .and_then(|mut enc| {
+                    run_calibration(
+                        &project,
+                        &vectors,
+                        &table,
+                        &mut enc,
+                        None,
+                        &CalibrateOptions::default(),
+                        cancel,
+                        &mut |p| tick("Calibrating", p.done, p.total),
+                    )
+                });
+                out["calibration"] = match cal {
+                    Ok(c) if c.cancelled => return Ok((out, true)),
+                    Ok(c) => serde_json::json!({ "method": c.method }),
+                    Err(e) => serde_json::json!({ "skipped": format!("{e:#}") }),
+                };
+            }
+            Ok((out, false))
         }),
     )
 }
@@ -754,6 +832,8 @@ fn start_index(
     state: State<AppState>,
     collection: String,
     models: Option<Vec<String>>,
+    // Also map and calibrate afterwards (the import pipeline; used by Retry).
+    map: Option<bool>,
 ) -> CmdResult<JobInfo> {
     let models = match models {
         Some(m) if !m.is_empty() => m,
@@ -782,6 +862,7 @@ fn start_index(
         &state.board,
         collection,
         models,
+        map.unwrap_or(false),
     )
 }
 
@@ -1258,6 +1339,7 @@ fn open_url(url: String) -> CmdResult<()> {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             engine_version,
@@ -1340,10 +1422,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let csv = dir.path().join("notes.csv");
         let mut rows = String::from("id,title,text\n");
-        for i in 0..30 {
+        let topics = [
+            "retinal detachment surgery outcomes",
+            "glaucoma intraocular pressure medication",
+            "myopia progression in children",
+            "corneal transplant rejection",
+        ];
+        for i in 0..240 {
+            let t = topics[i % 4];
             rows.push_str(&format!(
-                "{i},Note {i},Observation number {i} about topic {}\n",
-                i % 4
+                "{i},Study {i} on {t},Patients in cohort {i} were followed for {t}; case {i}.\n"
             ));
         }
         std::fs::write(&csv, rows).unwrap();
@@ -1379,12 +1467,34 @@ mod tests {
         let plan = import();
         assert_eq!(plan.models, vec![registry::DEFAULT_MODEL.to_string()]);
         assert!(status().is_empty(), "nothing indexed yet");
-        start_index_job(&emit, &session, &board, "notes".into(), plan.models.clone()).unwrap();
+        start_index_job(
+            &emit,
+            &session,
+            &board,
+            "notes".into(),
+            plan.models.clone(),
+            true,
+        )
+        .unwrap();
         // The session keeps answering while the job runs on its own connection.
         assert!(session.try_lock().is_ok());
         let done = wait_for_job(&board);
         assert_eq!(done.state, "completed", "{:?}", done.error);
-        assert_eq!(status(), vec![("indexed".to_string(), 30)]);
+        assert_eq!(status(), vec![("indexed".to_string(), 240)]);
+        let report = done.report.clone().unwrap();
+        assert!(
+            report["regions"]["fine"].as_u64().unwrap_or(0) > 0,
+            "{report}"
+        );
+        assert!(report["calibration"].is_object(), "{report}");
+        {
+            let g = session.lock().unwrap();
+            let i = info(g.as_ref().unwrap(), &board).unwrap();
+            assert!(
+                i.tables[0].regions.is_some(),
+                "regions are recorded for the map"
+            );
+        }
         let root = session
             .lock()
             .unwrap()
@@ -1406,9 +1516,17 @@ mod tests {
         // the next run, which embeds nothing new (resumable by input hash).
         let plan = import();
         assert_eq!(status()[0].0, "outdated");
-        start_index_job(&emit, &session, &board, "notes".into(), plan.models.clone()).unwrap();
+        start_index_job(
+            &emit,
+            &session,
+            &board,
+            "notes".into(),
+            plan.models.clone(),
+            true,
+        )
+        .unwrap();
         let done = wait_for_job(&board);
-        assert_eq!(done.report.as_ref().unwrap()[0]["embedded"], 0);
+        assert_eq!(done.report.as_ref().unwrap()["embed"][0]["embedded"], 0);
         assert_eq!(status()[0].0, "indexed");
 
         // A failing job is reported with its error, and a retry works.
@@ -1418,12 +1536,13 @@ mod tests {
             &board,
             "notes".into(),
             vec!["no-such-model".into()],
+            false,
         )
         .unwrap();
         let failed = wait_for_job(&board);
         assert_eq!(failed.state, "failed");
         assert!(failed.error.unwrap().contains("no-such-model"));
-        start_index_job(&emit, &session, &board, "notes".into(), plan.models).unwrap();
+        start_index_job(&emit, &session, &board, "notes".into(), plan.models, false).unwrap();
         assert_eq!(wait_for_job(&board).state, "completed");
     }
 

@@ -30,6 +30,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
     load.run(async () => {
       const g = await api.gap(tref, id);
       setGap(g); setVerdict(g.verdict?.verdict ?? "open"); setNote(g.verdict?.note ?? "");
+      ctx.setMarks({ region: g.region_a });
       setDescribed(undefined); setVerification(undefined);
     });
   }, [id, tref.collection, tref.space]);
@@ -50,7 +51,6 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const saveVerdict = () => save.run(async () => { await api.setVerdict(tref, id, verdict, note); setSaved(true); setTimeout(() => setSaved(false), 2000); });
 
   return <div className="page wide">
-    <button type="button" className="link start" onClick={() => ctx.go({ view: "project", tab: "gaps" })}>← All gaps</button>
     <div className="title-row">
       <h2 className="h1">{gap.label}</h2>
       <span className="tag">{KIND_LABEL[gap.kind]}</span>
@@ -82,7 +82,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           <div className="timeline" role="img" aria-label="Demand and coverage items per year">
             {gap.timeline.map((y, i) => <div key={y.year} className="year" title={`${y.year}: ${y.demand} demand, ${y.coverage} coverage`}>
               <div className="bars"><div className="demand" style={{ height: `${(y.demand / maxYear) * 100}%` }} /><div className="coverage" style={{ height: `${(y.coverage / maxYear) * 100}%` }} /></div>
-              <span>{i % every === 0 ? y.year : "\u00a0"}</span>
+              <span>{i % every === 0 ? `'${String(y.year).slice(2)}` : "\u00a0"}</span>
             </div>)}
           </div>
         </section>}

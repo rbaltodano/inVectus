@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type Weights } from "../api";
-import { ErrorLine, useAction, useStartJob, type Ctx } from "../App";
+import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type ProjectInfo, type Weights } from "../api";
+import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
-import { weightsKey } from "./Gaps";
+
+/** Gap-score weights per project, kept on this computer; scans read them. */
+export const weightsKey = (root: string) => `invectus.weights.${root}`;
 
 const WEIGHT_LABEL: [keyof Weights, string][] = [
   ["coverage_ratio", "Demand per coverage item"], ["demand_since", "Demand since the last coverage"], ["momentum", "Momentum"],
   ["stale_share", "Share of demand newer than the coverage"], ["bridge", "Bridges: closeness with little in between"], ["saturation", "Recent coverage penalty"],
 ];
 
-export default function Settings({ ctx }: { ctx?: Ctx }) {
+export default function Settings({ project, setProject }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [llms, setLlms] = useState<LlmInfo[]>([]);
   const [defaults, setDefaults] = useState<Weights>();
@@ -18,7 +20,6 @@ export default function Settings({ ctx }: { ctx?: Ctx }) {
   const [consent, setConsent] = useState<ModelInfo>();
   const jobs = useStartJob();
   const { busy, error, run } = useAction();
-  const project = ctx?.project;
   const running = isRunning(jobs.current);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function Settings({ ctx }: { ctx?: Ctx }) {
   const llmReady = llms.some((l) => l.installed);
   const changed = weights && defaults && JSON.stringify(weights) !== JSON.stringify(defaults);
 
-  return <div className="page narrow">
+  return <div className="page">
     <h1>Settings</h1>
     <ErrorLine error={error ?? jobs.error} />
 
@@ -68,7 +69,7 @@ export default function Settings({ ctx }: { ctx?: Ctx }) {
       <h2 id="s-net">Network</h2>
       <label className="check top">
         <input type="checkbox" checked={!project.network_enabled} disabled={busy}
-          onChange={() => ctx && run(async () => ctx.setProject(await api.setNetwork(!project.network_enabled)))} />
+          onChange={() => run(async () => setProject(await api.setNetwork(!project.network_enabled)))} />
         <span><b>Offline</b><div className="muted small">Blocks model downloads and outside-source checks for this project. Import, indexing, search, map, gaps and descriptions always run offline.</div></span>
       </label>
       {project.offline_env && <div className="note small">INVECTUS_OFFLINE is set: every network use is refused whatever this switch says.</div>}

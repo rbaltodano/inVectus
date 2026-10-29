@@ -12,7 +12,7 @@ import { weightsKey } from "./Settings";
 import backIcon from "../assets/icons/back.svg";
 import filterChevron from "../assets/figma/search-filter-chevron.svg?no-inline";
 import resultDivider from "../assets/figma/search-result-divider.svg?no-inline";
-import { SnakeLoader } from "../IndexingIndicator";
+import { MatrixLoader } from "../IndexingIndicator";
 
 export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: Page[]; active: boolean; tabId: string }) {
   const page = stack[stack.length - 1];
@@ -96,7 +96,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
     <form role="search" className="search-command" onSubmit={go}>
       <label htmlFor="panel-q" className="sr-only">Describe an idea</label>
       <input ref={queryInput} id="panel-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="/ to search" />
-      {busy && <span role="status" aria-label="Searching"><SnakeLoader /></span>}
+      {busy && <span role="status" aria-label="Searching"><MatrixLoader /></span>}
       <label className="search-scope">
         <span className="sr-only">Compare with</span>
         <select value={scope} disabled={busy} onChange={(e) => {

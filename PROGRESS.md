@@ -1067,3 +1067,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   surrounding highlight. Other controls retain their existing keyboard focus indicators.
 - Frontend TypeScript/Vite build and diff checks passed. No native rebuild or relaunch,
   as requested; visual review awaits the owner's next launch.
+
+## 2026-10-29 — Clockwise 3×2 loading matrix
+
+- Changed the shared loader to three columns and two rows, looping clockwise across the
+  top row and back across the bottom (row-major indices 0,1,2,5,4,3). Renamed the former
+  snake-specific component/styles to MatrixLoader; cell count derives from the traversal.
+- Kept the 120 ms step interval and 500 ms fade to half opacity; adjusted the cycle to
+  720 ms. Reduced-motion fallback remains. Updated the traversal regression test.
+- All 14 UI tests, frontend TypeScript/Vite build and diff checks passed. No native rebuild
+  or relaunch; live animation review remains pending the owner's next launch.

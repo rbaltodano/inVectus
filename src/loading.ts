@@ -1,7 +1,7 @@
 import type { JobInfo } from "./api";
 
-// Row-major cell indices: down column one, up column two, down column three.
-export const SNAKE_ORDER = [0, 3, 6, 7, 4, 1, 2, 5, 8] as const;
+// Row-major indices in a 3-column, 2-row grid, traversed clockwise.
+export const LOADER_ORDER = [0, 1, 2, 5, 4, 3] as const;
 export const INDEXING_PREVIEW_PERCENT = 84;
 
 export function indexingProgress(job: JobInfo | undefined, preview: boolean) {

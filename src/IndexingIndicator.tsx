@@ -1,12 +1,12 @@
 import type { CSSProperties } from "react";
 import type { JobInfo } from "./api";
-import { indexingProgress, SNAKE_ORDER } from "./loading";
+import { indexingProgress, LOADER_ORDER } from "./loading";
 
-export function SnakeLoader() {
-  return <span className="snake-loader" aria-hidden="true">
-    {Array.from({ length: 9 }, (_, cell) => <span key={cell} className="snake-cell"
-      data-step={SNAKE_ORDER.indexOf(cell as typeof SNAKE_ORDER[number])}
-      style={{ "--snake-step": SNAKE_ORDER.indexOf(cell as typeof SNAKE_ORDER[number]) } as CSSProperties} />)}
+export function MatrixLoader() {
+  return <span className="matrix-loader" aria-hidden="true">
+    {Array.from({ length: LOADER_ORDER.length }, (_, cell) => <span key={cell} className="matrix-cell"
+      data-step={LOADER_ORDER.indexOf(cell as typeof LOADER_ORDER[number])}
+      style={{ "--matrix-step": LOADER_ORDER.indexOf(cell as typeof LOADER_ORDER[number]) } as CSSProperties} />)}
   </span>;
 }
 
@@ -15,7 +15,7 @@ export default function IndexingIndicator({ job, preview = false }: { job?: JobI
   if (!progress) return null;
   const { percent, label } = progress;
   return <div className="indexing-indicator" title={label}>
-    <span className="indexing-percent"><SnakeLoader /><span>{percent === undefined ? "—" : `${percent}%`}</span></span>
+    <span className="indexing-percent"><MatrixLoader /><span>{percent === undefined ? "—" : `${percent}%`}</span></span>
     <div className={`indexing-bar ${percent === undefined ? "indeterminate" : ""}`} role="progressbar"
       aria-label={label} aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
       <span style={{ width: percent === undefined ? "100%" : `${percent}%` }} />

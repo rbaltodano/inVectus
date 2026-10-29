@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SNAKE_ORDER, indexingProgress } from "../src/loading.ts";
+import { LOADER_ORDER, indexingProgress } from "../src/loading.ts";
 import type { JobInfo } from "../src/api.ts";
 
 const job = (overrides: Partial<JobInfo> = {}): JobInfo => ({
@@ -9,9 +9,9 @@ const job = (overrides: Partial<JobInfo> = {}): JobInfo => ({
   error: null, report: null, started_ms: 0, finished_ms: null, ...overrides,
 });
 
-test("snake visits every square down, up, then down the columns", () => {
-  assert.deepEqual(SNAKE_ORDER, [0, 3, 6, 7, 4, 1, 2, 5, 8]);
-  assert.equal(new Set(SNAKE_ORDER).size, 9);
+test("loader loops clockwise around all six squares", () => {
+  assert.deepEqual(LOADER_ORDER, [0, 1, 2, 5, 4, 3]);
+  assert.equal(new Set(LOADER_ORDER).size, 6);
 });
 
 test("preview is visible when idle without claiming an actual job", () => {

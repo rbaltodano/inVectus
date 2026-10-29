@@ -1164,8 +1164,11 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Explicitly set plain-list items (including Central items) to line-height 1.5, matching
   the existing root default. Replaced the Back button's small SVG image with a 16 px
   inline left arrow that inherits the button color, retaining its 8 px label spacing.
-- Frontend TypeScript/Vite build and diff checks passed. No native rebuild or relaunch;
-  visual review awaits the next launch. No GitHub CI dispatched.
+- Frontend TypeScript/Vite build and diff checks passed. macOS release rebuild passed
+  with the existing upstream Apple __eh_frame linker warning; relaunched the rebuilt app
+  with the dev model store and confirmed its process running. This also includes the
+  pending taller 2×3 loader. Visual review remains with the owner; Windows/Linux unverified.
+  No GitHub CI dispatched.
 
 ## 2026-10-29 — Taller 2×3 loading matrix
 

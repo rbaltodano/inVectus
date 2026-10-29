@@ -828,6 +828,21 @@ one circle per project, Martian Mono, dark mode only for now.
 - Browser check: bars and meters measured mid-animation and settled (meters staggered, first
   year bar at 1.011× then 1.0); build passes; desktop app rebuilt and relaunched.
 
+## 2026-10-29 — Panel polish: no tab scrollbar, flicker-in marks, page crossfade
+
+- Removed the vertical scrollbar on the tab row: the active-tab underline sat 1 px below the
+  row, which overflowed a scrolling container; it now sits inside and the row never scrolls
+  vertically.
+- Accent marks on the circle (QUERY crosshair, result ×, green region ring) join the dot
+  flicker, so they flicker in whenever they reappear, e.g. on returning to Search.
+- Search: placeholder "/ to Search"; the line drawing in the empty state is gone.
+- Page changes inside the working panel (e.g. a gap opened from Gaps, and Back) fade the old
+  page out (150 ms), swap it and fade the new one in (220 ms), scrolled to the top. Visited pages
+  stay mounted, so search results and filters survive. Off with reduced motion.
+- Browser check with the stub backend: tab row 0 px scrollbar, placeholder text, crossfade class
+  sequence in → out → in with the detail swapped in; marks present after returning to Search.
+  Build passes; desktop app rebuilt and relaunched.
+
 ## Next
 1. Agent interface, roadmap A1–A3 in [docs/target-product.md](docs/target-product.md): shared
    orchestration crate, `invectus mcp` read tools, then write tools with single-writer handling.

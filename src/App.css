@@ -450,11 +450,12 @@ code, .path, .mono { font-family: var(--mono); }
 /* Working panel: one open surface; tabs are coded labels with a tick under the active one. */
 .project-console { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
 .project-toolbar { border-bottom: 1px solid var(--line); padding: 0 8px; }
-.project-tabs { gap: 0; }
+.project-tabs { gap: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.project-tabs::-webkit-scrollbar { display: none; }
 .project-tabs button { position: relative; padding: 16px 14px 14px; font-family: var(--sans); font-size: 13px; color: var(--dim); background: none !important; }
 .project-tabs button .tab-code { margin-right: 8px; color: var(--dim); opacity: 0.7; letter-spacing: 0.08em; }
 .project-tabs button[aria-selected="true"] { color: var(--ink); font-weight: 400; }
-.project-tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 1px; background: var(--ink); }
+.project-tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 1px; background: var(--ink); }
 .indexing-indicator { border-color: var(--line); font-family: var(--mono); font-size: 10.5px; }
 .indexing-bar { height: 2px; width: 44px; background: var(--line-2); }
 
@@ -536,3 +537,10 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 @media (prefers-reduced-motion: reduce) {
   .term .meter > div, .timeline .bars div, .timeline .year > span { animation: none; }
 }
+
+/* Page changes inside the working panel: fade the old page out, then the new one in. */
+.page-swap { display: flex; flex-direction: column; gap: inherit; }
+.page-swap.out { opacity: 0; transition: opacity 150ms ease-in; }
+.page-swap.in { animation: page-in 220ms ease-out both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .page-swap.out { transition: none; } .page-swap.in { animation: none; } }

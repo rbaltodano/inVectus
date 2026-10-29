@@ -16,21 +16,38 @@ import filterChevron from "../assets/figma/search-filter-chevron.svg?no-inline";
 import resultDivider from "../assets/figma/search-result-divider.svg?no-inline";
 import { MatrixLoader } from "../IndexingIndicator";
 
+const pageKey = (p: Page) => p.kind === "gap" ? `gap:${p.id}` : p.kind === "item" ? `item:${p.point.item_id}` : p.kind;
+const SWAP_OUT_MS = 150;
+
 export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: Page[]; active: boolean; tabId: string }) {
   const page = stack[stack.length - 1];
+  // Changing page fades the current content out, swaps it, then fades the new page in.
+  const [shown, setShown] = useState(page);
+  const [phase, setPhase] = useState<"in" | "out">("in");
+  const scroller = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (pageKey(page) === pageKey(shown)) { setShown(page); return; }
+    const swap = () => { setShown(page); setPhase("in"); if (scroller.current) scroller.current.scrollTop = 0; };
+    if (!active || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { swap(); return; }
+    setPhase("out");
+    const t = setTimeout(swap, SWAP_OUT_MS);
+    return () => clearTimeout(t);
+  }, [pageKey(page), active]);
   const searchPage = stack.find((p): p is Extract<Page, { kind: "search" }> => p.kind === "search");
   // Marks on the circle belong to the page that set them.
   useEffect(() => { if (page.kind !== "search" && page.kind !== "item" && page.kind !== "gap") ctx.setMarks({}); }, [page.kind]);
-  return <aside className={`menu ${page.kind === "search" ? "search-menu" : ""}`} role="tabpanel" id={`panel-${tabId}`} aria-labelledby={`tab-${tabId}`} hidden={!active} tabIndex={0}>
-    {stack.length > 1 && <button type="button" className="back" onClick={ctx.back}><img src={backIcon} alt="" aria-hidden="true" />Back</button>}
-    {searchPage && <div className="stack gap-s" hidden={page.kind !== "search"}>
-      <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && page.kind === "search"} />
+  return <aside ref={scroller} className={`menu ${shown.kind === "search" ? "search-menu" : ""}`} role="tabpanel" id={`panel-${tabId}`} aria-labelledby={`tab-${tabId}`} hidden={!active} tabIndex={0}>
+    <div className={`page-swap ${phase}`}>
+    {stack.length > 1 && shown.kind !== "search" && <button type="button" className="back" onClick={ctx.back}><img src={backIcon} alt="" aria-hidden="true" />Back</button>}
+    {searchPage && <div className="stack gap-s" hidden={shown.kind !== "search"}>
+      <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && shown.kind === "search"} />
     </div>}
-    {page.kind === "import" && <Import ctx={ctx} initialPath={page.path} onCancel={ctx.back} onDone={() => ctx.back()} />}
-    {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={page.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
-    {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={page.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} /></div>}
-    {page.kind === "gap" && <GapDetailView ctx={ctx} id={page.id} />}
-    {page.kind === "item" && <ItemPage ctx={ctx} page={page} />}
+    {shown.kind === "import" && <Import ctx={ctx} initialPath={shown.path} onCancel={ctx.back} onDone={() => ctx.back()} />}
+    {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={shown.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
+    {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={shown.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} /></div>}
+    {shown.kind === "gap" && <GapDetailView ctx={ctx} id={shown.id} />}
+    {shown.kind === "item" && <ItemPage ctx={ctx} page={shown} />}
+    </div>
   </aside>;
 }
 
@@ -98,7 +115,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
   return <div className="search-page" aria-busy={busy}>
     <form role="search" className="search-command" onSubmit={go}>
       <label htmlFor="panel-q" className="sr-only">Describe an idea</label>
-      <input ref={queryInput} id="panel-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="/ to search" />
+      <input ref={queryInput} id="panel-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="/ to Search" />
       {busy && <span role="status" aria-label="Searching"><MatrixLoader /></span>}
       <label className="search-scope">
         <span className="sr-only">Compare with</span>
@@ -116,7 +133,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
     </form>
     <div className="search-content">
       <ErrorLine error={error} />
-      {!result && !busy && <div className="empty-state"><LineArt kind="rings" />
+      {!result && !busy && <div className="empty-state">
         <span className="dim">Describe an idea. inVectus compares it with every item in “{table.collection}” and says whether something close already exists there.</span></div>}
       {assessment && <div className="search-assessment" aria-live="polite">
         <span className={`verdict ${check!.calibration.stale || !check!.search.hits.length ? "unassessed" : check!.verdict}`}>{assessment.label}</span>

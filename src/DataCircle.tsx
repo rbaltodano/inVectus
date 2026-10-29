@@ -41,6 +41,11 @@ const ACCENT = "#6edcaa";
 const SINGLE = 4;         // one item, in screen px
 const LABEL_FONT = `500 9.5px "Martian Mono Variable", ui-monospace, monospace`;
 const white = (a: number) => `rgba(255, 255, 255, ${a})`;
+const markKey = {
+  query: (q: { x: number; y: number }) => `mark:query:${q.x}:${q.y}`,
+  item: (id: number) => `mark:item:${id}`,
+  region: (id: number) => `mark:region:${id}`,
+};
 /** A gap's code, shared by the map and the gap list (rank by score, 1-based). */
 export const gapCode = (rank: number) => `G-${String(rank + 1).padStart(2, "0")}`;
 const MERGED_MAX = 11;    // the largest merged square
@@ -208,8 +213,12 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   useEffect(() => {
     const keys = renderedCells.map((cell) => `item:${data?.run.run_id}:${cell.first.item_id}`);
     if (showPlaceholders) for (let i = 0; i < placeholderCount; i++) keys.push(`placeholder:${i}`);
+    // Accent marks flicker in like the dots whenever they (re)appear, e.g. back on Search.
+    if (marks.query) keys.push(markKey.query(marks.query));
+    for (const id of marks.items ?? []) keys.push(markKey.item(id));
+    if (marks.region !== undefined) keys.push(markKey.region(marks.region));
     flicker.sync(keys, performance.now());
-  }, [renderedCells, showPlaceholders, placeholderCount, data?.run.run_id, flicker]);
+  }, [renderedCells, showPlaceholders, placeholderCount, data?.run.run_id, flicker, marks]);
 
   useEffect(() => {
     const c = canvas.current;
@@ -238,7 +247,9 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       const r = fine.get(id); if (!r) continue;
       const [x, y] = toScreen(r.x, r.y);
       g.strokeStyle = id === marks.region ? ACCENT : "rgba(238, 234, 228, 0.45)";
+      g.globalAlpha = id === marks.region ? opacity(markKey.region(id)) : 1;
       g.beginPath(); g.arc(x, y, Math.max(6, r.radius * fit.k * view.s), 0, Math.PI * 2); g.stroke();
+      g.globalAlpha = 1;
     }
     g.setLineDash([]);
 
@@ -272,10 +283,12 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         g.strokeStyle = ACCENT; g.fillStyle = ACCENT; g.lineWidth = 1.25; g.font = LABEL_FONT; g.textBaseline = "middle";
         for (const p of data?.points ?? []) if (hl.has(p.item_id)) {
           const [x, y] = toScreen(p.x, p.y);
+          g.globalAlpha = opacity(markKey.item(p.item_id));
           g.beginPath(); g.moveTo(x - 5, y - 5); g.lineTo(x + 5, y + 5); g.moveTo(x + 5, y - 5); g.lineTo(x - 5, y + 5); g.stroke();
           const label = marks.labels?.[p.item_id];
           if (label) g.fillText(label, x + 9, y - 7);
         }
+        g.globalAlpha = 1;
       }
     }
 
@@ -294,11 +307,13 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     // The searched idea: an accent crosshair with a glow, labelled.
     if (marks.query && !loading) {
       const [x, y] = toScreen(marks.query.x, marks.query.y);
+      g.globalAlpha = opacity(markKey.query(marks.query));
       g.shadowColor = ACCENT; g.shadowBlur = 16; g.strokeStyle = ACCENT; g.lineWidth = 1.5;
       g.beginPath(); g.moveTo(x - 8, y); g.lineTo(x + 8, y); g.moveTo(x, y - 8); g.lineTo(x, y + 8); g.stroke();
       g.shadowBlur = 0;
       g.fillStyle = ACCENT; g.font = LABEL_FONT; g.textBaseline = "middle";
       g.fillText("QUERY", x + 11, y + 9);
+      g.globalAlpha = 1;
     }
     g.restore();
 

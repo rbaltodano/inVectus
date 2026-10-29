@@ -1176,3 +1176,11 @@ packaging gates are still open. Details, reproducible commands and limitations:
   now row-major indices 0,1,3,5,4,2; six-cell timing and the 500 ms fade are unchanged.
 - All 18 UI tests, frontend TypeScript/Vite build and diff checks passed. No native rebuild
   or relaunch, as requested; live visual review awaits the next launch.
+
+## 2026-10-29 — App bundle relaunch correction
+
+- The earlier standalone background process had exited by the next check; the initial
+  process check did not establish a persistent visible window. Built the macOS app bundle
+  successfully, launched it through Launch Services with the dev model store, and confirmed
+  its bundle process persisted. Closed the duplicate standalone process. UI inspection was
+  unavailable because Computer Use was not approved; window visibility remains unverified.

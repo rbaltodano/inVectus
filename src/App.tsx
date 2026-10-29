@@ -7,10 +7,10 @@ import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
 import Settings from "./screens/Settings";
 import { Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
-import { PROJECT_TABS, pageTab, navigateTo, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
+import { PROJECT_TABS, pageTab, navigateTo, returnToSearch, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import "./App.css";
 
-/** A page of the menu beside the circle; pages stack, and Back pops one. */
+/** A page of the menu beside the circle; Back returns directly to the Search root. */
 export type Page =
   | { kind: "search"; query?: string } | { kind: "import"; path?: string }
   | { kind: "index"; collection?: string } | { kind: "gaps" }
@@ -32,6 +32,7 @@ export interface Ctx {
   go: (r: Route | Legacy) => void;
   push: (p: Page) => void;
   back: () => void;
+  backToSearch: () => void;
   setMarks: (m: Marks) => void;
   showRegion: (region: number) => void;
   reloadGaps: () => Promise<void>;
@@ -264,6 +265,10 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   };
   const push = (p: Page) => pushFrom(activeTab, p);
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+  const backToSearch = (from = activeTab) => {
+    setTabStacks((previous) => returnToSearch(previous, from).stacks);
+    setActiveTab("search");
+  };
   const showRegion = (region: number) => {
     setMarks({ region });
     setMapFocus((previous) => ({ region, request: (previous?.request ?? 0) + 1 }));
@@ -279,7 +284,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
 
   const ctx: Ctx = {
-    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, setMarks, showRegion, reloadGaps, refresh, setProject, pickTable,
+    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, backToSearch, setMarks, showRegion, reloadGaps, refresh, setProject, pickTable,
     view: { ...opts, set: (k, v) => setOpts((o) => ({ ...o, [k]: v })), reset: () => setResetKey((k) => k + 1) },
   };
   const addData = async () => {
@@ -323,6 +328,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         </div>
           {PROJECT_TABS.filter((tab) => tabStacks[tab.id]).map((tab) => <Panel key={tab.id} active={activeTab === tab.id} tabId={tab.id}
             ctx={{ ...ctx, push: (p) => pushFrom(tab.id, p), back: () => setStack((s) => s.length > 1 ? s.slice(0, -1) : s, tab.id),
+              backToSearch: () => backToSearch(tab.id),
               setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} />)}
       </section>
     </div>

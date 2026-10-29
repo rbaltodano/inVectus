@@ -1256,3 +1256,17 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live visual review remains with the owner.
   No CI dispatched.
+
+## 2026-10-29 — Back returns directly to Search
+
+- The visible panel Back button now switches directly to the existing Search root,
+  preserving its query and mounted results instead of stepping through selected points.
+  It clears detail history in Search and resets the originating tab to its list/root.
+  Import wizard step Back, cancellation and completion keep their existing behavior.
+- All 23 UI tests passed, including repeated point selections, returning from Gaps,
+  preserving the Search query and creating Search when not previously visited.
+  Frontend TypeScript/Vite build and diff checks passed; live navigation review remains
+  with the owner.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app with its existing project history and dev
+  model store. No GitHub CI dispatched.

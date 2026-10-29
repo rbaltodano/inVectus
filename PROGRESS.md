@@ -609,9 +609,37 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
 - Disk: `target/release` had grown to 24 GB with only 3.7 GiB free. Its intermediates were
   removed (executables kept); free space is ~22 GiB after this rebuild.
 
+## 2026-10-29 — Desktop UI from the wireframe (owner: "use what you have as a starting point")
+
+- Replaced the P1 single-page UI with the 10-board wireframe (artifact "inVectus Wireframes"):
+  a sidebar shell (Projects, Import, Index, Search, Map, Gaps, Settings, a Jobs panel) and a
+  header with the collection/model picker and the offline-mode switch. Screens: Projects
+  (recent list in browser storage, new/open), a 5-step Import wizard (drag-and-drop paths,
+  guessed column mapping, role rules with live counts over the first 1,000 rows, preview,
+  result), Index (model choice, download dialog, embed → calibrate → regions → score gaps with
+  live progress), Search (calibrated verdict or plain similarity when uncalibrated, "sits
+  between" regions), Map (canvas; colour by region/role/date/gap score, top-15 gap markers,
+  non-overlapping labels, zoom/pan, click/box selection), Gaps (filters, batch verify, CSV and
+  Markdown export, re-score), Gap detail (score terms, per-year chart, LLM description with
+  on-target/novelty checks, central items, verdict and note, outside-source check), Settings
+  (models, offline mode, local LLM status, per-project gap weights, calibration, embedding
+  details). Styles are tokens in `src/App.css` for the owner's later style pass.
+- New desktop commands: `inspect_source`, `set_network`, `list_llms`, `install_model`
+  (explicit; refused while the project is offline), `default_gap_weights`, `export_gaps`
+  (into the project's `exports/`), `open_url` (http(s) only, system browser); `scan_gaps`
+  takes optional weights; `project_info` reports network state and each table's calibration
+  and regions. Typed paths expand `~`. Item links that hold a bare DOI open via doi.org.
+- Not done from the wireframe: native file pickers (needs the Tauri dialog plugin, a new
+  download), "Save as gap"/search voids and midpoints from a search (no engine support yet),
+  choosing outside sources (fixed to PubMed + OpenAlex), cloud LLM providers (local only).
+- Checks: every screen was clicked through in a browser with the engine calls stubbed by real
+  demo-project JSON (gaps, gap detail, map with 5,000 points, a calibrated check). The release
+  desktop build compiles; the native window was not driven by an agent. Gap weights and the
+  recent-projects list live in per-machine browser storage.
+
 ## Next
-1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
-   backend commands exist.
+1. Owner's style pass over the wireframe UI; native file pickers (Tauri dialog plugin, needs
+   approval to download); region LLM labels in gap lists.
 2. **Full benchmark and term ablation are complete** (owner-approved read-only copy; results
    above). The model still loses to the baselines. Future tuning needs cached cutoff terms and
    a held-out-cutoff protocol; multimodal work must not rerun or re-embed this benchmark.

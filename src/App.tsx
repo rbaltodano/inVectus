@@ -1,190 +1,154 @@
-import { useEffect, useState, type ChangeEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { useEffect, useState } from "react";
+import { api, inTauri, type ProjectInfo, type TableInfo, type TableRef } from "./api";
+import { JobProgress, JobsProvider, useJobs } from "./jobs";
+import Projects, { remember } from "./screens/Projects";
+import Import from "./screens/Import";
+import Index from "./screens/Index";
+import Search from "./screens/Search";
+import MapView from "./screens/Map";
+import Gaps from "./screens/Gaps";
+import GapDetailView from "./screens/GapDetail";
+import Settings from "./screens/Settings";
 import "./App.css";
 
-type Role = "demand" | "coverage" | "neutral";
-interface Collection { collection_id: string; items: number; chunks: number; by_role: Record<string, number> }
-interface TableInfo { collection: string; space_id: string; model_key: string; runtime: string; dimensions: number; origin: string; vectors: number; ann_partitions: number | null }
-interface ProjectInfo { root: string; name: string; warning: string | null; collections: Collection[]; tables: TableInfo[] }
-interface ModelInfo { key: string; repo: string; dimensions: number; megabytes: number; installed: boolean; default: boolean; note: string }
-interface MappedRow { source_id: string; title: string | null; text: string; date: string | null; role: Role }
-interface Preview { columns: string[]; rows: MappedRow[]; skipped: Record<string, number> }
-interface ImportReport { collection: string; source_rows: number; items: number; inserted: number; updated: number; unchanged: number; chunks_written: number; skipped: Record<string, number>; warnings: string[] }
-interface Item { item_id: number; source_id: string; title: string | null; url: string | null; date: string | null; role: Role }
-interface Hit { rank: number; similarity: number; via_chunk: number | null; item: Item }
-interface SearchResult { mode: string; exhaustive: boolean; vectors_compared: number; compatibility: string; model_key: string; hits: Hit[]; notes: string[]; embed_ms: number; retrieve_ms: number }
-type EmbedEvent =
-  | { status: "progress"; done: number; total: number }
-  | { status: "finished"; report: { embedded: number; already_embedded: number; items_per_second: number; truncated: number; cancelled: boolean; vectors_in_table: number } }
-  | { status: "failed"; error: string };
+export type Screen =
+  | { name: "projects" } | { name: "import" } | { name: "index"; collection?: string }
+  | { name: "search"; query?: string } | { name: "map"; region?: number }
+  | { name: "gaps" } | { name: "gap"; id: number } | { name: "settings" };
 
-const inTauri = "__TAURI_INTERNALS__" in window;
+const NAV: [Screen["name"], string][] = [
+  ["projects", "Projects"], ["import", "Import"], ["index", "Index"], ["search", "Search"],
+  ["map", "Map"], ["gaps", "Gaps"], ["settings", "Settings"],
+];
 
-export default function App() {
-  const [version, setVersion] = useState<string>();
-  const [path, setPath] = useState("");
-  const [project, setProject] = useState<ProjectInfo>();
-  const [error, setError] = useState<string>();
-
-  useEffect(() => {
-    if (!inTauri) return;
-    invoke<string>("engine_version").then(setVersion).catch(() => undefined);
-    invoke<string>("default_projects_dir").then((d) => setPath(`${d}/My project.invectus`));
-  }, []);
-
-  const run = async <T,>(f: () => Promise<T>) => {
-    setError(undefined);
-    try { return await f(); } catch (e) { setError(String(e)); }
-  };
-  const open = (create: boolean) => run(async () => setProject(await invoke<ProjectInfo>("open_project", { path, create })));
-  const refresh = () => run(async () => setProject(await invoke<ProjectInfo>("project_info")));
-
-  return <main>
-    <p className="eyebrow">inVectus · engine {version ?? "(browser preview)"}</p>
-    <h1>Find what’s missing.</h1>
-    <p>P1 builds the collection and its nearest-neighbour search. Similarity here is evidence, not an absence verdict: calibrated inVectus search verdicts arrive in P2.</p>
-    {!inTauri && <p className="warn">Open the desktop app to use the engine.</p>}
-    {error && <p className="error" role="alert">{error}</p>}
-
-    <section>
-      <h2>Project</h2>
-      <div className="row">
-        <input aria-label="Project folder" value={path} onChange={(e) => setPath(e.target.value)} />
-        <button onClick={() => open(false)}>Open</button>
-        <button onClick={() => open(true)}>Create</button>
-      </div>
-      {project && <ProjectSummary p={project} />}
-    </section>
-
-    {project && <>
-      <ImportPanel run={run} onDone={refresh} />
-      <EmbedPanel project={project} onDone={refresh} />
-      <SearchPanel project={project} run={run} />
-    </>}
-    <footer>Local first · network off · macOS · Windows · Linux</footer>
-  </main>;
+/** What every screen gets from the shell. */
+export interface Ctx {
+  project: ProjectInfo;
+  /** The selected collection's vector table, if it has one. */
+  table?: TableInfo;
+  tref?: TableRef;
+  collection?: string;
+  go: (s: Screen) => void;
+  refresh: () => Promise<void>;
+  setProject: (p: ProjectInfo) => void;
 }
 
-function ProjectSummary({ p }: { p: ProjectInfo }) {
-  return <div>
-    <p><strong>{p.name}</strong> — {p.root}</p>
-    {p.warning && <p className="warn">{p.warning}</p>}
-    {p.collections.length === 0 && <p>No collections yet.</p>}
-    <ul>
-      {p.collections.map((c) => <li key={c.collection_id}>
-        <strong>{c.collection_id}</strong>: {c.items} items, {c.chunks} chunks · {Object.entries(c.by_role).map(([r, n]) => `${n} ${r}`).join(", ")}
-        <ul>{p.tables.filter((t) => t.collection === c.collection_id).map((t) =>
-          <li key={t.space_id}>{t.model_key} · space {t.space_id.slice(0, 12)} · {t.dimensions}d · {t.vectors} vectors · {t.origin}{t.ann_partitions ? ` · ANN ${t.ann_partitions} partitions` : ""}</li>)}
-        </ul>
-      </li>)}
-    </ul>
+export const tableKey = (t: TableInfo) => `${t.collection}\u0000${t.space_id}`;
+
+export default function App() {
+  const [project, setProject] = useState<ProjectInfo>();
+  const refresh = async () => { if (project) setProject(await api.info()); };
+  return <JobsProvider onFinished={() => { api.info().then(setProject).catch(() => undefined); }}>
+    <Shell project={project} setProject={setProject} refresh={refresh} />
+  </JobsProvider>;
+}
+
+function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void> }) {
+  const [screen, setScreen] = useState<Screen>({ name: "projects" });
+  const [selected, setSelected] = useState<string>();
+  const [version, setVersion] = useState<string>();
+  const [netError, setNetError] = useState<string>();
+  const jobs = useJobs();
+
+  useEffect(() => { if (inTauri) api.version().then(setVersion).catch(() => undefined); }, []);
+
+  // Keep a valid table selected: the last one picked, else the first table, else none.
+  const tables = project?.tables ?? [];
+  const table = tables.find((t) => tableKey(t) === selected) ?? tables[0];
+  const collection = table?.collection ?? project?.collections[0]?.collection_id;
+  const tref = table ? { collection: table.collection, space: table.space_id } : undefined;
+
+  const open = (p: ProjectInfo) => { setProject(p); remember(p); setSelected(undefined); setScreen(p.collections.length ? { name: "search" } : { name: "import" }); };
+  const toggleOffline = async () => {
+    if (!project) return;
+    setNetError(undefined);
+    try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); }
+  };
+
+  const ctx: Ctx | undefined = project && { project, table, tref, collection, go: setScreen, refresh, setProject };
+  const active = screen.name === "gap" ? "gaps" : screen.name;
+  const job = jobs.current;
+
+  return <div className="shell">
+    <nav aria-label="Main" className="sidebar">
+      <div className="brand">inVectus</div>
+      {NAV.map(([name, label]) => {
+        const disabled = name !== "projects" && name !== "settings" && !project;
+        return <button key={name} type="button" className="nav-link" aria-current={active === name ? "page" : undefined}
+          disabled={disabled} onClick={() => setScreen({ name } as Screen)}>{label}</button>;
+      })}
+      <section aria-label="Jobs" className="jobs">
+        <div className="eyebrow">Jobs</div>
+        {!job && <div className="muted small">No jobs running</div>}
+        {job && <>
+          <div className="small"><b>{job.label}</b> · {job.status === "running" ? "running" : job.status === "finished" ? (job.report?.cancelled ? "cancelled" : "done") : "failed"}</div>
+          {job.status === "running" && <JobProgress job={job} />}
+          {job.status === "failed" && <div className="error small">{job.message}</div>}
+          <div className="row">
+            {job.status === "running" && job.kind !== "download" && <button type="button" className="btn small" onClick={() => api.cancel()}>Cancel</button>}
+            {job.status !== "running" && <button type="button" className="btn small" onClick={jobs.clear}>Dismiss</button>}
+          </div>
+        </>}
+      </section>
+      <div className="muted small version">engine {version ?? "(browser preview)"}</div>
+    </nav>
+
+    <main className="main">
+      <header className="topbar">
+        {project
+          ? <div className="stack"><span className="muted small">Project</span><span className="strong">{project.name}</span></div>
+          : <div className="strong muted">No project open</div>}
+        <div className="topbar-right">
+          {project && tables.length > 0 && <label className="inline">
+            <span className="muted small">Collection</span>
+            <select value={table ? tableKey(table) : ""} onChange={(e) => setSelected(e.target.value)}>
+              {tables.map((t) => <option key={tableKey(t)} value={tableKey(t)}>{t.collection} · {t.model_key} · {t.dimensions}-d</option>)}
+            </select>
+          </label>}
+          {project && <button type="button" className="pill" aria-pressed={!project.network_enabled} onClick={toggleOffline}
+            title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off whatever this says" : undefined}>
+            Offline mode: {project.network_enabled && !project.offline_env ? "off" : "on"}
+          </button>}
+        </div>
+      </header>
+      {netError && <p className="error banner" role="alert">{netError}</p>}
+      {!inTauri && <p className="warn banner">Open the desktop app to use the engine. This browser preview cannot reach it.</p>}
+      {project?.warning && <p className="warn banner">{project.warning}</p>}
+
+      <div className="content">
+        {screen.name === "projects" && <Projects onOpen={open} current={project} />}
+        {screen.name === "settings" && <Settings ctx={ctx} />}
+        {ctx && screen.name === "import" && <Import ctx={ctx} />}
+        {ctx && screen.name === "index" && <Index ctx={ctx} initial={screen.collection} />}
+        {ctx && screen.name === "search" && <Search ctx={ctx} initial={screen.query} />}
+        {ctx && screen.name === "map" && <MapView ctx={ctx} focus={screen.region} />}
+        {ctx && screen.name === "gaps" && <Gaps ctx={ctx} />}
+        {ctx && screen.name === "gap" && <GapDetailView ctx={ctx} id={screen.id} />}
+      </div>
+    </main>
   </div>;
 }
 
-type Runner = <T>(f: () => Promise<T>) => Promise<T | undefined>;
-
-function ImportPanel({ run, onDone }: { run: Runner; onDone: () => void }) {
-  const [f, setF] = useState({ collection: "papers", source_path: "", text: "abstract", title: "title", id: "id", date: "", url: "", role: "neutral" as Role, role_column: "", role_rules: "", chunk_chars: 2000, chunk_overlap: 200 });
-  const [preview, setPreview] = useState<Preview>();
-  const [report, setReport] = useState<ImportReport>();
-  const form = { ...f, text: f.text.split(",").map((s) => s.trim()), limit: null };
-  const set = (k: keyof typeof f) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setF({ ...f, [k]: e.target.type === "number" ? Number(e.target.value) : e.target.value });
-  const field = (k: keyof typeof f, label: string) =>
-    <label>{label}<input value={String(f[k])} onChange={set(k)} type={typeof f[k] === "number" ? "number" : "text"} /></label>;
-
-  return <section>
-    <h2>Import</h2>
-    <p>A folder of .txt/.md files, a CSV/TSV or a Parquet file. Re-importing the same source is a no-op; changed rows are updated.</p>
-    <div className="grid">
-      {field("source_path", "Source path")}
-      {field("collection", "Collection")}
-      {field("text", "Text column(s)")}
-      {field("title", "Title column")}
-      {field("id", "Id column")}
-      {field("date", "Date column")}
-      {field("url", "URL column")}
-      <label>Role (constant or default)<select value={f.role} onChange={set("role")}>
-        <option>neutral</option><option>demand</option><option>coverage</option></select></label>
-      {field("role_column", "Role column (optional)")}
-      {field("role_rules", "Role rules, e.g. Systematic Review=coverage")}
-      {field("chunk_chars", "Chunk above (chars, 0 = never)")}
-      {field("chunk_overlap", "Chunk overlap (chars)")}
-    </div>
-    <div className="row">
-      <button onClick={() => run(async () => setPreview(await invoke<Preview>("preview_import", { form })))}>Preview 20</button>
-      <button onClick={() => run(async () => { setReport(await invoke<ImportReport>("run_import", { form })); onDone(); })}>Import</button>
-    </div>
-    {preview && <div>
-      <p className="muted">Columns: {preview.columns.join(", ")}{Object.keys(preview.skipped).length ? ` · skipped ${JSON.stringify(preview.skipped)}` : ""}</p>
-      <table><thead><tr><th>id</th><th>role</th><th>title</th><th>date</th><th>text</th></tr></thead>
-        <tbody>{preview.rows.map((r) => <tr key={r.source_id}><td>{r.source_id}</td><td>{r.role}</td><td>{r.title}</td><td>{r.date}</td><td>{r.text.slice(0, 120)}…</td></tr>)}</tbody></table>
-    </div>}
-    {report && <p>{report.collection}: {report.items} items (+{report.inserted} new, {report.updated} updated, {report.unchanged} unchanged), {report.chunks_written} chunks{Object.keys(report.skipped).length ? `; skipped ${JSON.stringify(report.skipped)}` : ""}{report.warnings.map((w) => <span key={w} className="warn"><br />{w}</span>)}</p>}
+/** Shown on screens that need something the selected collection lacks yet. */
+export function Needs({ title, body, action, onAction }: { title: string; body: string; action?: string; onAction?: () => void }) {
+  return <section className="card empty">
+    <h2>{title}</h2>
+    <p className="muted">{body}</p>
+    {action && <button type="button" className="btn primary" onClick={onAction}>{action}</button>}
   </section>;
 }
 
-function EmbedPanel({ project, onDone }: { project: ProjectInfo; onDone: () => void }) {
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [collection, setCollection] = useState(project.collections[0]?.collection_id ?? "");
-  const [model, setModel] = useState("");
-  const [state, setState] = useState<EmbedEvent>();
+export function ErrorLine({ error }: { error?: string }) {
+  return error ? <p className="error" role="alert">{error}</p> : null;
+}
+
+/** Run an async action with an error slot and a busy flag. */
+export function useAction() {
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  useEffect(() => {
-    invoke<ModelInfo[]>("list_models").then((m) => { setModels(m); setModel(m.find((x) => x.default)?.key ?? m[0]?.key ?? ""); });
-    const un = listen<EmbedEvent>("embed-event", (e) => { setState(e.payload); if (e.payload.status !== "progress") onDone(); });
-    return () => { un.then((f) => f()); };
-  }, []);
-  const running = state?.status === "progress";
-  const start = () => { setError(undefined); invoke("start_embed", { collection, model }).catch((e) => setError(String(e))); };
-  return <section>
-    <h2>Embed</h2>
-    <p>Runs on the CPU, offline, from an installed model. Cancelling keeps finished batches; running again resumes and skips unchanged items.</p>
-    <div className="row">
-      <select aria-label="Collection" value={collection} onChange={(e) => setCollection(e.target.value)}>
-        {project.collections.map((c) => <option key={c.collection_id}>{c.collection_id}</option>)}</select>
-      <select aria-label="Model" value={model} onChange={(e) => setModel(e.target.value)}>
-        {models.map((m) => <option key={m.key} value={m.key} disabled={!m.installed}>{m.key}{m.default ? " (default)" : ""}{m.installed ? "" : " — not installed"}</option>)}</select>
-      <button disabled={running || !collection} onClick={start}>Embed</button>
-      <button disabled={!running} onClick={() => invoke("cancel_job")}>Cancel</button>
-    </div>
-    {error && <p className="error">{error}</p>}
-    {state?.status === "progress" && <p><progress value={state.done} max={Math.max(state.total, 1)} /> {state.done}/{state.total}</p>}
-    {state?.status === "finished" && <p>{state.report.cancelled ? "Cancelled" : "Done"}: {state.report.embedded} embedded ({state.report.items_per_second.toFixed(1)}/s), {state.report.already_embedded} already embedded, {state.report.truncated} truncated; {state.report.vectors_in_table} vectors.</p>}
-    {state?.status === "failed" && <p className="error">{state.error}</p>}
-  </section>;
-}
-
-function SearchPanel({ project, run }: { project: ProjectInfo; run: Runner }) {
-  const [collection, setCollection] = useState(project.tables[0]?.collection ?? "");
-  const [query, setQuery] = useState("");
-  const [role, setRole] = useState<Role | "">("");
-  const [exhaustive, setExhaustive] = useState(true);
-  const [result, setResult] = useState<SearchResult>();
-  const go = () => run(async () => setResult(await invoke<SearchResult>("search", {
-    form: { collection, query, k: 10, role: role || null, exhaustive, space: null },
-  })));
-  return <section>
-    <h2>Nearest items</h2>
-    <div className="row">
-      <select aria-label="Collection" value={collection} onChange={(e) => setCollection(e.target.value)}>
-        {[...new Set(project.tables.map((t) => t.collection))].map((c) => <option key={c}>{c}</option>)}</select>
-      <input aria-label="Query" placeholder="Describe an idea…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
-      <select aria-label="Role filter" value={role} onChange={(e) => setRole(e.target.value as Role | "")}>
-        <option value="">any role</option><option>coverage</option><option>demand</option><option>neutral</option></select>
-      <label className="check"><input type="checkbox" checked={exhaustive} onChange={(e) => setExhaustive(e.target.checked)} /> exhaustive</label>
-      <button onClick={go} disabled={!query.trim() || !collection}>Search</button>
-    </div>
-    {result && <div>
-      <p className="muted">{result.mode} · {result.vectors_compared} vectors · {result.model_key} · {result.compatibility} · {result.embed_ms.toFixed(0)} + {result.retrieve_ms.toFixed(0)} ms</p>
-      <ol>{result.hits.map((h) => <li key={h.item.item_id}>
-        <span className="sim">{h.similarity.toFixed(3)}</span> <span className={`role ${h.item.role}`}>{h.item.role}</span>{" "}
-        {h.item.url ? <a href={h.item.url} target="_blank" rel="noreferrer">{h.item.title ?? h.item.source_id}</a> : (h.item.title ?? h.item.source_id)}
-        {h.item.date && <span className="muted"> · {h.item.date}</span>}
-        {h.via_chunk !== null && <span className="muted"> · via chunk {h.via_chunk}</span>}
-      </li>)}</ol>
-      {result.notes.map((n) => <p key={n} className="muted">{n}</p>)}
-    </div>}
-  </section>;
+  const run = async <T,>(f: () => Promise<T>): Promise<T | undefined> => {
+    setBusy(true); setError(undefined);
+    try { return await f(); } catch (e) { setError(String(e)); return undefined; } finally { setBusy(false); }
+  };
+  return { busy, error, setError, run };
 }

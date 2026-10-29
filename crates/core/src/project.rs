@@ -77,6 +77,12 @@ impl Project {
         })
     }
 
+    /// Turn the project's network switch on or off and save `project.json`.
+    pub fn set_network_enabled(&mut self, enabled: bool) -> Result<()> {
+        self.config.network_enabled = enabled;
+        write_json_atomic(&self.root.join("project.json"), &self.config)
+    }
+
     pub fn vectors_dir(&self) -> PathBuf {
         self.root.join("vectors")
     }

@@ -81,6 +81,27 @@ struct TableInfo {
     origin: String,
     vectors: usize,
     ann_partitions: Option<u64>,
+    calibration: Option<CalibrationStatus>,
+    regions: Option<RegionsStatus>,
+}
+
+#[derive(Serialize)]
+struct CalibrationStatus {
+    method: String,
+    sample: i64,
+    /// Vectors when fitted; differs from `vectors` when the collection changed since.
+    vectors: i64,
+    fitted_at: Option<String>,
+    holdout_auc: Option<f64>,
+}
+
+#[derive(Serialize)]
+struct RegionsStatus {
+    run_id: String,
+    created_at: Option<String>,
+    stats: serde_json::Value,
+    /// The latest regions have a gap scan.
+    scanned: bool,
 }
 
 #[derive(Serialize)]
@@ -88,6 +109,9 @@ struct ProjectInfo {
     root: String,
     name: String,
     warning: Option<String>,
+    network_enabled: bool,
+    /// `INVECTUS_OFFLINE=1`: every network use is refused whatever the project switch says.
+    offline_env: bool,
     collections: Vec<CollectionSummary>,
     tables: Vec<TableInfo>,
 }
@@ -99,7 +123,28 @@ fn info(s: &Session) -> anyhow::Result<ProjectInfo> {
         .vector_tables(None)?
         .into_iter()
         .map(|t| {
+            let store = &s.project.store;
+            let calibration = store
+                .latest_calibration(&t.collection_id, &t.space_id)?
+                .map(|c| CalibrationStatus {
+                    holdout_auc: c.metrics["holdout"]["auc"].as_f64(),
+                    method: c.method,
+                    sample: c.sample,
+                    vectors: c.vectors,
+                    fitted_at: c.created_at,
+                });
+            let regions = match store.latest_region_run(&t.collection_id, &t.space_id)? {
+                Some(run) => Some(RegionsStatus {
+                    scanned: store.gaps(&run.run_id)?.is_some(),
+                    run_id: run.run_id,
+                    created_at: run.created_at,
+                    stats: run.stats,
+                }),
+                None => None,
+            };
             Ok(TableInfo {
+                calibration,
+                regions,
                 vectors: s.vectors.count(&t)?,
                 collection: t.collection_id,
                 space_id: t.space_id,
@@ -115,6 +160,8 @@ fn info(s: &Session) -> anyhow::Result<ProjectInfo> {
         root: s.project.root.display().to_string(),
         name: s.project.config.name.clone(),
         warning: s.project.storage_warning(),
+        network_enabled: s.project.config.network_enabled,
+        offline_env: invectus_core::net::offline(),
         collections: s.project.store.collection_summaries()?,
         tables,
     })
@@ -137,8 +184,18 @@ async fn open_project(
     off_thread(move || open_project_blocking(&session, path, create)).await
 }
 
+/// A typed path with a leading `~` expanded to the home folder.
+fn user_path(path: &str) -> PathBuf {
+    let path = path.trim();
+    match (path.strip_prefix("~/"), dirs::home_dir()) {
+        (Some(rest), Some(home)) => home.join(rest),
+        _ if path == "~" => dirs::home_dir().unwrap_or_default(),
+        _ => PathBuf::from(path),
+    }
+}
+
 fn open_project_blocking(session: &Shared, path: String, create: bool) -> CmdResult<ProjectInfo> {
-    let path = PathBuf::from(path);
+    let path = user_path(&path);
     let project = if create {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(err)?;
@@ -185,7 +242,7 @@ struct ImportForm {
 }
 
 fn request(f: ImportForm) -> anyhow::Result<ImportRequest> {
-    let source = Source::detect(&PathBuf::from(&f.source_path))?;
+    let source = Source::detect(&user_path(&f.source_path))?;
     let blank = |o: Option<String>| o.filter(|s| !s.trim().is_empty());
     let role = match blank(f.role_column) {
         Some(column) => RoleMapping::Column {
@@ -227,10 +284,10 @@ fn request(f: ImportForm) -> anyhow::Result<ImportRequest> {
 }
 
 #[tauri::command]
-async fn preview_import(form: ImportForm) -> CmdResult<Preview> {
+async fn preview_import(form: ImportForm, rows: Option<usize>) -> CmdResult<Preview> {
     off_thread(move || {
         let req = request(form).map_err(err)?;
-        invectus_ingest::preview(&req, 20).map_err(err)
+        invectus_ingest::preview(&req, rows.unwrap_or(20)).map_err(err)
     })
     .await
 }
@@ -243,6 +300,130 @@ async fn run_import(state: State<'_, AppState>, form: ImportForm) -> CmdResult<I
         with_session(&session, |s| invectus_ingest::import(&mut s.project, &req))
     })
     .await
+}
+
+#[derive(Serialize)]
+struct SourceInfo {
+    /// `csv`, `parquet` or `folder`.
+    kind: String,
+    columns: Vec<String>,
+    /// The first rows, for guessing and showing the column mapping.
+    sample: Vec<Vec<Option<String>>>,
+    /// Rows read for this look (at most `SOURCE_LOOK_ROWS`).
+    rows_read: usize,
+    unreadable: usize,
+}
+
+const SOURCE_LOOK_ROWS: usize = 1000;
+
+/// Columns and sample rows of an import source, before any mapping is chosen.
+#[tauri::command]
+async fn inspect_source(path: String) -> CmdResult<SourceInfo> {
+    off_thread(move || {
+        let source = Source::detect(&user_path(&path)).map_err(err)?;
+        let kind = match source {
+            Source::Csv { .. } => "csv",
+            Source::Parquet { .. } => "parquet",
+            Source::Folder { .. } => "folder",
+        };
+        let table = invectus_ingest::source::read(&source, Some(SOURCE_LOOK_ROWS)).map_err(err)?;
+        Ok(SourceInfo {
+            kind: kind.into(),
+            sample: table.rows.iter().take(5).cloned().collect(),
+            rows_read: table.rows.len(),
+            unreadable: table.unreadable.len(),
+            columns: table.columns,
+        })
+    })
+    .await
+}
+
+/// Turn the project's network switch on or off (verification connectors use it).
+#[tauri::command]
+async fn set_network(state: State<'_, AppState>, enabled: bool) -> CmdResult<ProjectInfo> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            s.project.set_network_enabled(enabled)?;
+            info(s)
+        })
+    })
+    .await
+}
+
+#[derive(Serialize)]
+struct LlmInfo {
+    key: String,
+    repo: String,
+    megabytes: u64,
+    installed: bool,
+    default: bool,
+    note: String,
+}
+
+#[tauri::command]
+fn list_llms() -> CmdResult<Vec<LlmInfo>> {
+    let root = ModelStore::default_root().map_err(err)?;
+    Ok(invectus_llm::registry::MODELS
+        .iter()
+        .map(|m| LlmInfo {
+            key: m.key.into(),
+            repo: m.repo.into(),
+            megabytes: m.bytes / 1_000_000,
+            installed: invectus_llm::store::is_installed(&root, m),
+            default: m.key == invectus_llm::DEFAULT_LLM,
+            note: m.note.into(),
+        })
+        .collect())
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum DownloadEvent {
+    Log { model: String, line: String },
+    Finished { model: String },
+    Failed { model: String, error: String },
+}
+
+/// Download an embedding model at its pinned revision (explicit network use; checksums are
+/// verified). Progress lines arrive as `download-event` events.
+#[tauri::command]
+fn install_model(app: tauri::AppHandle, state: State<AppState>, model: String) -> CmdResult<()> {
+    let spec = registry::spec(&model).map_err(err)?;
+    if let Ok(guard) = state.session.try_lock()
+        && guard
+            .as_ref()
+            .is_some_and(|s| !s.project.config.network_enabled)
+    {
+        return Err("offline mode is on for this project: turn it off to download a model".into());
+    }
+    invectus_core::net::ensure_online(&format!("downloading model {}", spec.key)).map_err(err)?;
+    std::thread::spawn(move || {
+        let app2 = app.clone();
+        let key = model.clone();
+        let result = ModelStore::default_root().and_then(|root| {
+            ModelStore::new(root).download(spec, &mut |line| {
+                let _ = app2.emit(
+                    "download-event",
+                    DownloadEvent::Log {
+                        model: key.clone(),
+                        line: line.into(),
+                    },
+                );
+            })
+        });
+        let _ = app.emit(
+            "download-event",
+            match result {
+                Ok(_) => DownloadEvent::Finished { model },
+                Err(e) => DownloadEvent::Failed {
+                    model,
+                    error: format!("{e:#}"),
+                },
+            },
+        );
+    });
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -628,12 +809,20 @@ struct TableForm {
 
 /// Score gaps over the latest regions (verdicts are kept).
 #[tauri::command]
-async fn scan_gaps(state: State<'_, AppState>, form: TableForm) -> CmdResult<ScanReport> {
+async fn scan_gaps(
+    state: State<'_, AppState>,
+    form: TableForm,
+    weights: Option<invectus_gaps::scan::Weights>,
+) -> CmdResult<ScanReport> {
     let session = state.session.clone();
     off_thread(move || {
         with_session(&session, |s| {
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-            invectus_gaps::scan(&mut s.project, &s.vectors, &table, &ScanOptions::default())
+            let mut opts = ScanOptions::default();
+            if let Some(w) = weights {
+                opts.weights = w;
+            }
+            invectus_gaps::scan(&mut s.project, &s.vectors, &table, &opts)
         })
     })
     .await
@@ -769,6 +958,65 @@ async fn verify_gap(
     .await
 }
 
+/// The scan's default weights, for the settings screen's reset.
+#[tauri::command]
+fn default_gap_weights() -> invectus_gaps::scan::Weights {
+    ScanOptions::default().weights
+}
+
+/// Write the latest gaps as CSV or Markdown into the project's `exports/` folder.
+#[tauri::command]
+async fn export_gaps(
+    state: State<'_, AppState>,
+    form: TableForm,
+    format: String,
+) -> CmdResult<String> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            let list = invectus_gaps::list(&s.project, &table)?;
+            let (text, ext) = match format.as_str() {
+                "csv" => (invectus_gaps::export::csv(&list), "csv"),
+                "markdown" => (
+                    invectus_gaps::export::markdown(&s.project, &table.collection_id, &list, 50)?,
+                    "md",
+                ),
+                other => anyhow::bail!("unknown export format {other:?} (csv, markdown)"),
+            };
+            let dir = s.project.root.join("exports");
+            std::fs::create_dir_all(&dir)?;
+            let path = dir.join(format!(
+                "gaps-{}-{}.{ext}",
+                table.collection_id,
+                &list.run_id[..list.run_id.len().min(8)]
+            ));
+            std::fs::write(&path, text)?;
+            Ok(path.display().to_string())
+        })
+    })
+    .await
+}
+
+/// Open an http(s) link in the system browser (the webview does not follow external links).
+#[tauri::command]
+fn open_url(url: String) -> CmdResult<()> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err(format!("not a web link: {url}"));
+    }
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("rundll32");
+        c.arg("url.dll,FileProtocolHandler");
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(&url).spawn().map(|_| ()).map_err(err)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
@@ -777,6 +1025,13 @@ pub fn run() {
             default_projects_dir,
             open_project,
             project_info,
+            inspect_source,
+            set_network,
+            list_llms,
+            install_model,
+            default_gap_weights,
+            export_gaps,
+            open_url,
             preview_import,
             run_import,
             list_models,

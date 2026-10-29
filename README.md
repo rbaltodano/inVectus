@@ -13,6 +13,10 @@ means "already exists" for a collection, and `invectus check` gives the inVectus
 (exists / near / open with P(exists) and the nearest items). Calibration currently uses a no-LLM
 fallback, so P(exists) is approximate; `search` alone is never an absence verdict.
 
+Desktop app: projects, a guided import, indexing with live progress, search verdicts, the region
+map, gap lists and gap detail (descriptions, verdicts, outside-source checks) and settings. The
+screens follow the wireframe and await a style pass; run it with `npm run tauri dev`.
+
 ## Development
 
 Install [Tauri 2 platform prerequisites](https://v2.tauri.app/start/prerequisites/),

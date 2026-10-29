@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { api, fmt, year, KIND_LABEL, VERDICTS, type DescribeResult, type GapDetail, type Verification } from "../api";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import Link from "../Link";
+import { stagger } from "../motion";
 
 const TERM_LABEL: Record<string, string> = {
   demand_since: "Demand since the last coverage", coverage_ratio: "Demand per coverage item", momentum: "Momentum",
@@ -70,7 +71,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
             {gap.momentum !== null && <span>activity {growth(gap.momentum)} a year</span>}
             {gap.bridge_items !== null && <span>{fmt(gap.bridge_items)} items in between</span>}
           </div>
-          <div className="terms">{gap.terms.filter((x) => x.weight !== 0).map((x) => <div key={x.name} className="term">
+          <div className="terms" key={`terms-${gap.gap_id}`}>{gap.terms.filter((x) => x.weight !== 0).map((x, i) => <div key={x.name} className="term" style={{ "--i": i } as CSSProperties}>
             <span>{TERM_LABEL[x.name] ?? x.name}</span>
             <div className="meter thin" aria-hidden="true"><div className={x.contribution < 0 ? "neg" : ""} style={{ width: `${(Math.abs(x.contribution) / maxContribution) * 100}%` }} /></div>
             <b>{x.contribution >= 0 ? "+" : "−"}{Math.abs(x.contribution).toFixed(2)}</b>
@@ -79,8 +80,9 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
 
         {gap.timeline.length > 0 && <section aria-labelledby="tl" className="panel stack gap">
           <div className="row wrap"><h2 id="tl">Per year</h2><span className="key demand">Demand</span><span className="key coverage">Coverage</span></div>
-          <div className="timeline" role="img" aria-label="Demand and coverage items per year">
-            {gap.timeline.map((y, i) => <div key={y.year} className="year" title={`${y.year}: ${y.demand} demand, ${y.coverage} coverage`}>
+          <div className="timeline" key={`timeline-${gap.gap_id}`} role="img" aria-label="Demand and coverage items per year"
+            style={{ "--stagger": `${stagger(gap.timeline.length)}ms` } as CSSProperties}>
+            {gap.timeline.map((y, i) => <div key={y.year} className="year" style={{ "--i": i } as CSSProperties} title={`${y.year}: ${y.demand} demand, ${y.coverage} coverage`}>
               <div className="bars"><div className="demand" style={{ height: `${(y.demand / maxYear) * 100}%` }} /><div className="coverage" style={{ height: `${(y.coverage / maxYear) * 100}%` }} /></div>
               <span>{i % every === 0 ? `'${String(y.year).slice(2)}` : "\u00a0"}</span>
             </div>)}

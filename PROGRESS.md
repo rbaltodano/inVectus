@@ -816,6 +816,18 @@ one circle per project, Martian Mono, dark mode only for now.
   build pass; the desktop app was rebuilt and relaunched. Not reviewed in the native window by
   an agent.
 
+## 2026-10-29 — Plain ring again; gap charts animate in
+
+- Owner reverted the dial: the circle is a plain ring again (no ticks, axes or range rings),
+  with the progress arc while loading. Coded gap rings and labelled search marks stay.
+- Gap detail charts now enter with Angrove's motion: the score-term bars fill one after another
+  with its connector curve (ease-out quint, 0.55 s, 110 ms apart); the per-year bars spring up
+  from the baseline left to right on a short stagger using Motion.springRelaxed (response 0.5 s,
+  damping 0.8), simulated in `src/motion.ts` and handed to CSS as a `linear()` easing (733 ms,
+  ~1% overshoot; cubic-bezier fallback). Replays for each gap; off with reduced motion.
+- Browser check: bars and meters measured mid-animation and settled (meters staggered, first
+  year bar at 1.011× then 1.0); build passes; desktop app rebuilt and relaunched.
+
 ## Next
 1. Agent interface, roadmap A1–A3 in [docs/target-product.md](docs/target-product.md): shared
    orchestration crate, `invectus mcp` read tools, then write tools with single-writer handling.

@@ -222,13 +222,6 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     g.save();
     g.beginPath(); g.arc(R, R, R - 1, 0, Math.PI * 2); g.clip();
 
-    // Instrument backdrop, fixed to the circle (not the data): dashed axes and range rings.
-    g.strokeStyle = white(0.1); g.lineWidth = 1; g.setLineDash([2, 5]);
-    g.beginPath(); g.moveTo(0, R); g.lineTo(size, R); g.moveTo(R, 0); g.lineTo(R, size); g.stroke();
-    g.setLineDash([]);
-    g.strokeStyle = white(0.06);
-    for (const f of [1 / 3, 2 / 3]) { g.beginPath(); g.arc(R, R, R * f, 0, Math.PI * 2); g.stroke(); }
-
     const list = renderedCells;
     cells.current = list;
     const now = performance.now();
@@ -309,20 +302,12 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     }
     g.restore();
 
-    // The rim with dial ticks (every 3°, longer every 30°). While loading, ticks light up
-    // clockwise from the top as progress (loading state A).
-    g.strokeStyle = white(0.85); g.lineWidth = 1;
+    // The rim, and in loading state A the progress arc along it.
+    g.strokeStyle = INK; g.lineWidth = 1;
     g.beginPath(); g.arc(R, R, R - 1, 0, Math.PI * 2); g.stroke();
-    for (let t = 0; t < 120; t++) {
-      const a = -Math.PI / 2 + (t / 120) * Math.PI * 2, major = t % 10 === 0;
-      const lit = loading && t / 120 < frac;
-      const len = major ? 9 : 4;
-      g.strokeStyle = lit ? white(1) : white(major ? 0.5 : 0.22);
-      g.lineWidth = lit ? 1.5 : 1;
-      g.beginPath();
-      g.moveTo(R + Math.cos(a) * (R - 3), R + Math.sin(a) * (R - 3));
-      g.lineTo(R + Math.cos(a) * (R - 3 - len), R + Math.sin(a) * (R - 3 - len));
-      g.stroke();
+    if (loading && frac > 0) {
+      g.lineWidth = 3;
+      g.beginPath(); g.arc(R, R, R - 2, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); g.stroke();
     }
     if (!reducedMotion && flicker.pending(now)) {
       const frame = requestAnimationFrame(setFlickerFrame);

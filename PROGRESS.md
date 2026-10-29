@@ -1418,3 +1418,12 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app with its existing project history and dev
   model store. No GitHub CI dispatched.
+
+## 2026-10-29 — Leading left arrow for Back to Projects
+
+- Moved the header navigation arrow before Back to Projects and changed it to point
+  left. Navigation behavior and existing spacing/typography are unchanged.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live appearance review remains with the owner;
+  no GitHub CI dispatched.

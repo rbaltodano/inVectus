@@ -437,6 +437,8 @@ h2, .h1, .h2 { font-family: var(--sans); font-weight: 400; font-size: 15px; lett
   font-family: var(--mono); font-size: 10.5px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase;
 }
 .eyebrow { color: var(--dim); margin-bottom: 6px; }
+.project-back { display: inline-flex; align-items: center; gap: 8px; border: none; background: none; padding: 0; cursor: pointer; }
+.project-back:hover { color: var(--ink); }
 .score, .stat b, .big-num, .indexing-percent { font-family: var(--sans); font-variant-numeric: tabular-nums; }
 code, .path, .mono { font-family: var(--mono); }
 .head .path { font-size: 11px; color: var(--dim); margin-top: 6px; }

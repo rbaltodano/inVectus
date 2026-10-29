@@ -1373,3 +1373,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live hover review remains with the owner;
   no GitHub CI dispatched.
+
+## 2026-10-29 — Header Back to Projects
+
+- Replaced the static Project eyebrow above the project name with a Back to Projects
+  button and a right-pointing arrow after the label. It opens the existing Projects
+  route and retains the eyebrow typography, with hover and keyboard-focus feedback.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live appearance/click review remains with the
+  owner; no GitHub CI dispatched.

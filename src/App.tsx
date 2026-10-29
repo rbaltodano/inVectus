@@ -6,7 +6,7 @@ import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./s
 import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
 import Settings from "./screens/Settings";
-import { Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { ArrowRight, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, returnToSearch, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import "./App.css";
 
@@ -301,7 +301,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
 
   return <>
     <header className="head">
-      <div><div className="eyebrow">Project</div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
+      <div><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}>Back to Projects<ArrowRight size={14} aria-hidden="true" /></button><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
       <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
         onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
         title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>

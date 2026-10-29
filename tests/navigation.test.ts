@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { navigateTo, pageTab, tabKeyIndex, type TabStacks } from "../src/navigation.ts";
+import { navigateTo, pageTab, tabKeyIndex, PROJECT_TABS, type TabStacks } from "../src/navigation.ts";
 
 test("project destinations map to the correct tabs", () => {
-  assert.equal(pageTab({ kind: "home" }), "explore");
-  assert.equal(pageTab({ kind: "map" }), "explore");
   assert.equal(pageTab({ kind: "search" }), "search");
   assert.equal(pageTab({ kind: "gaps" }), "gaps");
   assert.equal(pageTab({ kind: "import" }), "collections");
@@ -29,15 +27,19 @@ test("details stay in their originating tab with a return path", () => {
 });
 
 test("cross-tab destinations replace the root without accumulating Back steps", () => {
-  const next = navigateTo({ search: [{ kind: "search", query: "old" }, { kind: "gap", id: 42 }] }, "explore", { kind: "search", query: "new" });
+  const next = navigateTo({ search: [{ kind: "search", query: "old" }, { kind: "gap", id: 42 }] }, "gaps", { kind: "search", query: "new" });
   assert.equal(next.tab, "search");
   assert.deepEqual(next.stacks.search, [{ kind: "search", query: "new" }]);
 });
 
 test("tab keyboard navigation wraps and handles Home and End", () => {
-  assert.equal(tabKeyIndex("ArrowRight", 3), 0);
-  assert.equal(tabKeyIndex("ArrowLeft", 0), 3);
+  assert.equal(tabKeyIndex("ArrowRight", 2), 0);
+  assert.equal(tabKeyIndex("ArrowLeft", 0), 2);
   assert.equal(tabKeyIndex("Home", 2), 0);
-  assert.equal(tabKeyIndex("End", 1), 3);
+  assert.equal(tabKeyIndex("End", 1), 2);
   assert.equal(tabKeyIndex("Tab", 1), undefined);
+});
+
+test("only Search, Gaps and Collections remain", () => {
+  assert.deepEqual(PROJECT_TABS.map((t) => t.id), ["search", "gaps", "collections"]);
 });

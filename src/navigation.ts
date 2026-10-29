@@ -1,13 +1,12 @@
 import type { Page } from "./App";
 
-export type ProjectTab = "explore" | "search" | "gaps" | "collections";
+export type ProjectTab = "search" | "gaps" | "collections";
 export const PROJECT_TABS: { id: ProjectTab; label: string; page: Page }[] = [
-  { id: "explore", label: "Explore", page: { kind: "home" } },
   { id: "search", label: "Search", page: { kind: "search" } },
   { id: "gaps", label: "Gaps", page: { kind: "gaps" } },
   { id: "collections", label: "Collections", page: { kind: "index" } },
 ];
-export const pageTab = (p: Page): ProjectTab => p.kind === "search" ? "search" : p.kind === "gaps" || p.kind === "gap" ? "gaps" : p.kind === "index" || p.kind === "import" ? "collections" : "explore";
+export const pageTab = (p: Page): ProjectTab => p.kind === "search" ? "search" : p.kind === "gaps" || p.kind === "gap" ? "gaps" : p.kind === "index" || p.kind === "import" ? "collections" : "search";
 
 
 export type TabStacks = Partial<Record<ProjectTab, Page[]>>;

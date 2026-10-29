@@ -1000,3 +1000,45 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Frontend and macOS release builds passed, as did diff checks. The known upstream Apple
   `__eh_frame` linker warning remains. Relaunched the rebuilt app with the dev model store.
   Visual review remains with the owner; Windows/Linux unverified. No GitHub CI dispatched.
+
+## 2026-10-29 — Search panel from the revised Figma frame
+
+- Implemented Figma file JBM9BM0Zo6JHgj7NCjxcRt, node 1227:166 using the design-to-code
+  context and screenshot. Kept the existing warm palette, desktop text sizes and lighter
+  weights as requested. Search now has an edge-to-edge input/filter row, an inline scoped
+  assessment, and flat similarity rankings with metadata beneath each title. Calibration,
+  probability, search scope, exhaustive/approximate status and notes remain available under
+  Assessment details. Empty results and stale calibration do not receive opportunity copy.
+- Removed Explore and its obsolete page route. Opening a project now starts at Search;
+  existing map-highlighting actions keep the current evidence panel visible. Map-display
+  options await the owner's map-side icon design; no replacement icon was invented.
+- Moved the native filter into the right side of the search bar. All items is the default;
+  Coverage/Demand remain available when those roles exist. Removed the silent all-items
+  fallback for empty roles. Changing the filter after a search reruns it; filters are disabled
+  while searching. Added the displayed slash-to-focus shortcut without intercepting typing
+  inside inputs, editors or selects. Search results/filter state survives tab changes.
+- Added a shared 3×3 loading matrix: one full-opacity square, eight at 50%, cycling down
+  the left column, up the middle, down the right (row-major order 0,3,6,7,4,1,2,5,8).
+  CSS uses 120 ms per square / 1080 ms per loop and supports reduced motion. The tab-row
+  indicator uses actual active local job progress when available. Per the owner's request,
+  idle animation remains permanently visible with an 84% preview and matching bar, identified
+  as preview in its tooltip/accessibility label. Removing the explicit preview prop restores
+  automatic hiding when idle. No indexing job was started for the preview.
+- Downloaded the frame's chevron and divider SVGs unchanged into src/assets/figma, verified
+  non-empty roots/dimensions and their rendered slots, and forced local file emission to
+  respect the existing desktop image CSP. No temporary remote asset URLs remain in runtime
+  code. Applied the same flat surfaces, spacing and typography to Gaps and Collections.
+- Fourteen local UI tests passed: three-tab routing/keyboard histories, loader order and
+  preview/real/indeterminate states, scoped assessment copy, and empty/stale safeguards.
+  Frontend TypeScript/Vite and macOS release build passed; the existing upstream Apple
+  linker __eh_frame warning remains. No GitHub CI dispatched; Windows/Linux unverified.
+- Visually checked an isolated browser fixture at the desktop window width and a wider
+  layout: search/filter behavior, tab-state preservation, Gaps/Collections controls, local
+  SVG geometry, one bright/eight half-opacity loader squares changing over time, and an
+  84% bar. Saved the sample-data panel screenshot under .spike-data/ui-preview/ (ignored).
+  Closed the preview and stopped its localhost server; relaunched the rebuilt desktop app
+  with the existing dev model store. These fixture checks are not new real-model benchmarks.
+- Decisions and spec conflicts: adopted the owner's revised navigation and positive but
+  collection-scoped assessment wording. The percentage/animation is temporarily previewed
+  while idle by explicit request; production idle hiding remains a documented follow-up
+  once the owner finishes tuning. No new engine or absence-claim scope was introduced.

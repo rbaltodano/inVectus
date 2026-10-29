@@ -1,73 +1,61 @@
 // The menu beside the data circle. Pages stack: choosing a row replaces the menu with that
 // page, and Back returns. The circle stays in view, so results and gaps show where they sit.
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { api, fmt, local, year, KIND_LABEL, verdictLabel, type CheckResult, type GapKind, type JobInfo, type Role, type SearchResult, type Weights } from "../api";
+import { useEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
+import { api, fmt, local, year, KIND_LABEL, verdictLabel, type CheckResult, type GapKind, type Role, type SearchResult, type Weights } from "../api";
 import { ErrorLine, useAction, type Ctx, type Page } from "../App";
-import { isRunning } from "../jobs";
 import Link from "../Link";
 import Import from "./Import";
 import Collections from "./Collections";
 import GapDetailView from "./GapDetail";
+import { assessmentCopy } from "../search-presentation";
 import { weightsKey } from "./Settings";
 import backIcon from "../assets/icons/back.svg";
-import searchIcon from "../assets/icons/search-panel.svg";
+import filterChevron from "../assets/figma/search-filter-chevron.svg?no-inline";
+import resultDivider from "../assets/figma/search-result-divider.svg?no-inline";
+import { SnakeLoader } from "../IndexingIndicator";
 
-export default function Panel({ ctx, stack, job, active, tabId }: { ctx: Ctx; stack: Page[]; job?: JobInfo; active: boolean; tabId: string }) {
+export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: Page[]; active: boolean; tabId: string }) {
   const page = stack[stack.length - 1];
   const searchPage = stack.find((p): p is Extract<Page, { kind: "search" }> => p.kind === "search");
   // Marks on the circle belong to the page that set them.
   useEffect(() => { if (page.kind !== "search" && page.kind !== "item" && page.kind !== "gap") ctx.setMarks({}); }, [page.kind]);
-  return <aside className="menu" role="tabpanel" id={`panel-${tabId}`} aria-labelledby={`tab-${tabId}`} hidden={!active} tabIndex={0}>
+  return <aside className={`menu ${page.kind === "search" ? "search-menu" : ""}`} role="tabpanel" id={`panel-${tabId}`} aria-labelledby={`tab-${tabId}`} hidden={!active} tabIndex={0}>
     {stack.length > 1 && <button type="button" className="back" onClick={ctx.back}><img src={backIcon} alt="" aria-hidden="true" />Back</button>}
-    {page.kind === "home" && <><Home ctx={ctx} job={job} /><MapPage ctx={ctx} /></>}
     {searchPage && <div className="stack gap-s" hidden={page.kind !== "search"}>
       <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && page.kind === "search"} />
     </div>}
     {page.kind === "import" && <Import ctx={ctx} initialPath={page.path} onCancel={ctx.back} onDone={() => ctx.back()} />}
     {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={page.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
-    {page.kind === "map" && <MapPage ctx={ctx} />}
     {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={page.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} /></div>}
     {page.kind === "gap" && <GapDetailView ctx={ctx} id={page.id} />}
     {page.kind === "item" && <ItemPage ctx={ctx} page={page} />}
   </aside>;
 }
 
-function Home({ ctx, job }: { ctx: Ctx; job?: JobInfo }) {
-  const { project, table } = ctx;
-  const items = project.collections.reduce((n, c) => n + c.items, 0);
-  const ready = table?.index_status === "indexed" || table?.index_status === "imported";
-  const pct = job?.total ? Math.round((job.done / job.total) * 100) : 0;
-  return <>
-    <div className="menu-card project-card">
-      <div><div className="card-title">{project.name}</div><div className="path">{project.root.replace(/^\/Users\/[^/]+/, "~")}</div></div>
-      <div className="card-foot">
-        <span>{fmt(items)} items</span>
-        <span className="index-status"><span className={`square ${ready ? "on" : ""}`} aria-hidden="true" />{ready ? "Indexed" : "Not indexed yet"}</span>
-      </div>
-    </div>
-    {job && <div className="menu-card stack gap-s" aria-live="polite">
-      <span className="card-title">{job.label}</span>
-      <span className="dim small">{isRunning(job) ? `${job.phase ?? "Starting"}${job.total ? ` · ${pct}%` : ""}` : job.state === "completed" ? "Done" : job.state === "cancelled" ? "Cancelled" : `Failed: ${job.error}`}</span>
-      {isRunning(job) && <button type="button" className="text-btn start" onClick={() => api.cancel()}>Cancel</button>}
-      {job.state === "failed" && job.collection && <button type="button" className="text-btn start" onClick={() => ctx.push({ kind: "index", collection: job.collection! })}>Retry in Collections</button>}
-    </div>}
-  </>;
-}
-
-const VERDICT = { open: "Open", near: "Near", exists: "Exists" };
-
 function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; active: boolean }) {
   const { table, tref, map, project } = ctx;
   const [query, setQuery] = useState(initial ?? "");
-  const [scope, setScope] = useState<Role | "">("coverage");
+  const [scope, setScope] = useState<Role | "">("");
   const [check, setCheck] = useState<CheckResult>();
   const [plain, setPlain] = useState<SearchResult>();
   const { busy, error, run } = useAction();
   const points = useMemo(() => new Map((map?.points ?? []).map((p) => [p.item_id, p])), [map]);
   const coll = project.collections.find((c) => c.collection_id === table?.collection);
-  const role = scope && (coll?.by_role[scope] ?? 0) > 0 ? scope : null;
+  const queryInput = useRef<HTMLInputElement>(null);
   const result = check?.search ?? plain;
   const [queryPos, setQueryPos] = useState<{ x: number; y: number; label: string }>();
+
+  useEffect(() => {
+    if (!active) return;
+    const focusSearch = (e: KeyboardEvent) => {
+      const target = e.target;
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select, [contenteditable]"))) return;
+      e.preventDefault(); queryInput.current?.focus();
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, [active]);
 
   useEffect(() => {
     if (initial !== undefined) { setQuery(initial); setCheck(undefined); setPlain(undefined); }
@@ -93,49 +81,77 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
   }, [result, map, active]);
 
   if (!table || !tref) return <div className="menu-card dim small">Search needs an indexed collection. Add a dataset first.</div>;
-  const go = (e?: FormEvent) => {
-    e?.preventDefault();
-    if (!query.trim()) return;
+  const search = (nextScope = scope) => {
+    if (!query.trim() || busy) return;
+    const role = nextScope || null;
     run(async () => {
-      if (table.calibration) { setCheck(await api.check(tref, query, role, false)); setPlain(undefined); }
-      else { setPlain(await api.search(tref, query, role, true)); setCheck(undefined); }
+      setCheck(undefined); setPlain(undefined);
+      if (table.calibration) setCheck(await api.check(tref, query, role, false));
+      else setPlain(await api.search(tref, query, role, true));
     });
   };
-  const pct = check ? Math.round(check.p_exists * 100) : 0;
-  return <>
-    <form role="search" className="menu-row search-row" onSubmit={go}>
-      <img src={searchIcon} alt="" aria-hidden="true" />
+  const go = (e: FormEvent) => { e.preventDefault(); search(); };
+  const assessment = check ? assessmentCopy(check, scope || null) : undefined;
+  return <div className="search-page" aria-busy={busy}>
+    <form role="search" className="search-command" onSubmit={go}>
       <label htmlFor="panel-q" className="sr-only">Describe an idea</label>
-      <input id="panel-q" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Describe an idea" />
-      {busy && <span className="dim small">…</span>}
+      <input ref={queryInput} id="panel-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="/ to search" />
+      {busy && <span role="status" aria-label="Searching"><SnakeLoader /></span>}
+      <label className="search-scope">
+        <span className="sr-only">Compare with</span>
+        <select value={scope} disabled={busy} onChange={(e) => {
+          const next = e.target.value as Role | "";
+          setScope(next);
+          if (result) search(next);
+        }}>
+          <option value="">All items</option>
+          <option value="coverage" disabled={!coll?.by_role.coverage}>Coverage</option>
+          <option value="demand" disabled={!coll?.by_role.demand}>Demand</option>
+        </select>
+        <img src={filterChevron} alt="" aria-hidden="true" />
+      </label>
     </form>
-    <div className="row wrap small">
-      <label className="inline dim">Compare with
-        <select value={scope} onChange={(e) => setScope(e.target.value as Role | "")}>
-          <option value="coverage">Coverage</option><option value="">Everything</option><option value="demand">Demand</option>
-        </select></label>
+    <div className="search-content">
+      <ErrorLine error={error} />
+      {assessment && <div className="search-assessment" aria-live="polite">
+        <span className={`verdict ${check!.calibration.stale || !check!.search.hits.length ? "unassessed" : check!.verdict}`}>{assessment.label}</span>
+        <span>{assessment.message}</span>
+      </div>}
+      {!table.calibration && result && <p className="dim small">Not calibrated · similarity rankings only</p>}
+      {result && <section className="search-rankings" aria-labelledby="rankings-title">
+        <h2 id="rankings-title">Similarity rankings</h2>
+        <div className="search-results" role="group" aria-label="Search results">
+          {result.hits.map((h, i) => <Fragment key={h.item.item_id}>
+            {i > 0 && <img className="search-result-divider" src={resultDivider} alt="" aria-hidden="true" />}
+            <button type="button" className="search-hit"
+              onMouseEnter={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
+              onFocus={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
+              onClick={() => { const p = points.get(h.item.item_id); if (p) ctx.push({ kind: "item", point: p }); }}>
+              <span className={`score ${i === 0 ? "top" : ""}`} aria-label={`similarity ${h.similarity.toFixed(2)}`}>{h.similarity.toFixed(2)}</span>
+              <span className="rank-title">{h.item.title ?? h.item.source_id}
+                <span className="dim">{[h.item.role.charAt(0).toUpperCase() + h.item.role.slice(1), year(h.item.date)].filter(Boolean).join(" – ")}</span>
+              </span>
+            </button>
+          </Fragment>)}
+          {result.hits.length === 0 && <p className="dim small">No items to compare in this selection.</p>}
+        </div>
+        <details className="assessment-details">
+          <summary>Assessment details</summary>
+          <div className="stack gap-s small dim">
+            <span>Cosine similarity, not a probability · “{table.collection}” only · {result.exhaustive ? "every item checked" : "approximate search"}</span>
+            {check && <>
+              <span>{Math.round(check.p_exists * 100)}% estimated chance the idea is already in this collection.</span>
+              <span>{check.calibration.quality}</span>
+              <span>{check.summary}</span>
+              <span>{check.next_step}</span>
+              {check.notes.map((note, i) => <span key={i}>{note}</span>)}
+            </>}
+            {result.notes.map((note, i) => <span key={i}>{note}</span>)}
+          </div>
+        </details>
+      </section>}
     </div>
-    <ErrorLine error={error} />
-    {!table.calibration && result && <div className="menu-card dim small">Not calibrated, so there is no verdict yet; scores below rank similarity only.</div>}
-    {check && <div className="menu-card stack gap-s" aria-live="polite">
-      <div className="row"><span className={`verdict ${check.verdict}`}>{VERDICT[check.verdict]}</span><span className="big-num">{pct}%</span><span className="dim small">chance it is already in this collection</span></div>
-      <span className="small">{check.summary}</span>
-      <span className="dim small">{check.calibration.quality}</span>
-    </div>}
-    {result && <>
-      <div className="section">Rankings</div>
-      <div className="dim small">Cosine similarity (not a probability), against “{table.collection}” only · {result.exhaustive ? "every item checked" : "approximate"}</div>
-      <div className="result-list" role="group" aria-label="Search results">
-      {result.hits.map((h, i) => <button key={h.item.item_id} type="button" className="menu-row rank"
-        onMouseEnter={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
-        onFocus={() => ctx.setMarks({ query: queryPos, items: [h.item.item_id] })}
-        onClick={() => { const p = points.get(h.item.item_id); if (p) ctx.push({ kind: "item", point: p }); }}>
-        <span className={`score ${i === 0 ? "top" : ""}`} aria-label={`similarity ${h.similarity.toFixed(2)}`}>{h.similarity.toFixed(2)}</span>
-        <span className="rank-title">{h.item.title ?? h.item.source_id}<span className="dim">{[h.item.role, year(h.item.date)].filter(Boolean).join(" · ")}</span></span>
-      </button>)}
-      </div>
-    </>}
-  </>;
+  </div>;
 }
 
 function ItemPage({ ctx, page }: { ctx: Ctx; page: Extract<Page, { kind: "item" }> }) {
@@ -152,24 +168,6 @@ function ItemPage({ ctx, page }: { ctx: Ctx; page: Extract<Page, { kind: "item" 
     {p.url && <Link url={p.url}>Open the source</Link>}
     <button type="button" className="menu-row" onClick={() => ctx.push({ kind: "search", query: p.title ?? "" })}>Search for similar items</button>
   </div>;
-}
-
-function MapPage({ ctx }: { ctx: Ctx }) {
-  const { map, view, table } = ctx;
-  const toggle = (k: "showGaps" | "showLabels" | "showOutlines", label: string, hint: string) =>
-    <label className="menu-row toggle"><input type="checkbox" checked={view[k]} onChange={(e) => view.set(k, e.target.checked)} /><span>{label}</span><span className="dim small push">{hint}</span></label>;
-  return <>
-    <div className="menu-card stack gap-s">
-      <div className="card-title">Map</div>
-      <span className="dim small">{map ? `${fmt(map.points.length)} items in ${fmt(map.regions.filter((r) => r.level === "fine").length)} regions · ${table?.model_key}` : "No map yet: it is drawn after indexing and mapping."}</span>
-      <span className="dim small">Squares that overlap merge into one; zoom in to separate them. Scroll to pan, pinch or Command-scroll to zoom, drag to pan, and click a merged square to zoom to it.</span>
-    </div>
-    {toggle("showGaps", "Gap marks", "rings")}
-    {toggle("showLabels", "Region names", "largest 16")}
-    {toggle("showOutlines", "Region outlines", "else on hover")}
-    <button type="button" className="menu-row" onClick={view.reset}>Reset view</button>
-    {map && <p className="dim small">{map.note}</p>}
-  </>;
 }
 
 function GapsPage({ ctx }: { ctx: Ctx }) {

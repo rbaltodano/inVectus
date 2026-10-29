@@ -112,9 +112,6 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .menu-row:disabled { color: var(--dim); cursor: default; }
 .menu-row img { width: 14px; height: 14px; }
 .menu-row .push { margin-left: auto; font-weight: 400; }
-.search-row input { flex: 1; border: none; background: none; padding: 0; min-height: 0; font-size: 14px; font-weight: 500; text-transform: none; color: var(--text); }
-.search-row input:focus-visible { outline: none; }
-.search-row:focus-within { box-shadow: inset 0 0 0 1px var(--line-2); }
 .rank { padding: 12px 16px; align-items: flex-start; border-radius: 0; border-bottom: 1px solid var(--line); }
 .score { flex: 0 0 56px; font-size: 14px; font-weight: 500; line-height: 1.5; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .score.top { color: var(--accent); }
@@ -297,8 +294,8 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 }
 
 /* Persistent project destinations, styled like the restrained terminal reference. */
-.project-tabs { display: flex; flex: none; gap: 4px; padding: 12px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-.project-tabs button { flex: none; border: none; border-radius: 2px; padding: 8px 12px; background: transparent; color: var(--dim); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; }
+.project-tabs { display: flex; flex: 1; min-width: 0; gap: 4px; padding: 0; overflow-x: auto; }
+.project-tabs button { flex: none; border: none; border-radius: 0; padding: 12px 16px; background: transparent; color: var(--dim); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; }
 .project-tabs button:hover { color: var(--text); }
 .project-tabs button[aria-selected="true"] { color: var(--ink); background: var(--surface-2); font-weight: 500; }
 [hidden] { display: none !important; }
@@ -315,7 +312,6 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .index-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
 .card:focus-within .card-forget { opacity: 1; }
 .card-open { padding-right: 64px; }
-.search-row input { min-width: 0; font-weight: 400; }
 .menu-card p, .panel p { line-height: 1.5; }
 
 /* Angrove's expanded minimum is 280 pt; its Mac sidebar baseline is 13 pt regular. */
@@ -336,7 +332,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 
 /* The map is a companion to the project's self-contained working panel. */
 .project-stage { gap: 24px; align-items: stretch; flex-direction: row; overflow: hidden; }
-.project-console { display: flex; flex-direction: column; flex: 0 0 54%; min-width: 400px; max-width: 620px; min-height: 0; height: 100%; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); overflow: hidden; }
+.project-console { display: flex; flex-direction: column; flex: 0 0 54%; min-width: 400px; max-width: 740px; min-height: 0; height: 100%; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); overflow: hidden; }
 .project-console .banner { padding: 8px 16px; font-size: 13px; flex: none; }
 .project-console .menu { flex: 1; min-height: 0; max-height: none; padding: 16px; }
 .project-console .menu > .stack { flex-shrink: 0; }
@@ -355,3 +351,53 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 }
 
 .side-error { flex: none; overflow-wrap: anywhere; }
+
+/* Search panel from Figma 1227:166; retain inVectus's desktop type and palette. */
+.project-console { border-radius: 0; }
+.project-toolbar { display: flex; flex: none; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); }
+.indexing-indicator { display: flex; flex: none; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid var(--surface); border-right: 1px solid var(--surface); padding: 0 12px; font-size: 12px; color: var(--text-2); }
+.indexing-percent { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.indexing-bar { width: 50px; height: 12px; background: var(--surface); }
+.indexing-bar > span { display: block; height: 100%; background: var(--text-2); }
+.indexing-bar.indeterminate > span { opacity: 0.5; }
+.snake-loader { --snake-step-duration: 120ms; --snake-duration: calc(var(--snake-step-duration) * 9); display: inline-grid; grid-template-columns: repeat(3, 2px); grid-template-rows: repeat(3, 2px); gap: 2px; flex: none; vertical-align: middle; }
+.snake-cell { width: 2px; height: 2px; background: currentColor; opacity: 0.5; animation: matrix-snake var(--snake-duration) steps(1, end) infinite; animation-delay: calc(var(--snake-step) * var(--snake-step-duration) - var(--snake-duration)); }
+@keyframes matrix-snake { 0% { opacity: 1; } 11.111111%, 100% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) { .snake-cell { animation: none; } .snake-cell[data-step="0"] { opacity: 1; } }
+.project-console .menu.search-menu { padding: 0; gap: 0; }
+.search-page { display: flex; flex-direction: column; }
+.search-command { display: flex; flex: none; align-items: center; gap: 16px; margin: 0; padding: 24px; border-bottom: 1px solid var(--line); }
+.search-command input { flex: 1; min-width: 0; width: 0; padding: 0; min-height: 24px; border: none; border-radius: 0; background: none; font-size: 14px; font-weight: 400; }
+.search-command input:focus-visible { outline-offset: 6px; }
+.search-scope { position: relative; display: flex; flex-direction: row; flex: none; align-items: center; font-weight: 400; }
+.search-scope select { appearance: none; border: none; border-radius: 0; padding: 0 16px 0 0; min-height: 24px; background: transparent; font-size: 13px; cursor: pointer; }
+.search-scope img { position: absolute; right: 0; pointer-events: none; }
+.search-content { display: flex; flex-direction: column; gap: 24px; padding: 24px; }
+.search-content > p { margin: 0; }
+.search-assessment { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.search-assessment .verdict { flex: none; padding: 4px 8px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.search-assessment > span:last-child { flex: 1; min-width: 180px; }
+.search-assessment .verdict.exists { color: var(--ink); background: transparent; }
+.search-rankings { display: flex; flex-direction: column; gap: 24px; margin-top: 36px; }
+.search-rankings h2 { font-size: 14px; font-weight: 500; }
+.search-results { display: flex; flex-direction: column; gap: 24px; }
+.search-hit { display: flex; align-items: center; gap: 16px; padding: 0; width: 100%; min-width: 0; text-align: left; border: none; border-radius: 0; background: transparent; color: var(--text-2); font: inherit; font-size: 14px; font-weight: 400; cursor: pointer; }
+.search-hit:hover, .search-hit:focus-visible { background: var(--surface-2); }
+.search-hit .score { font-size: 14px; flex: 0 0 56px; font-weight: 500; }
+.search-hit .rank-title { gap: 16px; flex: 1; }
+.search-result-divider { display: block; width: 500px; max-width: 100%; height: 1px; align-self: center; }
+.assessment-details { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.assessment-details summary { color: var(--dim); font-size: 13px; }
+.assessment-details > div { padding-top: 12px; }
+.project-console .menu:not(.search-menu) { padding: 24px; gap: 24px; }
+.project-console .menu-card, .project-console .panel { background: transparent; border-radius: 0; }
+.project-console .result-list, .project-console .collection-list { background: transparent; border: none; border-radius: 0; }
+.project-console .result-list .rank { background: transparent; padding: 16px 0; }
+.project-console .result-list .rank:hover, .project-console .result-list .rank:focus-visible { background: var(--surface-2); }
+.project-console .collection-row { padding: 16px 0; }
+.project-console .collection-row[data-open="true"] { background: transparent; }
+.project-console .section { margin-top: 0; }
+@media (max-width: 1200px) { .project-tabs button { padding: 10px; } .indexing-indicator { padding: 0 8px; gap: 8px; } }
+@media (max-width: 760px) { .project-toolbar { flex-wrap: wrap; } .search-command, .search-content, .project-console .menu:not(.search-menu) { padding: 16px; } }
+
+@media (max-width: 760px) { .project-toolbar .project-tabs { flex: 1 0 220px; } }

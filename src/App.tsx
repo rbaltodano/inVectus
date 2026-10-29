@@ -4,6 +4,7 @@ import { JobsProvider, isRunning, useJobs } from "./jobs";
 import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
 import Panel from "./screens/Panel";
+import IndexingIndicator from "./IndexingIndicator";
 import Settings from "./screens/Settings";
 import { Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
@@ -11,8 +12,8 @@ import "./App.css";
 
 /** A page of the menu beside the circle; pages stack, and Back pops one. */
 export type Page =
-  | { kind: "home" } | { kind: "search"; query?: string } | { kind: "import"; path?: string }
-  | { kind: "index"; collection?: string } | { kind: "map" } | { kind: "gaps" }
+  | { kind: "search"; query?: string } | { kind: "import"; path?: string }
+  | { kind: "index"; collection?: string } | { kind: "gaps" }
   | { kind: "gap"; id: number } | { kind: "item"; point: MapPoint };
 
 export type Route = { view: "projects" } | { view: "new" } | { view: "settings" } | { view: "project" };
@@ -52,7 +53,7 @@ export default function App() {
 function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void> }) {
   const [route, setRoute] = useState<Route>({ view: "projects" });
   const [recent, setRecent] = useState<Recent[]>(recentProjects);
-  const [stack, setStack] = useState<Page[]>([{ kind: "home" }]);
+  const [stack, setStack] = useState<Page[]>([{ kind: "search" }]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string>();
   const jobs = useJobs();
@@ -64,12 +65,12 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
 
   const opened = (p: ProjectInfo, first?: Page) => {
     setProject(p); setError(undefined);
-    setStack(first ? [{ kind: "home" }, first] : [{ kind: "home" }]);
+    setStack(first ? [{ kind: "search" }, first] : [{ kind: "search" }]);
     setRoute({ view: "project" });
   };
   const openRecent = async (r: Recent) => {
     if (opening || (switchingBlocked && job?.project !== r.root)) return;
-    setQuery(""); setError(undefined); setStack([{ kind: "home" }]);
+    setQuery(""); setError(undefined); setStack([{ kind: "search" }]);
     if (project?.root === r.root) { setRoute({ view: "project" }); return; }
     setOpening(true);
     try { opened(await api.open(r.root, false)); } catch (e) { setError(String(e)); }
@@ -237,11 +238,11 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
   const go = (r: Route | Legacy) => {
     if (!("tab" in r)) { if (r.view !== "project") goRoute(r); return; }
-    if (r.tab === "overview") selectTab("explore");
+    if (r.tab === "overview") selectTab("search");
     else if (r.tab === "search") push({ kind: "search", query: r.query });
     else if (r.tab === "gaps") push(r.gap !== undefined ? { kind: "gap", id: r.gap } : { kind: "gaps" });
     else if (r.tab === "collections") push(r.adding ? { kind: "import" } : { kind: "index", collection: r.collection });
-    else if (r.tab === "map") { if (r.region !== undefined) setMarks({ ...marks, region: r.region }); push({ kind: "map" }); }
+    else if (r.tab === "map") { if (r.region !== undefined) setMarks({ ...marks, region: r.region }); }
   };
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
 
@@ -277,17 +278,20 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
       <section className="project-console" aria-label="Project workspace">
         {project.warning && <p className="banner">{project.warning}</p>}
         {netError && <p className="banner err">{netError}</p>}
-        <div className="project-tabs" role="tablist" aria-label="Project sections">
-          {PROJECT_TABS.map((tab, i) => <button key={tab.id} id={`tab-${tab.id}`} type="button" role="tab"
-            aria-selected={activeTab === tab.id} aria-controls={tabStacks[tab.id] ? `panel-${tab.id}` : undefined} tabIndex={activeTab === tab.id ? 0 : -1}
-            onClick={() => selectTab(tab.id)} onKeyDown={(e) => {
-              const next = tabKeyIndex(e.key, i);
-              if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
-            }}>{tab.label}</button>)}
+        <div className="project-toolbar">
+          <div className="project-tabs" role="tablist" aria-label="Project sections">
+            {PROJECT_TABS.map((tab, i) => <button key={tab.id} id={`tab-${tab.id}`} type="button" role="tab"
+              aria-selected={activeTab === tab.id} aria-controls={tabStacks[tab.id] ? `panel-${tab.id}` : undefined} tabIndex={activeTab === tab.id ? 0 : -1}
+              onClick={() => selectTab(tab.id)} onKeyDown={(e) => {
+                const next = tabKeyIndex(e.key, i);
+                if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
+              }}>{tab.label}</button>)}
+          </div>
+        <IndexingIndicator job={job} preview />
         </div>
           {PROJECT_TABS.filter((tab) => tabStacks[tab.id]).map((tab) => <Panel key={tab.id} active={activeTab === tab.id} tabId={tab.id}
             ctx={{ ...ctx, push: (p) => pushFrom(tab.id, p), back: () => setStack((s) => s.length > 1 ? s.slice(0, -1) : s, tab.id),
-              setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} job={job} />)}
+              setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} />)}
       </section>
     </div>
   </>;

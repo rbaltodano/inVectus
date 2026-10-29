@@ -1517,3 +1517,11 @@ packaging gates are still open. Details, reproducible commands and limitations:
   showed).
 - Checked in the browser stub harness only; not rebuilt or relaunched as the macOS app.
   UI tests (28), type check and frontend build pass. No CI dispatched.
+
+## 2026-10-29 — Relaunch latest typography changes
+
+- On the owner's subsequent relaunch request, completed the previously interrupted
+  macOS release rebuild. Frontend and native builds passed with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its original
+  project history and dev model store, including bundled Inter and cream text.
+- Live typography/scrollbar appearance remains for owner review. No CI dispatched.

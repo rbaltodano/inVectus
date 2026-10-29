@@ -31,6 +31,7 @@ dirs = "6"
 tempfile = "3"
 clap = { version = "4", features = ["derive", "env"] }
 ctrlc = "3"
+libc = "0.2"
 # Project store and CSV/Parquet reader. Bundled: no system DuckDB; extensions are statically
 # linked and auto-install is disabled at connect time (no hidden network).
 duckdb = { version = "=1.20000.0", features = ["bundled", "parquet", "json"] }

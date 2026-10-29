@@ -25,6 +25,8 @@ struct Session {
     vectors: VectorStore,
     /// Query encoder cached per vector space id.
     encoder: Option<(String, OnnxEmbedder)>,
+    /// The local language model, loaded on first use and kept for the session.
+    llm: Option<invectus_llm::LlamaGenerator>,
 }
 
 #[derive(Default)]
@@ -154,6 +156,7 @@ fn open_project_blocking(session: &Shared, path: String, create: bool) -> CmdRes
         project,
         vectors,
         encoder: None,
+        llm: None,
     });
     info(guard.as_ref().unwrap()).map_err(err)
 }
@@ -709,18 +712,21 @@ async fn describe_gap(
                 },
                 None => invectus_midpoint::Target::Region { region: g.region_a },
             };
-            let store = ModelStore::new(ModelStore::default_root()?);
-            let spec = invectus_llm::registry::spec(invectus_llm::DEFAULT_LLM)?;
-            let mut generator = invectus_llm::LlamaGenerator::load(&store.root, spec, 8)?;
+            if s.llm.is_none() {
+                let store = ModelStore::new(ModelStore::default_root()?);
+                let spec = invectus_llm::registry::spec(invectus_llm::DEFAULT_LLM)?;
+                s.llm = Some(invectus_llm::LlamaGenerator::load(&store.root, spec, 8)?);
+            }
             encoder_for(s, &table)?;
             let encoder = &mut s.encoder.as_mut().unwrap().1;
+            let generator = s.llm.as_mut().unwrap();
             let defaults = invectus_midpoint::DescribeOptions::default();
             invectus_midpoint::describe(
                 &s.project,
                 &s.vectors,
                 &table,
                 encoder,
-                &mut generator,
+                generator,
                 &target,
                 &invectus_midpoint::DescribeOptions {
                     genre: genre.unwrap_or(defaults.genre),

@@ -17,6 +17,48 @@ pub struct GapView {
     #[serde(flatten)]
     pub gap: Gap,
     pub verdict: Option<GapVerdictRecord>,
+    /// The latest outside-source check of this gap (`invectus gaps verify`), summarised.
+    pub verification: Option<VerificationSummary>,
+}
+
+/// What the last verification found, without its full hit list.
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
+pub struct VerificationSummary {
+    pub matches: u64,
+    pub summary: String,
+    /// The closest outside items.
+    pub closest: Vec<OutsideHit>,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
+pub struct OutsideHit {
+    pub title: String,
+    pub source: String,
+    pub year: Option<i64>,
+    pub url: Option<String>,
+    pub similarity: f64,
+}
+
+fn summarise(v: &serde_json::Value) -> VerificationSummary {
+    VerificationSummary {
+        matches: v["matches"].as_u64().unwrap_or(0),
+        summary: v["summary"].as_str().unwrap_or("").to_string(),
+        closest: v["hits"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .take(3)
+                    .map(|h| OutsideHit {
+                        title: h["title"].as_str().unwrap_or("").to_string(),
+                        source: h["source"].as_str().unwrap_or("").to_string(),
+                        year: h["year"].as_i64(),
+                        url: h["url"].as_str().map(String::from),
+                        similarity: h["similarity"].as_f64().unwrap_or(f64::NAN),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -88,6 +130,10 @@ pub fn list(project: &Project, table: &VectorTableRecord) -> Result<GapList> {
             let gap: Gap = serde_json::from_value(r.data)?;
             Ok(GapView {
                 verdict: matching(&gap, &verdicts),
+                verification: project
+                    .store
+                    .latest_verification(&run.run_id, gap.gap_id)?
+                    .map(|v| summarise(&v)),
                 gap,
             })
         })
@@ -155,6 +201,24 @@ pub fn set_verdict(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verification_summaries_keep_the_three_closest() {
+        let v = serde_json::json!({
+            "matches": 1, "summary": "1 outside item looks like a match",
+            "hits": [
+                {"title": "A", "source": "pubmed", "year": 2020, "url": "u", "similarity": 0.9},
+                {"title": "B", "source": "openalex", "similarity": 0.8},
+                {"title": "C", "source": "pubmed", "similarity": 0.7},
+                {"title": "D", "source": "pubmed", "similarity": 0.6}
+            ]
+        });
+        let s = summarise(&v);
+        assert_eq!((s.matches, s.closest.len()), (1, 3));
+        assert_eq!(s.closest[0].year, Some(2020));
+        assert_eq!(s.closest[1].url, None);
+        assert_eq!(summarise(&serde_json::json!({})).closest.len(), 0);
+    }
 
     #[test]
     fn jaccard_overlap() {

@@ -395,7 +395,11 @@ enum GapsCommand {
     Verify {
         #[command(flatten)]
         t: TableArgs,
-        id: i32,
+        /// Gap to check (or use --top).
+        id: Option<i32>,
+        /// Check the N highest-ranked gaps instead of one.
+        #[arg(long, conflicts_with = "id")]
+        top: Option<usize>,
         /// Sources, comma-separated.
         #[arg(long, value_delimiter = ',', default_value = "pubmed,openalex")]
         sources: Vec<invectus_verify::Source>,
@@ -557,6 +561,13 @@ enum GapmapCommand {
 }
 
 fn main() {
+    // Exit quietly when the reader of stdout goes away (e.g. `invectus … | head`) instead of
+    // panicking on a write error: restore the default SIGPIPE action Rust ignores.
+    #[cfg(unix)]
+    // SAFETY: called once at startup before any other thread exists.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     if let Err(e) = run() {
         eprintln!("error: {e:#}");
         std::process::exit(1);
@@ -1499,6 +1510,9 @@ fn print_gap(g: &invectus_gaps::GapView) {
             .map_or("undecided", |v| v.verdict.as_str())
     );
     println!("       {}", g.gap.explanation);
+    if let Some(v) = &g.verification {
+        println!("       outside sources: {}", v.summary);
+    }
 }
 
 fn run_describe(
@@ -1677,6 +1691,21 @@ fn cmd_gaps(c: GapsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
                     v.note
                 );
             }
+            if let Some(v) = &d.view.verification {
+                for h in &v.closest {
+                    println!(
+                        "       outside {:.3} [{}{}] {}{}",
+                        h.similarity,
+                        h.source,
+                        h.year.map(|y| format!(" {y}")).unwrap_or_default(),
+                        h.title,
+                        h.url
+                            .as_deref()
+                            .map(|u| format!(" · {u}"))
+                            .unwrap_or_default()
+                    );
+                }
+            }
             println!("       items at the centre:");
             for i in &d.core_items {
                 println!(
@@ -1708,6 +1737,7 @@ fn cmd_gaps(c: GapsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
         GapsCommand::Verify {
             t,
             id,
+            top,
             sources,
             network,
             max,
@@ -1725,17 +1755,39 @@ fn cmd_gaps(c: GapsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
                     batch_size: 16,
                 },
             )?;
-            let v = invectus_verify::verify_gap(
-                &project,
-                &table,
-                &mut encoder,
-                id,
-                &invectus_verify::VerifyOptions {
-                    sources,
-                    max_per_source: max,
-                    allow_network: network,
-                },
-            )?;
+            let ids: Vec<i32> = match (id, top) {
+                (Some(i), _) => vec![i],
+                (None, Some(n)) => gap_list(&project, &table)?
+                    .gaps
+                    .iter()
+                    .take(n)
+                    .map(|g| g.gap.gap_id)
+                    .collect(),
+                (None, None) => bail!("give a gap id or --top N"),
+            };
+            let opts = invectus_verify::VerifyOptions {
+                sources,
+                max_per_source: max,
+                allow_network: network,
+            };
+            if ids.len() > 1 {
+                let mut all = Vec::new();
+                for i in ids {
+                    let v = invectus_verify::verify_gap(&project, &table, &mut encoder, i, &opts)?;
+                    if !json {
+                        println!(
+                            "{:>3}. [{} match(es)] {} — {}",
+                            v.gap_id, v.matches, v.label, v.summary
+                        );
+                    }
+                    all.push(v);
+                }
+                if json {
+                    return print_json(&all);
+                }
+                return Ok(());
+            }
+            let v = invectus_verify::verify_gap(&project, &table, &mut encoder, ids[0], &opts)?;
             if json {
                 return print_json(&v);
             }

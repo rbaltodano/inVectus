@@ -593,6 +593,22 @@ calibration). The designs are coming, so the work is engine, CLI and backend onl
 - Not done: the Steam and other-collection connectors, batch verification (`--top N`), a
   title-calibrated match threshold, and showing verification in gap lists and reports.
 
+## 2026-10-29 — Verification everywhere, batch verify, two fixes
+
+- Gap lists, details, the desktop `list_gaps` / `gap_detail` and both report formats carry each
+  gap's latest verification: the summary and the 3 closest outside titles with links. CSV gains
+  `outside_matches` and `outside_summary`.
+- `invectus gaps verify --top N` checks the N highest-ranked gaps in one run. Demo top 3: 6.8 s
+  (one from cache). In each case relevant reviews exist outside the 5,000-paper sample (e.g.
+  "Pathology of eyelid tumors" for "Malignant Tumors of the Orbit and Eyelid"), although none
+  crossed the automatic match line. The keyword queries are broad: up to 262k OpenAlex reviews
+  match the term ORs. Sharper queries, for example written by the local LLM, are a follow-up.
+- Fixed: the CLI no longer panics when stdout closes early (`| head`); SIGPIPE's default
+  action is restored on Unix. The desktop session now keeps Gemma loaded after its first use
+  instead of reloading it for every gap description.
+- Disk: `target/release` had grown to 24 GB with only 3.7 GiB free. Its intermediates were
+  removed (executables kept); free space is ~22 GiB after this rebuild.
+
 ## Next
 1. UI from the owner's designs: Search verdict (P2), Map (P3), Gaps and Gap detail (P4); the
    backend commands exist.

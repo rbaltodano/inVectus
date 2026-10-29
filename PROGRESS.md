@@ -1226,3 +1226,24 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app with its existing project history and dev model
   store. Live visual review remains with the owner; no GitHub CI dispatched.
+
+## 2026-10-29 — Gap entrance fade, offset source lines and map focus
+
+- Gap-row slide now fades smoothly from opacity zero to one over the existing 300 ms,
+  with the 150 ms per-row stagger unchanged. Result lists and their console no longer
+  use overflow:hidden. The menu retains vertical scrolling with a 24 px horizontal
+  gutter, including narrow layouts, to accommodate the -24 px slide.
+- Shared source links use a separate 1 px bottom border with 3 px padding below the
+  text, replacing text-decoration. Cloned inline decorations preserve the line beneath
+  every wrapped segment. Existing source opening behavior is unchanged.
+- Show on map previously reapplied the region mark already set on detail entry. It now
+  sends a repeatable explicit request that centres and fits that region on the canvas,
+  clears hover/active zoom motion and focuses/scrolls the map into view. The detail
+  remains open. Requests are consumed once and cleared on collection/map changes, so
+  subsequent resize/data redraws do not undo manual panning. Coordinates remain display-only.
+- All 20 UI tests passed, including new off-centre region centring, outline fitting and
+  zoom-bound checks. Frontend build and diff checks passed. Live layout, wrapped-link
+  appearance and button interaction remain unverified through the UI.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app using its existing project history and dev
+  model store. No CI dispatched; Windows/Linux remain unverified.

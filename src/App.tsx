@@ -33,6 +33,7 @@ export interface Ctx {
   push: (p: Page) => void;
   back: () => void;
   setMarks: (m: Marks) => void;
+  showRegion: (region: number) => void;
   reloadGaps: () => Promise<void>;
   refresh: () => Promise<void>;
   setProject: (p: ProjectInfo) => void;
@@ -219,6 +220,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
     setTabStacks((prev) => ({ ...prev, [tab]: typeof pages === "function" ? pages(prev[tab]!) : pages }));
   const [opts, setOpts] = useState({ showGaps: true, showLabels: false, showOutlines: false });
   const [resetKey, setResetKey] = useState(0);
+  const [mapFocus, setMapFocus] = useState<{ region: number; request: number }>();
   const [mapError, setMapError] = useState<string>();
   const [netError, setNetError] = useState<string>();
 
@@ -228,7 +230,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   const job = jobs.current && jobs.current.project === project.root ? jobs.current : undefined;
 
   useEffect(() => {
-    setMap(undefined); setMapError(undefined);
+    setMap(undefined); setMapError(undefined); setMapFocus(undefined);
     if (tref && table?.regions) api.map(tref).then(setMap).catch((e) => setMapError(String(e)));
   }, [tref?.collection, tref?.space, table?.regions?.run_id]);
   const reloadGaps = useCallback(async () => {
@@ -262,18 +264,22 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   };
   const push = (p: Page) => pushFrom(activeTab, p);
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+  const showRegion = (region: number) => {
+    setMarks({ region });
+    setMapFocus((previous) => ({ region, request: (previous?.request ?? 0) + 1 }));
+  };
   const go = (r: Route | Legacy) => {
     if (!("tab" in r)) { if (r.view !== "project") goRoute(r); return; }
     if (r.tab === "overview") selectTab("search");
     else if (r.tab === "search") push({ kind: "search", query: r.query });
     else if (r.tab === "gaps") push(r.gap !== undefined ? { kind: "gap", id: r.gap } : { kind: "gaps" });
     else if (r.tab === "collections") push(r.adding ? { kind: "import" } : { kind: "index", collection: r.collection });
-    else if (r.tab === "map") { if (r.region !== undefined) setMarks({ ...marks, region: r.region }); }
+    else if (r.tab === "map") { if (r.region !== undefined) showRegion(r.region); }
   };
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
 
   const ctx: Ctx = {
-    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, setMarks, reloadGaps, refresh, setProject, pickTable,
+    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, setMarks, showRegion, reloadGaps, refresh, setProject, pickTable,
     view: { ...opts, set: (k, v) => setOpts((o) => ({ ...o, [k]: v })), reset: () => setResetKey((k) => k + 1) },
   };
   const addData = async () => {
@@ -296,7 +302,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
     </header>
     <div className="stage project-stage">
-      <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey}
+      <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey} focusRegion={mapFocus}
         showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
         empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
         idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}

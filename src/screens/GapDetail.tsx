@@ -118,7 +118,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
             <Link url={i.url}>{i.title ?? `item ${i.item_id}`}</Link>
             <span className="muted small"> · <span className={`tag role ${i.role}`}>{i.role}</span> {year(i.date)}</span>
           </li>)}</ul>
-          <div className="row"><button type="button" className="btn" onClick={() => ctx.go({ view: "project", tab: "map", region: gap.region_a })}>Show on map</button></div>
+          <div className="row"><button type="button" className="btn" onClick={() => ctx.showRegion(gap.region_a)}>Show on map</button></div>
         </section>
       </div>
 

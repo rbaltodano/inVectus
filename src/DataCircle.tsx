@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import LineArt from "./LineArt";
 import { fmt, year, KIND_LABEL, type GapView, type JobInfo, type MapData, type MapPoint, type Region } from "./api";
 import { DotFlicker } from "./dot-flicker";
+import { regionFocusView } from "./map-focus";
 
 export interface Marks {
   /** Estimated position of the searched idea, in map coordinates (approximate). */
@@ -34,6 +35,8 @@ interface Props {
   onItem: (p: MapPoint) => void;
   /** Bumped by the parent to reset the view. */
   resetKey?: number;
+  /** Explicit focus requests; the counter lets the same region be focused again after panning. */
+  focusRegion?: { region: number; request: number };
 }
 
 const INK = "#eeeae4";
@@ -111,9 +114,10 @@ function disc(i: number): [number, number] {
   return [Math.cos(t) * r, Math.sin(t) * r];
 }
 
-export default function DataCircle({ data, gaps, marks, showGaps, showLabels, showOutlines, job, empty, idle, onGap, onItem, resetKey }: Props) {
+export default function DataCircle({ data, gaps, marks, showGaps, showLabels, showOutlines, job, empty, idle, onGap, onItem, resetKey, focusRegion }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const focusedRequest = useRef<Props["focusRegion"]>();
   const [size, setSize] = useState(560);
   const [view, setView] = useState({ s: 1, x: 0, y: 0 });
   const viewRef = useRef(view);
@@ -186,6 +190,16 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const inside = (x: number, y: number, pad = 0) => (x - R) ** 2 + (y - R) ** 2 <= (R - pad) ** 2;
 
   const fine = useMemo(() => new Map((data?.regions ?? []).filter((r) => r.level === "fine").map((r) => [r.region_id, r])), [data]);
+  useEffect(() => {
+    if (!focusRegion || focusedRequest.current === focusRegion) return;
+    const region = fine.get(focusRegion.region);
+    if (!region) return;
+    focusedRequest.current = focusRegion;
+    stopZoom();
+    setHover(undefined);
+    setView(regionFocusView(region, fit, size, ZOOM_MIN, ZOOM_MAX));
+    canvas.current?.focus({ preventScroll: false });
+  }, [focusRegion, fine, fit, size, stopZoom]);
   const regionName = (r?: Region) => r ? r.llm_label ?? r.label : "";
   const gapPos = (g: GapView): [number, number] | undefined => {
     const a = fine.get(g.region_a), b = g.region_b !== null ? fine.get(g.region_b) : undefined;
@@ -432,7 +446,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   return <div ref={wrap} className="circle-wrap">
     <div className="circle" style={{ width: size, height: size }}>
       <canvas ref={canvas} style={{ width: size, height: size, cursor: drag.current?.moved ? "grabbing" : hover ? "pointer" : "grab" }}
-        role="img" aria-label={data ? `Map of ${fmt(data.points.length)} items; positions are for browsing only` : "Dataset circle"}
+        role="img" tabIndex={0} aria-label={data ? `Map of ${fmt(data.points.length)} items; positions are for browsing only` : "Dataset circle"}
         onPointerDown={(e) => { stopZoom(); const [x, y] = at(e); canvas.current!.setPointerCapture(e.pointerId); drag.current = { x, y, v: view, moved: false }; }}
         onPointerMove={(e) => {
           const [x, y] = at(e); const d = drag.current;

@@ -1159,6 +1159,14 @@ packaging gates are still open. Details, reproducible commands and limitations:
   pending quiet search focus and clockwise 3×2 loader changes. Visual review remains with
   the owner; Windows/Linux unverified. No GitHub CI dispatched.
 
+## 2026-10-29 — Detail list line height and Back arrow
+
+- Explicitly set plain-list items (including Central items) to line-height 1.5, matching
+  the existing root default. Replaced the Back button's small SVG image with a 16 px
+  inline left arrow that inherits the button color, retaining its 8 px label spacing.
+- Frontend TypeScript/Vite build and diff checks passed. No native rebuild or relaunch;
+  visual review awaits the next launch. No GitHub CI dispatched.
+
 ## 2026-10-29 — Taller 2×3 loading matrix
 
 - Changed the shared loading matrix to two columns and three rows. Clockwise traversal is

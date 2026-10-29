@@ -11,7 +11,7 @@ import { assessmentCopy } from "../search-presentation";
 import { gapCode } from "../DataCircle";
 import LineArt from "../LineArt";
 import { weightsKey } from "./Settings";
-import backIcon from "../assets/icons/back.svg";
+import { ArrowLeft } from "lucide-react";
 import filterChevron from "../assets/figma/search-filter-chevron.svg?no-inline";
 import resultDivider from "../assets/figma/search-result-divider.svg?no-inline";
 import { MatrixLoader } from "../IndexingIndicator";
@@ -38,7 +38,7 @@ export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: 
   useEffect(() => { if (page.kind !== "search" && page.kind !== "item" && page.kind !== "gap") ctx.setMarks({}); }, [page.kind]);
   return <aside ref={scroller} className={`menu ${shown.kind === "search" ? "search-menu" : ""}`} role="tabpanel" id={`panel-${tabId}`} aria-labelledby={`tab-${tabId}`} hidden={!active} tabIndex={0}>
     <div className={`page-swap ${phase}`}>
-    {stack.length > 1 && shown.kind !== "search" && <button type="button" className="back" onClick={ctx.back}><img src={backIcon} alt="" aria-hidden="true" />Back</button>}
+    {stack.length > 1 && shown.kind !== "search" && <button type="button" className="back" onClick={ctx.back}><ArrowLeft size={16} aria-hidden="true" />Back</button>}
     {searchPage && <div className="stack gap-s" hidden={shown.kind !== "search"}>
       <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && shown.kind === "search"} />
     </div>}

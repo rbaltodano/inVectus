@@ -1383,3 +1383,18 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live appearance/click review remains with the
   owner; no GitHub CI dispatched.
+
+## 2026-10-29 — Open workspace with vertical divider
+
+- Removed the content console's enclosing border, corner radius and background, plus
+  the full-width line beneath the toolbar. Tabs remain at the top with their active
+  underline; the content keeps its existing independent scroll area.
+- Added a 1 px vertical divider midway through the 24 px content/map gutter. Its 16 px
+  inset within the console plus the desktop stage's 32 px padding leaves 48 px from
+  the top and bottom edges of the workspace below the project header. The divider is
+  decorative and ignores pointer input; it is hidden in the existing stacked layout
+  at viewport widths of 1040 px and below.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live layout review remains with the owner;
+  no GitHub CI dispatched.

@@ -338,13 +338,16 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 
 /* The map is a companion to the project's self-contained working panel. */
 .project-stage { gap: 24px; align-items: stretch; flex-direction: row; overflow: hidden; }
-.project-console { display: flex; flex-direction: column; flex: 0 0 54%; min-width: 400px; max-width: 740px; min-height: 0; height: 100%; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); overflow: visible; }
+.project-console { position: relative; display: flex; flex-direction: column; flex: 0 0 54%; min-width: 400px; max-width: 740px; min-height: 0; height: 100%; border: none; border-radius: 0; background: transparent; overflow: visible; }
+/* The stage contributes 32px of padding; another 16px leaves 48px at each end. */
+.project-console::after { content: ""; position: absolute; right: -12px; top: 16px; bottom: 16px; width: 1px; background: var(--line); pointer-events: none; }
 .project-console .banner { padding: 8px 16px; font-size: 13px; flex: none; }
 .project-console .menu { flex: 1; min-height: 0; max-height: none; padding: 16px; }
 .project-console .menu > .stack { flex-shrink: 0; }
 .project-console .menu .page { padding: 0; overflow: visible; flex: none; }
 @media (max-width: 1040px) {
   .project-stage { flex-direction: column; overflow-y: auto; }
+  .project-console::after { display: none; }
   .project-stage .circle-wrap { flex: none; height: 360px; min-height: 360px; }
   .project-console { flex: none; width: 100%; max-width: none; min-width: 0; height: auto; min-height: 480px; overflow: visible; }
   .project-console .menu { flex: none; overflow-y: visible; }
@@ -360,7 +363,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 
 /* Search panel from Figma 1227:166; retain inVectus's desktop type and palette. */
 .project-console { border-radius: 0; }
-.project-toolbar { display: flex; flex: none; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); }
+.project-toolbar { display: flex; flex: none; align-items: center; gap: 8px; padding: 8px; border-bottom: none; }
 .indexing-indicator { display: flex; flex: none; align-items: center; justify-content: center; gap: 16px; border-left: 1px solid var(--surface); border-right: 1px solid var(--surface); padding: 0 12px; font-size: 12px; color: var(--text-2); }
 .indexing-percent { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .indexing-bar { width: 50px; height: 12px; background: var(--surface); }
@@ -456,8 +459,8 @@ code, .path, .mono { font-family: var(--mono); }
 .net { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; border-color: var(--line-2); border-radius: 999px; padding: 5px 12px; }
 
 /* Working panel: one open surface; tabs are coded labels with a tick under the active one. */
-.project-console { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
-.project-toolbar { border-bottom: 1px solid var(--line); padding: 0 8px; }
+.project-console { border: none; border-radius: 0; background: transparent; }
+.project-toolbar { border-bottom: none; padding: 0 8px; }
 .project-tabs { gap: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .project-tabs::-webkit-scrollbar { display: none; }
 .project-tabs button { position: relative; padding: 16px 14px 14px; font-family: var(--sans); font-size: 13px; color: var(--dim); background: none !important; }

@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:navigation": "node --experimental-strip-types --test tests/navigation.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/martian-mono": "5.3.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "2.8.3",
+    "lucide-react": "^1.64.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

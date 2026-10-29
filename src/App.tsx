@@ -5,11 +5,8 @@ import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
 import Panel from "./screens/Panel";
 import Settings from "./screens/Settings";
-import searchIcon from "./assets/icons/search.svg";
-import projectsIcon from "./assets/icons/projects.svg";
-import documentIcon from "./assets/icons/document.svg";
-import mapIcon from "./assets/icons/map.svg";
-import settingsIcon from "./assets/icons/settings.svg";
+import { Folder, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { PROJECT_TABS, pageTab, navigateTo, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import "./App.css";
 
 /** A page of the menu beside the circle; pages stack, and Back pops one. */
@@ -69,28 +66,21 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     setRoute({ view: "project" });
   };
   const openRecent = async (r: Recent) => {
-    setQuery(""); setError(undefined);
+    setQuery(""); setError(undefined); setStack([{ kind: "home" }]);
     if (project?.root === r.root) { setRoute({ view: "project" }); return; }
     try { opened(await api.open(r.root, false)); } catch (e) { setError(String(e)); }
   };
-  // Sidebar Import / Index / Map open their menu beside the circle.
-  const openPage = (p: Page) => {
-    if (!project) { setRoute({ view: p.kind === "import" ? "new" : "projects" }); return; }
-    setRoute({ view: "project" });
-    setStack([{ kind: "home" }, p]);
-  };
   const matches = query.trim() ? recent.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 8) : [];
-  const nav = (label: string, icon: string, current: boolean, onClick: () => void) =>
+  const nav = (label: string, Icon: LucideIcon, current: boolean, onClick: () => void) =>
     <button type="button" className="side-link" aria-current={current ? "page" : undefined} onClick={onClick}>
-      <img src={icon} alt="" aria-hidden="true" /><span>{label}</span></button>;
-  const top = stack[stack.length - 1];
+      <Icon size={18} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span></button>;
 
   return <div className="shell">
     <nav aria-label="Main" className="sidebar">
       <div className="side-top">
         <div className="logo">inVectus</div>
         <div className="side-search">
-          <img src={searchIcon} alt="" aria-hidden="true" />
+          <Search size={18} strokeWidth={1.5} aria-hidden="true" />
           <label htmlFor="side-q" className="sr-only">Find a project</label>
           <input id="side-q" placeholder="SEARCH" value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && matches[0]) openRecent(matches[0]); if (e.key === "Escape") setQuery(""); }} />
@@ -99,15 +89,12 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
           {matches.map((r) => <li key={r.root}><button type="button" onClick={() => openRecent(r)}>{r.name}<span>{tilde(r.root)}</span></button></li>)}
           {matches.length === 0 && <li className="dim small">No project matches.</li>}
         </ul>}
-        {nav("Projects", projectsIcon, route.view === "projects" || route.view === "new", () => setRoute({ view: "projects" }))}
-        {nav("Import", documentIcon, route.view === "project" && top.kind === "import", () => openPage({ kind: "import" }))}
-        {nav("Index", documentIcon, route.view === "project" && top.kind === "index", () => openPage({ kind: "index" }))}
-        {nav("Map", mapIcon, route.view === "project" && top.kind === "map", () => openPage({ kind: "map" }))}
+        {nav("Projects", Folder, route.view === "projects" || route.view === "new", () => setRoute({ view: "projects" }))}
         {error && <p className="side-error" role="alert">{error}</p>}
       </div>
       <div className="side-bottom">
         {job && <JobLine job={job} recent={recent} />}
-        {nav("Settings", settingsIcon, route.view === "settings", () => setRoute({ view: "settings" }))}
+        {nav("Settings", SettingsIcon, route.view === "settings", () => setRoute({ view: "settings" }))}
       </div>
     </nav>
 
@@ -123,7 +110,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
       {route.view === "new" && <NewProject onCreated={opened} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
       {route.view === "settings" && <Settings project={project} setProject={setProject} />}
       {route.view === "project" && project && <Workspace key={project.root} project={project} setProject={setProject} refresh={refresh}
-        stack={stack} setStack={setStack} goRoute={setRoute} />}
+        initialStack={stack} goRoute={setRoute} />}
     </main>
   </div>;
 }
@@ -181,15 +168,30 @@ function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?
   </>;
 }
 
-function Workspace({ project, setProject, refresh, stack, setStack, goRoute }: {
+function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   project: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void>;
-  stack: Page[]; setStack: (s: Page[] | ((s: Page[]) => Page[])) => void; goRoute: (r: Route) => void;
+  initialStack: Page[]; goRoute: (r: Route) => void;
 }) {
   const jobs = useJobs();
   const [selected, setSelected] = useState(() => local.get<string | undefined>(`invectus.scope.${project.root}`, undefined));
   const [map, setMap] = useState<MapData>();
   const [gaps, setGaps] = useState<GapView[]>([]);
-  const [marks, setMarks] = useState<Marks>({});
+  const initialTab = pageTab(initialStack[initialStack.length - 1]);
+  const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
+  const [tabStacks, setTabStacks] = useState<TabStacks>(() => ({
+    [initialTab]: initialTab === "collections" && initialStack[initialStack.length - 1].kind === "import"
+      ? [{ kind: "index" }, initialStack[initialStack.length - 1]] : [initialStack[initialStack.length - 1]],
+  }));
+  const [tabMarks, setTabMarks] = useState<Partial<Record<ProjectTab, Marks>>>({});
+  const marks = tabMarks[activeTab] ?? {};
+  const stack = tabStacks[activeTab]!;
+  const setMarks = (m: Marks) => setTabMarks((prev) => ({ ...prev, [activeTab]: m }));
+  const selectTab = (id: ProjectTab) => {
+    setTabStacks((prev) => prev[id] ? prev : { ...prev, [id]: [PROJECT_TABS.find((t) => t.id === id)!.page] });
+    setActiveTab(id);
+  };
+  const setStack = (pages: Page[] | ((s: Page[]) => Page[]), tab = activeTab) =>
+    setTabStacks((prev) => ({ ...prev, [tab]: typeof pages === "function" ? pages(prev[tab]!) : pages }));
   const [opts, setOpts] = useState({ showGaps: true, showLabels: false, showOutlines: false });
   const [resetKey, setResetKey] = useState(0);
   const [mapError, setMapError] = useState<string>();
@@ -207,15 +209,20 @@ function Workspace({ project, setProject, refresh, stack, setStack, goRoute }: {
   const reloadGaps = async () => { if (tref && table?.regions?.scanned) setGaps((await api.gaps(tref)).gaps); else setGaps([]); };
   useEffect(() => { reloadGaps().catch(() => setGaps([])); }, [tref?.collection, tref?.space, table?.regions?.run_id, table?.regions?.scanned]);
 
-  const push = (p: Page) => setStack((s) => [...s, p]);
+  const pushFrom = (tab: ProjectTab, p: Page) => {
+    const target = p.kind === "item" || p.kind === "gap" ? tab : pageTab(p);
+    setTabStacks((prev) => navigateTo(prev, tab, p).stacks);
+    setActiveTab(target);
+  };
+  const push = (p: Page) => pushFrom(activeTab, p);
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
   const go = (r: Route | Legacy) => {
     if (!("tab" in r)) { if (r.view !== "project") goRoute(r); return; }
-    if (r.tab === "overview") setStack([{ kind: "home" }]);
+    if (r.tab === "overview") selectTab("explore");
     else if (r.tab === "search") push({ kind: "search", query: r.query });
     else if (r.tab === "gaps") push(r.gap !== undefined ? { kind: "gap", id: r.gap } : { kind: "gaps" });
     else if (r.tab === "collections") push(r.adding ? { kind: "import" } : { kind: "index", collection: r.collection });
-    else if (r.tab === "map") { if (r.region !== undefined) setMarks((m) => ({ ...m, region: r.region })); push({ kind: "map" }); }
+    else if (r.tab === "map") { if (r.region !== undefined) setMarks({ ...marks, region: r.region }); push({ kind: "map" }); }
   };
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
 
@@ -225,7 +232,7 @@ function Workspace({ project, setProject, refresh, stack, setStack, goRoute }: {
   };
   const addData = async () => {
     const path = await pickSource(false).catch(() => null);
-    if (path) setStack([{ kind: "home" }, { kind: "import", path }]);
+    if (path) push({ kind: "import", path });
   };
   const importing = stack[stack.length - 1].kind === "import";
   const noData = project.collections.length === 0 && !isRunning(job) && !importing;
@@ -244,13 +251,23 @@ function Workspace({ project, setProject, refresh, stack, setStack, goRoute }: {
     </header>
     {project.warning && <p className="banner">{project.warning}</p>}
     {netError && <p className="banner err">{netError}</p>}
+    <div className="project-tabs" role="tablist" aria-label="Project sections">
+      {PROJECT_TABS.map((tab, i) => <button key={tab.id} id={`tab-${tab.id}`} type="button" role="tab"
+        aria-selected={activeTab === tab.id} aria-controls={tabStacks[tab.id] ? `panel-${tab.id}` : undefined} tabIndex={activeTab === tab.id ? 0 : -1}
+        onClick={() => selectTab(tab.id)} onKeyDown={(e) => {
+          const next = tabKeyIndex(e.key, i);
+          if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
+        }}>{tab.label}</button>)}
+    </div>
     <div className="stage">
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey}
         showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
         empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
-        idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Index" : map ? undefined : "Loading map…"}
+        idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}
         onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
-      <Panel ctx={ctx} stack={stack} job={job} />
+      {PROJECT_TABS.filter((tab) => tabStacks[tab.id]).map((tab) => <Panel key={tab.id} active={activeTab === tab.id} tabId={tab.id}
+        ctx={{ ...ctx, push: (p) => pushFrom(tab.id, p), back: () => setStack((s) => s.length > 1 ? s.slice(0, -1) : s, tab.id),
+          setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} job={job} />)}
     </div>
   </>;
 }

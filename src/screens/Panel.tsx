@@ -12,31 +12,28 @@ import { weightsKey } from "./Settings";
 import backIcon from "../assets/icons/back.svg";
 import searchIcon from "../assets/icons/search-panel.svg";
 
-export default function Panel({ ctx, stack, job }: { ctx: Ctx; stack: Page[]; job?: JobInfo }) {
+export default function Panel({ ctx, stack, job, active, tabId }: { ctx: Ctx; stack: Page[]; job?: JobInfo; active: boolean; tabId: string }) {
   const page = stack[stack.length - 1];
+  const searchPage = stack.find((p): p is Extract<Page, { kind: "search" }> => p.kind === "search");
   // Marks on the circle belong to the page that set them.
   useEffect(() => { if (page.kind !== "search" && page.kind !== "item" && page.kind !== "gap") ctx.setMarks({}); }, [page.kind]);
-  return <aside className="menu" aria-label="Project menu">
+  return <aside className="menu" role="tabpanel" id={`panel-${tabId}`} aria-labelledby={`tab-${tabId}`} hidden={!active} tabIndex={0}>
     {stack.length > 1 && <button type="button" className="back" onClick={ctx.back}><img src={backIcon} alt="" aria-hidden="true" />Back</button>}
-    {page.kind === "home" && <Home ctx={ctx} job={job} />}
-    {page.kind === "search" && <SearchPage ctx={ctx} initial={page.query} />}
+    {page.kind === "home" && <><Home ctx={ctx} job={job} /><MapPage ctx={ctx} /></>}
+    {searchPage && <div className="stack gap-s" hidden={page.kind !== "search"}>
+      <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && page.kind === "search"} />
+    </div>}
     {page.kind === "import" && <Import ctx={ctx} initialPath={page.path} onCancel={ctx.back} onDone={() => ctx.back()} />}
-    {page.kind === "index" && <Collections ctx={ctx} focus={page.collection} />}
+    {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={page.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
     {page.kind === "map" && <MapPage ctx={ctx} />}
-    {page.kind === "gaps" && <GapsPage ctx={ctx} />}
+    {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={page.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} /></div>}
     {page.kind === "gap" && <GapDetailView ctx={ctx} id={page.id} />}
     {page.kind === "item" && <ItemPage ctx={ctx} page={page} />}
   </aside>;
 }
 
-function Row({ label, detail, onClick, icon }: { label: string; detail?: string; onClick: () => void; icon?: string }) {
-  return <button type="button" className="menu-row" onClick={onClick}>
-    {icon && <img src={icon} alt="" aria-hidden="true" />}<span>{label}</span>{detail && <span className="dim push">{detail}</span>}
-  </button>;
-}
-
 function Home({ ctx, job }: { ctx: Ctx; job?: JobInfo }) {
-  const { project, table, gaps } = ctx;
+  const { project, table } = ctx;
   const items = project.collections.reduce((n, c) => n + c.items, 0);
   const ready = table?.index_status === "indexed" || table?.index_status === "imported";
   const pct = job?.total ? Math.round((job.done / job.total) * 100) : 0;
@@ -52,19 +49,14 @@ function Home({ ctx, job }: { ctx: Ctx; job?: JobInfo }) {
       <span className="card-title">{job.label}</span>
       <span className="dim small">{isRunning(job) ? `${job.phase ?? "Starting"}${job.total ? ` · ${pct}%` : ""}` : job.state === "completed" ? "Done" : job.state === "cancelled" ? "Cancelled" : `Failed: ${job.error}`}</span>
       {isRunning(job) && <button type="button" className="text-btn start" onClick={() => api.cancel()}>Cancel</button>}
-      {job.state === "failed" && job.collection && <button type="button" className="text-btn start" onClick={() => ctx.push({ kind: "index", collection: job.collection! })}>Retry in Index</button>}
+      {job.state === "failed" && job.collection && <button type="button" className="text-btn start" onClick={() => ctx.push({ kind: "index", collection: job.collection! })}>Retry in Collections</button>}
     </div>}
-    <Row icon={searchIcon} label="Search" onClick={() => ctx.push({ kind: "search" })} />
-    <Row label="Gaps" detail={table?.regions?.scanned ? `${fmt(gaps.length)}` : undefined} onClick={() => ctx.push({ kind: "gaps" })} />
-    <Row label="Import data" onClick={() => ctx.push({ kind: "import" })} />
-    <Row label="Index" detail={project.collections.length ? `${project.collections.length} collection${project.collections.length === 1 ? "" : "s"}` : undefined} onClick={() => ctx.push({ kind: "index" })} />
-    <Row label="Map" onClick={() => ctx.push({ kind: "map" })} />
   </>;
 }
 
 const VERDICT = { open: "Open", near: "Near", exists: "Exists" };
 
-function SearchPage({ ctx, initial }: { ctx: Ctx; initial?: string }) {
+function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; active: boolean }) {
   const { table, tref, map, project } = ctx;
   const [query, setQuery] = useState(initial ?? "");
   const [scope, setScope] = useState<Role | "">("coverage");
@@ -77,10 +69,15 @@ function SearchPage({ ctx, initial }: { ctx: Ctx; initial?: string }) {
   const result = check?.search ?? plain;
   const [queryPos, setQueryPos] = useState<{ x: number; y: number; label: string }>();
 
+  useEffect(() => {
+    if (initial !== undefined) { setQuery(initial); setCheck(undefined); setPlain(undefined); }
+  }, [initial]);
+
   // Where the idea sits: between its two nearest regions (weighted by similarity), else the
   // mean of its nearest items on the map. Either way it is an estimate.
   useEffect(() => {
-    if (!result || !map) return;
+    if (!active) return;
+    if (!result || !map) { ctx.setMarks({}); return; }
     const regions = new Map(map.regions.map((r) => [r.region_id, r]));
     const between = (check?.between ?? []).map((b) => ({ r: regions.get(b.region_id), w: Math.max(b.similarity, 0.01) })).filter((b) => b.r);
     let pos: { x: number; y: number; label: string } | undefined;
@@ -93,7 +90,7 @@ function SearchPage({ ctx, initial }: { ctx: Ctx; initial?: string }) {
     }
     setQueryPos(pos);
     ctx.setMarks({ query: pos, items: result.hits.slice(0, 1).map((h) => h.item.item_id) });
-  }, [result, map]);
+  }, [result, map, active]);
 
   if (!table || !tref) return <div className="menu-card dim small">Search needs an indexed collection. Add a dataset first.</div>;
   const go = (e?: FormEvent) => {
@@ -163,7 +160,7 @@ function MapPage({ ctx }: { ctx: Ctx }) {
     <div className="menu-card stack gap-s">
       <div className="card-title">Map</div>
       <span className="dim small">{map ? `${fmt(map.points.length)} items in ${fmt(map.regions.filter((r) => r.level === "fine").length)} regions · ${table?.model_key}` : "No map yet: it is drawn after indexing and mapping."}</span>
-      <span className="dim small">Squares that overlap merge into one; zoom in to separate them. Scroll to zoom, drag to pan, click a merged square to zoom to it.</span>
+      <span className="dim small">Squares that overlap merge into one; zoom in to separate them. Scroll to pan, pinch or Command-scroll to zoom, drag to pan, and click a merged square to zoom to it.</span>
     </div>
     {toggle("showGaps", "Gap marks", "rings")}
     {toggle("showLabels", "Region names", "largest 16")}
@@ -179,8 +176,8 @@ function GapsPage({ ctx }: { ctx: Ctx }) {
   const [msg, setMsg] = useState<string>();
   const { busy, error, run } = useAction();
   if (!table || !tref) return <div className="menu-card dim small">Gaps need an indexed, mapped collection.</div>;
-  if (!table.regions) return <div className="menu-card stack gap-s"><b>No map yet</b><span className="dim small">Gaps are found within and between regions. Run mapping from Index.</span>
-    <button type="button" className="menu-row" onClick={() => ctx.push({ kind: "index", collection: table.collection })}>Open Index</button></div>;
+  if (!table.regions) return <div className="menu-card stack gap-s"><b>No map yet</b><span className="dim small">Gaps are found within and between regions. Run mapping from Collections.</span>
+    <button type="button" className="menu-row" onClick={() => ctx.push({ kind: "index", collection: table.collection })}>Open Collections</button></div>;
   const scan = () => run(async () => {
     await api.scan(tref, local.get<Weights | null>(weightsKey(project.root), null));
     await ctx.refresh(); await ctx.reloadGaps();

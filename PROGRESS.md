@@ -915,3 +915,24 @@ packaging gates are still open. Details, reproducible commands and limitations:
   The existing Apple linker `__eh_frame` warning remains. Relaunched the rebuilt desktop
   binary with the existing dev model store. Visual verification is left to the owner as
   requested; no frame-rate measurement or Windows/Linux verification claimed. No CI run.
+
+## 2026-10-29 — Project tabs and sidebar icons
+
+- Added persistent Explore, Search, Gaps and Collections tabs below the project header,
+  with muted labels, a subtle active background and arrow/Home/End keyboard navigation.
+  Projects and Settings remain in the sidebar; import and indexing controls live under
+  Collections. Explore combines the project summary with the existing map controls.
+- Standardized sidebar/project-search icons using locally bundled Lucide React SVGs
+  (18 px, 1.5 px stroke); added a subtle sidebar selection background.
+- Tabs have separate navigation histories and map highlights. Visited panels remain mounted,
+  preserving search results, gap filters and collection controls across tab changes; the
+  shared map keeps its zoom. Search and gap state reset when collection/embedding scope
+  changes. Search results also survive opening an item and returning with Back.
+- Five local navigation tests passed (`npm run test:navigation`, Node 25.9.0): destination
+  routing, cross-tab history preservation, detail return paths, root replacement and keyboard
+  wrap/Home/End behavior. Frontend build and macOS release `tauri build --no-bundle --ci`
+  passed; the existing upstream Apple linker `__eh_frame` warning remains. Relaunched the
+  rebuilt binary with the existing dev model store. Interactive visual verification is left
+  to the owner as requested; Windows/Linux remain unverified. No GitHub CI dispatched.
+- Decisions and spec conflicts: this changes navigation grouping while retaining the map,
+  search, import, collections and gap evidence controls; no new spec conflict identified.

@@ -73,10 +73,10 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 13px; text-transfo
 .side-results { list-style: none; margin: -12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .side-results button { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: none; border-radius: var(--r); background: var(--bg); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .side-results button span { color: var(--dim); font-size: 13px; font-weight: 300; }
-.side-link { display: flex; align-items: center; gap: 16px; border: none; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--text); cursor: pointer; opacity: 0.72; }
-.side-link img { width: 16px; height: 16px; object-fit: contain; }
+.side-link { display: flex; align-items: center; gap: 16px; border: none; background: none; padding: 10px 12px; border-radius: var(--r); font: inherit; font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--text); cursor: pointer; opacity: 0.72; }
+.side-link svg, .side-search svg { flex-shrink: 0; }
 .side-link:hover, .side-link[aria-current="page"] { opacity: 1; }
-.side-link[aria-current="page"] span { border-bottom: 1px solid var(--text); }
+.side-link[aria-current="page"] { background: var(--surface-2); }
 .side-error { margin: 0; color: var(--danger); font-size: 13px; }
 .job-line { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text); padding: 12px; border: 1px solid var(--line); border-radius: var(--r); }
 .text-btn { align-self: flex-start; border: none; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--ink); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
@@ -300,3 +300,11 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 13px; text-transfo
   .sidebar { position: static; height: auto; flex: none; }
   .head, .stage, .page { padding: 16px; }
 }
+
+/* Persistent project destinations, styled like the restrained terminal reference. */
+.project-tabs { display: flex; flex: none; gap: 12px; padding: 12px 48px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.project-tabs button { flex: none; border: none; border-radius: 2px; padding: 8px 12px; background: transparent; color: var(--dim); font: inherit; font-weight: 500; cursor: pointer; }
+.project-tabs button:hover { color: var(--text); }
+.project-tabs button[aria-selected="true"] { color: var(--ink); background: var(--surface-2); font-weight: 700; }
+[hidden] { display: none !important; }
+@media (max-width: 760px) { .project-tabs { padding: 10px 16px; gap: 4px; } }

@@ -1398,3 +1398,23 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live layout review remains with the owner;
   no GitHub CI dispatched.
+
+## 2026-10-29 — Resizable content/map split
+
+- Replaced the decorative divider with a draggable, focusable separator. Pointer capture
+  keeps resizing active across both panes; release/cancel/lost capture ends the drag.
+  A 24 px hit area surrounds the 1 px line; its desktop endpoints remain 48 px from
+  the workspace top and bottom. Hover/focus/drag highlight the divider.
+- Content and map each have a 400 px minimum in the side-by-side layout; removed the
+  content's former 740 px maximum. The preferred ratio survives window resizes during
+  the mounted workspace, with both pane widths clamped to their minima. Layout now
+  uses measured workspace width rather than a viewport breakpoint, stacking when
+  400 + 24 + 400 px cannot fit. The narrow stacked layout remains responsive.
+- Left/right arrows resize by 16 px (Shift: 64 px); Home/End move to the pane limits.
+  The separator exposes orientation and current/min/max sizes to accessibility tools.
+- All 28 UI tests passed, including split minima, exact stacking threshold and window
+  resizing constraints. Frontend TypeScript/Vite build and diff checks passed.
+  Live dragging, keyboard interaction and layout remain unverified through the UI.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app with its existing project history and dev
+  model store. No GitHub CI dispatched.

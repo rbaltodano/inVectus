@@ -5,6 +5,7 @@ import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
 import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
+import WorkspaceSplit from "./WorkspaceSplit";
 import Settings from "./screens/Settings";
 import { ArrowRight, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, returnToSearch, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
@@ -307,7 +308,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
         {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
     </header>
-    <div className="stage project-stage">
+    <WorkspaceSplit>
       <section className="project-console" aria-label="Project workspace">
         {project.warning && <p className="banner">{project.warning}</p>}
         {netError && <p className="banner err">{netError}</p>}
@@ -334,7 +335,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
         idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns in the import panel" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}
         onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
-    </div>
+    </WorkspaceSplit>
   </>;
 }
 

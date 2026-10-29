@@ -60,7 +60,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 
 /* Shell: compact sidebar leaves more room for the map. */
 .shell { display: flex; min-height: 100vh; }
-.sidebar { flex: 0 0 280px; background: var(--surface); border-right: 1px solid var(--line); padding: 24px; display: flex; flex-direction: column; justify-content: space-between; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.sidebar { flex: 0 0 240px; background: var(--surface); border-right: 1px solid var(--line); padding: 24px 16px; display: flex; flex-direction: column; justify-content: space-between; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .side-top, .side-bottom { display: flex; flex-direction: column; gap: 24px; }
 .logo { align-self: flex-start; border: 1px solid rgba(222, 222, 222, 0.5); padding: 8px 12px; font-size: 18px; font-weight: 500; color: var(--text); }
 .side-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--r); padding: 0 12px; }
@@ -314,7 +314,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .card-open { padding-right: 64px; }
 .menu-card p, .panel p { line-height: 1.5; }
 
-/* Angrove's expanded minimum is 280 pt; its Mac sidebar baseline is 13 pt regular. */
+/* Compact sidebar; retain Angrove's 13 pt regular desktop text baseline. */
 .sidebar { overflow: hidden; }
 .side-top { flex: 1; min-height: 0; gap: 16px; }
 .side-bottom { flex: none; padding-top: 16px; }

@@ -1050,3 +1050,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   and reduced-motion fallback are unchanged; fading squares form a short trail.
 - Frontend TypeScript/Vite build and diff checks passed. No native rebuild or relaunch,
   as requested. Live animation review remains pending the owner's next launch.
+
+## 2026-10-29 — Narrower sidebar
+
+- Reduced sidebar width from 280 px to 240 px and horizontal padding from 24 px to 16 px;
+  retained 24 px vertical padding and 13 px regular sidebar text. Updated the old width comment.
+- Frontend TypeScript/Vite build and diff checks passed. The requested desktop rebuild also
+  includes the previously saved 500 ms matrix fade. Visual review remains with the owner.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker warning.
+  Launched the rebuilt app with the existing dev model store (no old app process was running).
+  No GitHub CI dispatched; Windows/Linux remain unverified.

@@ -1096,3 +1096,10 @@ packaging gates are still open. Details, reproducible commands and limitations:
   relaunched the rebuilt app with the dev model store as requested. This also includes the
   pending quiet search focus and clockwise 3×2 loader changes. Visual review remains with
   the owner; Windows/Linux unverified. No GitHub CI dispatched.
+
+## 2026-10-29 — Taller 2×3 loading matrix
+
+- Changed the shared loading matrix to two columns and three rows. Clockwise traversal is
+  now row-major indices 0,1,3,5,4,2; six-cell timing and the 500 ms fade are unchanged.
+- All 18 UI tests, frontend TypeScript/Vite build and diff checks passed. No native rebuild
+  or relaunch, as requested; live visual review awaits the next launch.

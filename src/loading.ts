@@ -1,7 +1,7 @@
 import type { JobInfo } from "./api";
 
-// Row-major indices in a 3-column, 2-row grid, traversed clockwise.
-export const LOADER_ORDER = [0, 1, 2, 5, 4, 3] as const;
+// Row-major indices in a 2-column, 3-row grid, traversed clockwise.
+export const LOADER_ORDER = [0, 1, 3, 5, 4, 2] as const;
 export const INDEXING_PREVIEW_PERCENT = 84;
 
 export function indexingProgress(job: JobInfo | undefined, preview: boolean) {

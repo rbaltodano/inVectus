@@ -10,7 +10,7 @@ const job = (overrides: Partial<JobInfo> = {}): JobInfo => ({
 });
 
 test("loader loops clockwise around all six squares", () => {
-  assert.deepEqual(LOADER_ORDER, [0, 1, 2, 5, 4, 3]);
+  assert.deepEqual(LOADER_ORDER, [0, 1, 3, 5, 4, 2]);
   assert.equal(new Set(LOADER_ORDER).size, 6);
 });
 

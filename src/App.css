@@ -360,7 +360,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .indexing-bar { width: 50px; height: 12px; background: var(--surface); }
 .indexing-bar > span { display: block; height: 100%; background: var(--text-2); }
 .indexing-bar.indeterminate > span { opacity: 0.5; }
-.matrix-loader { --matrix-step-duration: 120ms; --matrix-duration: calc(var(--matrix-step-duration) * 6); display: inline-grid; grid-template-columns: repeat(3, 2px); grid-template-rows: repeat(2, 2px); gap: 2px; flex: none; vertical-align: middle; }
+.matrix-loader { --matrix-step-duration: 120ms; --matrix-duration: calc(var(--matrix-step-duration) * 6); display: inline-grid; grid-template-columns: repeat(2, 2px); grid-template-rows: repeat(3, 2px); gap: 2px; flex: none; vertical-align: middle; }
 .matrix-cell { width: 2px; height: 2px; background: currentColor; opacity: 0.5; animation: matrix-clockwise var(--matrix-duration) linear infinite; animation-delay: calc(var(--matrix-step) * var(--matrix-step-duration) - var(--matrix-duration)); }
 /* 720 ms cycle: hold bright for 120 ms, then fade to half opacity over 500 ms. */
 @keyframes matrix-clockwise { 0%, 16.666667% { opacity: 1; } 86.111111%, 100% { opacity: 0.5; } }

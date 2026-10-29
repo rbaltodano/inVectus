@@ -524,7 +524,7 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 /* Projects page cards: large, quiet, rounded like the reference cards. */
 .card { background: var(--surface); border: none; border-radius: 10px; padding: 20px; }
 .card-title { font-family: var(--sans); font-size: 15px; font-weight: 400; color: var(--text); }
-.empty-note { background: transparent; border: 1px solid var(--line); border-radius: 10px; }
+.empty-note { background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
 
 /* Gap charts enter like Angrove's Insight Tree: the indicator bars fill with its connector curve
    (ease-out quint, 0.55 s), one after another; the year bars spring up from the baseline left

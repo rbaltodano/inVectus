@@ -1184,3 +1184,15 @@ packaging gates are still open. Details, reproducible commands and limitations:
   successfully, launched it through Launch Services with the dev model store, and confirmed
   its bundle process persisted. Closed the duplicate standalone process. UI inspection was
   unavailable because Computer Use was not approved; window visibility remains unverified.
+
+## 2026-10-29 — Uniform Projects empty-state padding and original launch profile
+
+- Restored 24 px padding on all four sides of the bordered Projects empty state; the
+  later generic empty-state rule had overridden its horizontal padding to zero.
+- Read existing WebKit project history without modifying it: the standalone executable's
+  `invectus-app` profile contains demo.invectus (10,000 items); the macOS bundle uses
+  a separate `app.invectus.desktop` profile. The empty recent list was a profile difference.
+- Frontend and macOS release builds passed, with the existing upstream Apple __eh_frame
+  linker warning. Launched the updated standalone binary with the dev model store in a
+  retained terminal session. Visual window/content verification remains with the owner.
+  No CI dispatched; no reference data changed.

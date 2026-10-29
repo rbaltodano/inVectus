@@ -1336,3 +1336,20 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live layout review remains with the owner;
   no GitHub CI dispatched.
+
+## 2026-10-29 — Pan and zoom to a selected gap
+
+- Opening a gap now automatically focuses its map location, retaining the green selected
+  ring and 4 px strokes on Gaps. Coverage/stale gaps focus their region; bridge gaps
+  focus the actual midpoint and fit both region outlines. If results/map arrive later,
+  focusing waits until the selected gap's geometry is available.
+- Camera motion pans the world-space view centre and zooms geometrically with smoothstep
+  easing over 450 ms. A new focus or pointer/scroll gesture cancels prior zoom motion;
+  reduced motion applies the final view immediately. Show on map uses the same animation.
+  Selection focus is consumed once per gap/run, preserving subsequent manual panning.
+- All 25 UI tests passed, including bridge midpoint/bounds and camera endpoint/centre
+  interpolation tests. Frontend TypeScript/Vite build and diff checks passed.
+  Live interaction and frame-rate behavior remain unverified through the UI.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app with its existing project history and dev
+  model store. No GitHub CI dispatched.

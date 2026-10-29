@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import LineArt from "./LineArt";
 import { fmt, year, KIND_LABEL, type GapView, type JobInfo, type MapData, type MapPoint, type Region } from "./api";
 import { DotFlicker } from "./dot-flicker";
-import { regionFocusView } from "./map-focus";
+import { gapFocusArea, interpolateCamera, regionFocusView } from "./map-focus";
 
 export interface Marks {
   /** Estimated position of the searched idea, in map coordinates (approximate). */
@@ -122,6 +122,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const focusedRequest = useRef<Props["focusRegion"]>();
+  const focusedGap = useRef<string>();
   const [size, setSize] = useState(560);
   const [view, setView] = useState({ s: 1, x: 0, y: 0 });
   const viewRef = useRef(view);
@@ -238,16 +239,42 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const inside = (x: number, y: number, pad = 0) => (x - R) ** 2 + (y - R) ** 2 <= (R - pad) ** 2;
 
   const fine = useMemo(() => new Map((data?.regions ?? []).filter((r) => r.level === "fine").map((r) => [r.region_id, r])), [data]);
+  const focusArea = useCallback((area: { x: number; y: number; radius: number }) => {
+    stopZoom();
+    setHover(undefined);
+    const target = regionFocusView(area, fit, size, ZOOM_MIN, ZOOM_MAX);
+    if (reducedMotion) { setView(target); return; }
+    const start = viewRef.current;
+    const started = performance.now();
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - started) / 450);
+      setView(interpolateCamera(start, target, progress));
+      if (progress < 1) zoomFrame.current = requestAnimationFrame(step);
+      else zoomFrame.current = undefined;
+    };
+    zoomFrame.current = requestAnimationFrame(step);
+  }, [fit, size, reducedMotion, stopZoom]);
+
+  useEffect(() => {
+    if (selectedGapId === undefined) { focusedGap.current = undefined; return; }
+    const key = `${data?.run.run_id}:${selectedGapId}`;
+    if (focusedGap.current === key) return;
+    const gap = gaps.find((g) => g.gap_id === selectedGapId);
+    const a = gap && fine.get(gap.region_a);
+    if (!gap || !a) return;
+    const b = gap.region_b === null ? undefined : fine.get(gap.region_b);
+    focusedGap.current = key;
+    focusArea(gapFocusArea(a, b));
+  }, [selectedGapId, data?.run.run_id, gaps, fine, focusArea]);
+
   useEffect(() => {
     if (!focusRegion || focusedRequest.current === focusRegion) return;
     const region = fine.get(focusRegion.region);
     if (!region) return;
     focusedRequest.current = focusRegion;
-    stopZoom();
-    setHover(undefined);
-    setView(regionFocusView(region, fit, size, ZOOM_MIN, ZOOM_MAX));
+    focusArea(region);
     canvas.current?.focus({ preventScroll: false });
-  }, [focusRegion, fine, fit, size, stopZoom]);
+  }, [focusRegion, fine, focusArea]);
   const regionName = (r?: Region) => r ? r.llm_label ?? r.label : "";
   const gapPos = (g: GapView): [number, number] | undefined => {
     const a = fine.get(g.region_a), b = g.region_b !== null ? fine.get(g.region_b) : undefined;

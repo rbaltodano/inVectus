@@ -981,3 +981,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   No GitHub CI dispatched.
 - Decisions and spec conflicts: the owner requested the right panel as the primary project
   workspace and the sidebar as the project switcher; no new spec conflict identified.
+
+## 2026-10-29 — Restore project heading above the workspace
+
+- Moved the project name and path from the right panel back to the top-level workspace
+  header, restoring the existing 24 px title and 13 px path styles. Tabs and project controls
+  remain inside the right panel. Removed the superseded console title/path styles.
+- Frontend TypeScript/Vite build and diff checks passed. Visual review remains with the owner;
+  Windows/Linux remain unverified. No GitHub CI dispatched.
+- macOS release rebuild passed with the existing upstream `__eh_frame` linker warning;
+  relaunched the rebuilt binary with the existing dev model store.

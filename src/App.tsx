@@ -261,6 +261,9 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   useEffect(() => { if (job && job.state !== "running" && prevJob.current === job.id) refresh(); prevJob.current = job?.id; }, [job?.state]);
 
   return <>
+    <header className="head">
+      <div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
+    </header>
     <div className="stage project-stage">
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey}
         showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
@@ -269,7 +272,6 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
       <section className="project-console" aria-label="Project workspace">
         <header className="console-head">
-          <div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
           <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
             onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
             title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>

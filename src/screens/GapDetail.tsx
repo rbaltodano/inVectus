@@ -114,7 +114,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
 
         <section aria-labelledby="ni" className="panel stack gap">
           <h2 id="ni">Central items</h2>
-          <ul className="plain">{gap.core_items.map((i) => <li key={i.item_id}>
+          <ul className="plain source-list">{gap.core_items.map((i) => <li key={i.item_id}>
             <Link url={i.url}>{i.title ?? `item ${i.item_id}`}</Link>
             <span className="muted small"> · <span className={`tag role ${i.role}`}>{i.role}</span> {year(i.date)}</span>
           </li>)}</ul>

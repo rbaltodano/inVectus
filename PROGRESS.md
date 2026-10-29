@@ -1353,3 +1353,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app with its existing project history and dev
   model store. No GitHub CI dispatched.
+
+## 2026-10-29 — More breathing room for Central items
+
+- Increased Central items source-list line height from 1.5 to 1.8 and added 8 px between
+  consecutive items, leaving room for the offset source-link borders and inline metadata.
+  Scoped to that source list rather than all plain lists.
+- Frontend and macOS release builds and diff checks passed, with the existing upstream
+  Apple __eh_frame linker warning. Relaunched the standalone app with its existing
+  project history and dev model store. Live spacing review remains with the owner;
+  no GitHub CI dispatched.

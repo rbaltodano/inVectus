@@ -4,6 +4,7 @@ Negative search: find what is missing in a collection, describe what would fill 
 verify it before claiming it does not exist. Local-first desktop app for macOS, Windows and Linux.
 
 - Source of truth: [SPEC.md](SPEC.md)
+- Target product (agent edition, full app, MCP interface): [docs/target-product.md](docs/target-product.md)
 - Ledger and next steps: [PROGRESS.md](PROGRESS.md)
 - P0 measurements and decisions: [docs/spikes](docs/spikes/README.md)
 

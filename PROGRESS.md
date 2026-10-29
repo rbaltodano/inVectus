@@ -779,16 +779,31 @@ one circle per project, Martian Mono, dark mode only for now.
 - The import pipeline now also maps, scans and calibrates automatically (SPEC §4 lists these
   as separate user steps).
 
+## 2026-10-29 — Target product documented (agent edition, full app, MCP)
+
+- Added [docs/target-product.md](docs/target-product.md): the owner-approved final form. An
+  AI agent does the legwork through an MCP server (`invectus mcp`, stdio, no network port);
+  people review and decide in the desktop app or CLI. One engine, two editions: a headless
+  agent edition with no local language model, and the full app with an optional one. The
+  embedding model is required in both. Covers the tool list and guardrails, agent-written
+  descriptions/paraphrases/region names that pass the existing checks, decision provenance
+  (person vs agent, suggestions vs decisions), the DuckDB single-writer plan for app and agent
+  on one project, a built/planned status table and roadmap A1–A8.
+- SPEC.md gains §7.8 (editions and agent interface, marked planned) and milestone P9; README
+  links the document. Documentation only: no code changed, nothing built or measured.
+- Decisions and spec conflicts to review: SPEC §1.3 lists "not a RAG chatbot" and §7.2 shows
+  only the desktop shell over the crates; the MCP server is a new front end over the same
+  engine, not a chatbot. §14.3 (which local LLM by default) narrows: the agent edition has
+  none, and a small model for the full app needs measuring against Gemma 12B first.
+
 ## Next
-1. Owner review of the data-circle UI in the native window, and the light-mode design; native file pickers (Tauri
-   dialog plugin, needs approval to download); region LLM labels in gap lists; a job queue.
-2. **Full benchmark and term ablation are complete** (owner-approved read-only copy; results
-   above). The model still loses to the baselines. Future tuning needs cached cutoff terms and
-   a held-out-cutoff protocol; multimodal work must not rerun or re-embed this benchmark.
-3. LLM-dependent work (calibration paraphrases, midpoint descriptions P5, LLM region labels)
-   waits for a provider decision. Verification connectors (P6) need network approval for live
-   tests.
-4. Adjudicate a sample of verdicts and gaps before trusting thresholds and weights.
+1. Agent interface, roadmap A1–A3 in [docs/target-product.md](docs/target-product.md): shared
+   orchestration crate, `invectus mcp` read tools, then write tools with single-writer handling.
+2. Decision provenance (A4) before agents can suggest decisions.
+3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
+   indexing preview is intentional for tuning and must be removed before release.
+4. The gap ranking still loses to the baselines on the full backtest; adjudicate a sample of
+   verdicts and gaps before trusting thresholds and weights.
 5. Run the three-OS CI once the repository is public (AGENTS.md: no CI while private).
 
 

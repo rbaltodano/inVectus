@@ -314,6 +314,17 @@ Long work (import, embed, cluster, scan, verify) runs as **resumable jobs**: che
 
 ---
 
+### 7.8 Editions and agent interface (target)
+
+Owner-approved direction (2026-10-29): an AI agent does the legwork and a person makes the
+calls. One engine ships as a headless **agent edition** (`invectus` CLI plus an MCP server,
+`invectus mcp`, over stdio, no local language model) and the **full app** (desktop plus the same
+server, local language model optional). The embedding model is required in both; where there is
+no local language model, the agent writes descriptions, paraphrases and region names through
+tools that run the existing checks. Decisions record whether a person or an agent made them.
+Details, tools, guardrails and roadmap: [docs/target-product.md](docs/target-product.md).
+Planned, not built.
+
 ## 8. User interface
 
 | Screen | Contents |
@@ -376,6 +387,7 @@ Gapmap reference on an M4 Pro: about 50–70 docs/s embedding (nomic, MPS, fp16)
 | P6 | Verification | PubMed, OpenAlex and Steam connectors; verdict workflow; export |
 | P7 | Evaluation | Backtest harness and benchmark results; weight tuning |
 | P8 | Ship | Signed installers (macOS notarized, Windows, Linux AppImage), docs, demo video |
+| P9 | Agent interface | Shared orchestration crate, `invectus mcp` tools, decision provenance, agent-written descriptions with checks, connect-an-agent setup, headless edition ([roadmap](docs/target-product.md#11-roadmap)) |
 
 **Early win:** P2 alone, inVectus search on an imported collection with calibrated verdicts, is a demo-able product. Build it before the map.
 

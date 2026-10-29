@@ -27,6 +27,7 @@ interface Props {
   showOutlines: boolean;
   /** Emphasise gap rings while the Gaps tab is active. */
   gapsActive?: boolean;
+  selectedGapId?: number;
   /** The running job of this project, for the loading states. */
   job?: JobInfo;
   /** Nothing imported yet: the circle is a button that adds a dataset. */
@@ -117,7 +118,7 @@ function disc(i: number): [number, number] {
   return [Math.cos(t) * r, Math.sin(t) * r];
 }
 
-export default function DataCircle({ data, gaps, marks, showGaps, showLabels, showOutlines, gapsActive = false, job, empty, idle, onGap, onItem, resetKey, focusRegion }: Props) {
+export default function DataCircle({ data, gaps, marks, showGaps, showLabels, showOutlines, gapsActive = false, selectedGapId, job, empty, idle, onGap, onItem, resetKey, focusRegion }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const focusedRequest = useRef<Props["focusRegion"]>();
@@ -142,6 +143,32 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [gapEmphasis, setGapEmphasis] = useState(0);
   const gapEmphasisRef = useRef(0);
+  const [selectedEmphasis, setSelectedEmphasis] = useState<Record<number, number>>({});
+  const selectedEmphasisRef = useRef(selectedEmphasis);
+  const mapGaps = useMemo(() => {
+    const visible = gaps.slice(0, GAP_MARKS);
+    const selected = gaps.find((gap) => gap.gap_id === selectedGapId);
+    if (selected && !visible.includes(selected)) visible.push(selected);
+    return visible;
+  }, [gaps, selectedGapId]);
+
+  useEffect(() => {
+    const start = selectedEmphasisRef.current;
+    const target: Record<number, number> = selectedGapId === undefined ? {} : { [selectedGapId]: 1 };
+    const update = (value: Record<number, number>) => { selectedEmphasisRef.current = value; setSelectedEmphasis(value); };
+    if (reducedMotion) { update(target); return; }
+    const ids = new Set([...Object.keys(start), ...Object.keys(target)].map(Number));
+    if (!ids.size) return;
+    const started = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - started) / 250);
+      update(progress === 1 ? target : Object.fromEntries([...ids].map((id) => [id, (start[id] ?? 0) + ((target[id] ?? 0) - (start[id] ?? 0)) * progress])));
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [selectedGapId, reducedMotion]);
 
   useEffect(() => {
     const target = gapsActive ? 1 : 0;
@@ -252,12 +279,12 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     if (marks.query) keys.push(markKey.query(marks.query));
     for (const id of marks.items ?? []) keys.push(markKey.item(id));
     if (marks.region !== undefined) keys.push(markKey.region(marks.region));
-    if (gapsActive && showGaps && !loading) for (const gap of gaps.slice(0, GAP_MARKS)) {
+    if (gapsActive && showGaps && !loading) for (const gap of mapGaps) {
       const position = gapPos(gap);
       if (position && inside(position[0], position[1], 7)) keys.push(markKey.gap(data?.run.run_id, gap.gap_id));
     }
     flicker.sync(keys, performance.now());
-  }, [renderedCells, showPlaceholders, placeholderCount, data?.run.run_id, flicker, marks, gapsActive, showGaps, loading, gaps]);
+  }, [renderedCells, showPlaceholders, placeholderCount, data?.run.run_id, flicker, marks, gapsActive, showGaps, loading, mapGaps]);
 
   useEffect(() => {
     const c = canvas.current;
@@ -274,7 +301,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     cells.current = list;
     const now = performance.now();
     const opacity = (key: string) => reducedMotion ? 1 : flicker.opacity(key, now);
-    const squareOpacity = (normal: number) => normal + (0.25 - normal) * gapEmphasis;
+    const squareOpacity = (normal: number) => normal + (0.15 - normal) * gapEmphasis;
 
     // Region outlines: hidden until hover (or the toggle / a marked region).
     const majority = (c: Cell) => [...c.regions.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -334,14 +361,16 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
 
     // Gap marks: small rings with their codes.
     if (showGaps && !loading) {
-      g.lineWidth = 4; g.font = LABEL_FONT; g.textBaseline = "middle";
-      gaps.slice(0, GAP_MARKS).forEach((gp, i) => {
+      g.font = LABEL_FONT; g.textBaseline = "middle";
+      mapGaps.forEach((gp, i) => {
         const p = gapPos(gp); if (!p || !inside(p[0], p[1], 7)) return;
         g.globalAlpha = gapsActive ? opacity(markKey.gap(data?.run.run_id, gp.gap_id)) : 1;
-        g.strokeStyle = INK; g.fillStyle = "#0e0f10";
+        const selected = gp.gap_id === selectedGapId;
+        g.lineWidth = 1 + 3 * (selectedEmphasis[gp.gap_id] ?? 0);
+        g.strokeStyle = selected ? ACCENT : INK; g.fillStyle = "#0e0f10";
         g.beginPath(); g.arc(p[0], p[1], 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
         // Codes on the strongest few only; the rest show theirs on hover.
-        if (i < 6) { g.fillStyle = white(0.55); g.fillText(gapCode(i), p[0] + 8, p[1]); }
+        if (i < 6 || selected) { g.fillStyle = selected ? ACCENT : white(0.55); g.fillText(gapCode(gaps.indexOf(gp)), p[0] + 8, p[1]); }
       });
       g.globalAlpha = 1;
     }
@@ -370,13 +399,13 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       const frame = requestAnimationFrame(setFlickerFrame);
       return () => cancelAnimationFrame(frame);
     }
-  }, [data, size, view, gaps, marks, showGaps, showOutlines, gapsActive, gapEmphasis, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion]);
+  }, [data, size, view, gaps, mapGaps, marks, showGaps, showOutlines, gapsActive, gapEmphasis, selectedGapId, selectedEmphasis, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion]);
 
   // Pointer: drag to pan, wheel to zoom, hover to inspect, click to open.
   const at = (e: PE) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
   const find = (x: number, y: number) => {
     if (!inside(x, y)) return undefined;
-    if (showGaps) for (const gp of gaps.slice(0, GAP_MARKS)) { const p = gapPos(gp); if (p && (p[0] - x) ** 2 + (p[1] - y) ** 2 < 64) return { gap: gp }; }
+    if (showGaps) for (const gp of mapGaps) { const p = gapPos(gp); if (p && (p[0] - x) ** 2 + (p[1] - y) ** 2 < 64) return { gap: gp }; }
     if (marks.query) { const [qx, qy] = toScreen(marks.query.x, marks.query.y); if ((qx - x) ** 2 + (qy - y) ** 2 < 81) return { query: true }; }
     let best: Cell | undefined, bd = 100;
     for (const c of cells.current) { const d = (c.x - x) ** 2 + (c.y - y) ** 2; if (d < bd) { bd = d; best = c; } }

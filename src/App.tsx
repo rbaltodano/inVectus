@@ -291,7 +291,8 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
     const path = await pickSource(false).catch(() => null);
     if (path) push({ kind: "import", path });
   };
-  const importing = stack[stack.length - 1].kind === "import";
+  const currentPage = stack[stack.length - 1];
+  const importing = currentPage.kind === "import";
   const noData = project.collections.length === 0 && !isRunning(job) && !importing;
   const anyIndex = tables.some((t) => t.origin === "embedded");
   // A finished job reloads the project, which reloads the map; the circle glides to it.
@@ -309,6 +310,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
     <div className="stage project-stage">
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey} focusRegion={mapFocus}
         gapsActive={activeTab === "gaps"}
+        selectedGapId={currentPage.kind === "gap" ? currentPage.id : undefined}
         showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
         empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
         idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}

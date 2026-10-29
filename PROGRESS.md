@@ -1288,3 +1288,20 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app with its existing project history and dev
   model store. No GitHub CI dispatched; Windows/Linux remain unverified.
+
+## 2026-10-29 — Fainter squares and selected gap rings
+
+- Lowered Gaps-tab square opacity from 25% to an absolute 15%, retaining the 250 ms fade
+  and restoration on leaving. Random ring entrance timing is unchanged.
+- Gap rings now default to 1 CSS px. The currently open gap's ring transitions to 4 px
+  over 250 ms and uses the existing green accent (#6edcaa), as does its rank label.
+  Selection comes from the active detail page, including a gap opened from Search;
+  returning to a list/Search removes selection and transitions the stroke back to 1 px.
+  Other rings stay at 1 px. Reduced motion applies the target width immediately.
+- A selected gap outside the top 12 is additionally rendered and hit-tested, with its
+  original rank code, so opening a lower-ranked gap can still show its selected ring.
+- All 23 existing UI tests passed; frontend TypeScript/Vite build and diff checks passed.
+  Live selected-ring appearance and animation remain unverified through the UI.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app with its existing project history and dev
+  model store. No GitHub CI dispatched.

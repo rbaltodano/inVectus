@@ -4,9 +4,11 @@ import { ErrorLine, useAction, type Ctx } from "../App";
 import Link from "../Link";
 import { stagger } from "../motion";
 
+// Keys are the engine's term names (crates/gaps/src/scan.rs).
 const TERM_LABEL: Record<string, string> = {
-  demand_since: "Demand since the last coverage", coverage_ratio: "Demand per coverage item", momentum: "Momentum",
-  stale_share: "Share of demand newer than the coverage", bridge: "Closeness with little in between", saturation: "Recent coverage penalty",
+  "demand since last coverage (log)": "Demand since last coverage", "demand per coverage (log)": "Demand per coverage item",
+  momentum: "Momentum", "share of demand after coverage": "Demand newer than the coverage", "recent coverage": "Recent coverage penalty",
+  "similarity × (1 − bridge ratio) × (1 + momentum)": "Closeness with little in between",
 };
 
 /** Momentum is a log-linear yearly rate; show it as percent growth per year. */
@@ -62,15 +64,16 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
     <div className="detail-layout">
       <div className="stack gap">
         <section aria-labelledby="why" className="panel stack gap">
-          <div className="label">Engine assessment</div>
-          <h2 id="why">Why the engine flags this</h2>
-          <p>{gap.explanation}</p>
-          <div className="facts-row small muted">
-            <span>{fmt(gap.demand)} demand</span><span>{fmt(gap.coverage)} coverage</span>
-            {gap.last_coverage && <span>last coverage {gap.last_coverage}</span>}
-            {gap.momentum !== null && <span>activity {growth(gap.momentum)} a year</span>}
-            {gap.bridge_items !== null && <span>{fmt(gap.bridge_items)} items in between</span>}
-          </div>
+          <h2 id="why">Why it’s flagged</h2>
+          <p className="muted">{gap.explanation}</p>
+          <dl className="gap-stats">
+            <div><dt>Demand</dt><dd>{fmt(gap.demand)}</dd></div>
+            <div><dt>Coverage</dt><dd>{fmt(gap.coverage)}</dd></div>
+            {gap.momentum !== null && <div><dt>Activity</dt><dd>{growth(gap.momentum)}<small>/yr</small></dd></div>}
+            {gap.last_coverage && <div><dt>Last coverage</dt><dd>{gap.last_coverage}</dd></div>}
+            {gap.bridge_items !== null && <div><dt>In between</dt><dd>{fmt(gap.bridge_items)}</dd></div>}
+          </dl>
+          <div className="breakdown-head"><span>Score breakdown</span><b>{gap.score.toFixed(2)}</b></div>
           <div className="terms" key={`terms-${gap.gap_id}`}>{gap.terms.filter((x) => x.weight !== 0).map((x, i) => <div key={x.name} className="term" style={{ "--i": i } as CSSProperties}>
             <span>{TERM_LABEL[x.name] ?? x.name}</span>
             <div className="meter thin" aria-hidden="true"><div className={x.contribution < 0 ? "neg" : ""} style={{ width: `${(Math.abs(x.contribution) / maxContribution) * 100}%` }} /></div>

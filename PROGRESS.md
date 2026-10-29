@@ -1506,3 +1506,14 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - The owner then requested changes only and no relaunch. Stopped the in-progress
   native rebuild (exit 130); no native build success is claimed for this change, and
   the running app was left untouched. No GitHub CI dispatched.
+
+## 2026-10-29 — Streamlined gap assessment
+
+- Gap detail: one heading ("Why it's flagged") instead of an eyebrow plus heading; the
+  engine's sentence is muted; demand, coverage, activity (and last coverage / items in
+  between when present) are a row of figures with mono labels; the score terms sit under
+  a "Score breakdown" line carrying the total. Term labels now map the engine's actual
+  term names (the old map used weight keys, so raw names like "demand per coverage (log)"
+  showed).
+- Checked in the browser stub harness only; not rebuilt or relaunched as the macOS app.
+  UI tests (28), type check and frontend build pass. No CI dispatched.

@@ -1042,3 +1042,11 @@ packaging gates are still open. Details, reproducible commands and limitations:
   collection-scoped assessment wording. The percentage/animation is temporarily previewed
   while idle by explicit request; production idle hiding remains a documented follow-up
   once the owner finishes tuning. No new engine or absence-claim scope was introduced.
+
+## 2026-10-29 — Loading-matrix fade trail
+
+- Each matrix square still lights at the existing 120 ms snake cadence, then fades linearly
+  from full to half opacity over 500 ms instead of switching instantly. The 1080 ms cycle
+  and reduced-motion fallback are unchanged; fading squares form a short trail.
+- Frontend TypeScript/Vite build and diff checks passed. No native rebuild or relaunch,
+  as requested. Live animation review remains pending the owner's next launch.

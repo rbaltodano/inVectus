@@ -361,8 +361,9 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .indexing-bar > span { display: block; height: 100%; background: var(--text-2); }
 .indexing-bar.indeterminate > span { opacity: 0.5; }
 .snake-loader { --snake-step-duration: 120ms; --snake-duration: calc(var(--snake-step-duration) * 9); display: inline-grid; grid-template-columns: repeat(3, 2px); grid-template-rows: repeat(3, 2px); gap: 2px; flex: none; vertical-align: middle; }
-.snake-cell { width: 2px; height: 2px; background: currentColor; opacity: 0.5; animation: matrix-snake var(--snake-duration) steps(1, end) infinite; animation-delay: calc(var(--snake-step) * var(--snake-step-duration) - var(--snake-duration)); }
-@keyframes matrix-snake { 0% { opacity: 1; } 11.111111%, 100% { opacity: 0.5; } }
+.snake-cell { width: 2px; height: 2px; background: currentColor; opacity: 0.5; animation: matrix-snake var(--snake-duration) linear infinite; animation-delay: calc(var(--snake-step) * var(--snake-step-duration) - var(--snake-duration)); }
+/* 1080 ms cycle: hold bright for 120 ms, then fade to half opacity over 500 ms. */
+@keyframes matrix-snake { 0%, 11.111111% { opacity: 1; } 57.407407%, 100% { opacity: 0.5; } }
 @media (prefers-reduced-motion: reduce) { .snake-cell { animation: none; } .snake-cell[data-step="0"] { opacity: 1; } }
 .project-console .menu.search-menu { padding: 0; gap: 0; }
 .search-page { display: flex; flex-direction: column; }

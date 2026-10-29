@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
 import DataCircle, { type Marks } from "./DataCircle";
@@ -206,6 +206,26 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   const gapsRequest = useRef(0);
   const initialTab = pageTab(initialStack[initialStack.length - 1]);
   const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number; top: number }>();
+  useLayoutEffect(() => {
+    const tabs = tabsRef.current;
+    if (!tabs) return;
+    const measure = () => {
+      const selected = tabs.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!selected) return;
+      const style = getComputedStyle(selected);
+      const leftPadding = parseFloat(style.paddingLeft), rightPadding = parseFloat(style.paddingRight);
+      const next = { left: selected.offsetLeft + leftPadding, width: selected.offsetWidth - leftPadding - rightPadding,
+        top: selected.offsetTop + selected.offsetHeight - parseFloat(style.paddingBottom) + 6 };
+      setTabIndicator((previous) => previous?.left === next.left && previous.width === next.width && previous.top === next.top ? previous : next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(tabs);
+    tabs.querySelectorAll('button[role="tab"]').forEach((button) => observer.observe(button));
+    return () => observer.disconnect();
+  }, [activeTab]);
   const [tabStacks, setTabStacks] = useState<TabStacks>(() => ({
     [initialTab]: initialTab === "collections" && initialStack[initialStack.length - 1].kind === "import"
       ? [{ kind: "index" }, initialStack[initialStack.length - 1]] : [initialStack[initialStack.length - 1]],
@@ -314,13 +334,14 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         {project.warning && <p className="banner">{project.warning}</p>}
         {netError && <p className="banner err">{netError}</p>}
         <div className="project-toolbar">
-          <div className="project-tabs" role="tablist" aria-label="Project sections">
+          <div ref={tabsRef} className="project-tabs" role="tablist" aria-label="Project sections">
             {PROJECT_TABS.map((tab, i) => <button key={tab.id} id={`tab-${tab.id}`} type="button" role="tab"
               aria-selected={activeTab === tab.id} aria-controls={tabStacks[tab.id] ? `panel-${tab.id}` : undefined} tabIndex={activeTab === tab.id ? 0 : -1}
               onClick={() => selectTab(tab.id)} onKeyDown={(e) => {
                 const next = tabKeyIndex(e.key, i);
                 if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
               }}><span className="tab-code">{String(i + 1).padStart(2, "0")}</span>{tab.label}</button>)}
+            {tabIndicator && <span className="project-tab-indicator" aria-hidden="true" style={{ width: tabIndicator.width, top: tabIndicator.top, transform: `translateX(${tabIndicator.left}px)` }} />}
           </div>
         <IndexingIndicator job={job} preview />
         </div>

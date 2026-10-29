@@ -1450,3 +1450,18 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its existing
   project history and dev model store. Live spacing review remains with the owner;
   no GitHub CI dispatched.
+
+## 2026-10-29 — Closer animated tab underline
+
+- Replaced per-tab active pseudo-elements with one shared underline, positioned 6 px
+  below the active tab's text line box rather than at the bottom of its 24 px padding.
+  The tab hit areas and equal padding are unchanged.
+- The underline animates horizontal position and width over 200 ms when selection
+  changes, including keyboard and programmatic navigation. Measurements refresh on
+  active-tab changes and ResizeObserver updates to the tab strip/buttons, including
+  resizing and font-width changes. It moves with the scrollable tab strip and ignores
+  pointer input; reduced motion switches position immediately.
+- All 28 existing UI tests, frontend and macOS release builds and diff checks passed,
+  with the existing upstream Apple __eh_frame linker warning. Relaunched the standalone
+  app with its existing project history and dev model store. Live underline motion and
+  spacing remain unverified through the UI; no GitHub CI dispatched.

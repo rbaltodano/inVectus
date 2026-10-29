@@ -263,6 +263,10 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   return <>
     <header className="head">
       <div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
+      <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
+        onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
+        title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
+        {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
     </header>
     <div className="stage project-stage">
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey}
@@ -271,12 +275,6 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
         idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}
         onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
       <section className="project-console" aria-label="Project workspace">
-        <header className="console-head">
-          <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
-            onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
-            title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
-            {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
-        </header>
         {project.warning && <p className="banner">{project.warning}</p>}
         {netError && <p className="banner err">{netError}</p>}
         <div className="project-tabs" role="tablist" aria-label="Project sections">

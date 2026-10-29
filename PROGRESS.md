@@ -991,3 +991,12 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Windows/Linux remain unverified. No GitHub CI dispatched.
 - macOS release rebuild passed with the existing upstream `__eh_frame` linker warning;
   relaunched the rebuilt binary with the existing dev model store.
+
+## 2026-10-29 — Restore Offline switch to the top header
+
+- Moved the existing Offline/Network on switch beside the project heading at the top of the
+  workspace. Removed the now-empty console header and its CSS; tabs lead the right panel.
+  Network-switch behavior is unchanged.
+- Frontend and macOS release builds passed, as did diff checks. The known upstream Apple
+  `__eh_frame` linker warning remains. Relaunched the rebuilt app with the dev model store.
+  Visual review remains with the owner; Windows/Linux unverified. No GitHub CI dispatched.

@@ -1365,6 +1365,28 @@ fn open_url(url: String) -> CmdResult<()> {
 
 pub fn run() {
     tauri::Builder::default()
+        .setup(|_| {
+            // A release executable launched outside its .app bundle has no Dock icon by
+            // default. Set the same icon explicitly, keeping its existing WebKit profile.
+            #[cfg(target_os = "macos")]
+            {
+                use objc2::{AllocAnyThread, MainThreadMarker};
+                use objc2_app_kit::{NSApplication, NSImage};
+                use objc2_foundation::NSData;
+                let main_thread =
+                    MainThreadMarker::new().ok_or("app setup requires the main thread")?;
+                let data = NSData::with_bytes(include_bytes!("../icons/icon.icns"));
+                let icon =
+                    NSImage::initWithData(NSImage::alloc(), &data).ok_or("invalid app icon")?;
+                let app = NSApplication::sharedApplication(main_thread);
+                // SAFETY: the main-thread marker above verifies AppKit's thread requirement;
+                // `icon` is a valid retained NSImage for the duration of the setter call.
+                unsafe {
+                    app.setApplicationIconImage(Some(&icon));
+                }
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![

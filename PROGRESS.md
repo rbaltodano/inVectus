@@ -1525,3 +1525,24 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Apple __eh_frame linker warning. Relaunched the standalone app with its original
   project history and dev model store, including bundled Inter and cream text.
 - Live typography/scrollbar appearance remains for owner review. No CI dispatched.
+
+## 2026-10-29 — Owner-provided logo and app icon
+
+- Moved Desktop/invectus-logo.png and Desktop/invectus-icon.png into
+  src/assets/branding, removing the Desktop copies as requested. Original PNGs and
+  transparency are preserved. The sidebar now displays the supplied full logo at its
+  natural aspect ratio, replacing the bordered text placeholder.
+- Regenerated the existing desktop icon asset set with Tauri's icon tool, using contain
+  fitting to square the 179×174 source without cropping or stretching. Updated PNG,
+  macOS ICNS, Windows ICO and existing Appx sizes; mobile outputs stayed in temp storage.
+- Added a macOS-only AppKit setup hook to apply that same ICNS to the running app's Dock
+  icon, including standalone release launches that retain the existing WebKit profile.
+  Uses existing Objective-C runtime dependency versions and verifies the main thread.
+- Visually inspected source/generated PNGs and verified alpha/square dimensions. All
+  28 existing UI tests, frontend build and diff checks passed.
+- macOS release executable and .app bundle builds passed with the existing upstream
+  Apple __eh_frame linker warning. Verified the bundle declares icon.icns and its
+  resource matches the generated source byte-for-byte. Formatting/diff checks passed.
+  Relaunched the standalone app with its existing project history and dev model store;
+  live sidebar/Dock appearance remains for owner review. Windows/Linux are unverified;
+  no CI dispatched.

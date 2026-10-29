@@ -4,6 +4,7 @@ import { JobsProvider, isRunning, useJobs } from "./jobs";
 import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, renameRecent, type Recent } from "./screens/Projects";
 import ProjectName from "./ProjectName";
+import brandLogo from "./assets/branding/invectus-logo.png";
 import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
 import WorkspaceSplit from "./WorkspaceSplit";
@@ -105,7 +106,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
   return <div className="shell">
     <nav aria-label="Main" className="sidebar">
       <div className="side-top">
-        <div className="logo">inVectus</div>
+        <div className="logo"><img src={brandLogo} alt="inVectus" /></div>
         <div className="side-search">
           <Search size={16} strokeWidth={1.5} aria-hidden="true" />
           <label htmlFor="side-q" className="sr-only">Find a project</label>

@@ -65,7 +65,8 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .shell { display: flex; min-height: 100vh; }
 .sidebar { flex: 0 0 240px; background: var(--surface); border-right: 1px solid var(--line); padding: 24px 16px; display: flex; flex-direction: column; justify-content: space-between; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .side-top, .side-bottom { display: flex; flex-direction: column; gap: 24px; }
-.logo { align-self: flex-start; border: 1px solid rgba(222, 222, 222, 0.5); padding: 8px 12px; font-size: 18px; font-weight: 500; color: var(--text); }
+.logo { align-self: flex-start; width: 100%; padding: 0; }
+.logo img { display: block; width: 100%; height: auto; }
 .side-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--r); padding: 0 12px; }
 .side-search input { border: none; background: none; padding: 10px 0; font-size: 13px; font-weight: 400; color: var(--text); width: 100%; min-width: 0; }
 .side-search input:focus-visible { outline: none; }
@@ -461,7 +462,6 @@ code, .path, .mono { font-family: var(--mono); }
 
 /* Sidebar: same ground as the page, one hairline. */
 .sidebar { background: var(--bg); border-right: 1px solid var(--line); }
-.logo { border-color: var(--line-2); font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; padding: 6px 10px; }
 .side-search { border-color: var(--line); border-radius: var(--r); }
 .sidebar .side-link, .project-link { border-radius: var(--r); }
 .side-link[aria-current="page"], .project-link[aria-current="page"], .project-link:hover:not(:disabled) { background: var(--surface); }

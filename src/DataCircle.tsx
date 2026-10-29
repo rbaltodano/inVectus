@@ -42,11 +42,11 @@ interface Props {
   focusRegion?: { region: number; request: number };
 }
 
-const INK = "#eeeae4";
+const INK = "#f7f3eb";
 const ACCENT = "#6edcaa";
 const SINGLE = 4;         // one item, in screen px
 const LABEL_FONT = `500 9.5px "Martian Mono Variable", ui-monospace, monospace`;
-const white = (a: number) => `rgba(255, 255, 255, ${a})`;
+const white = (a: number) => `rgba(247, 243, 235, ${a})`;
 const markKey = {
   query: (q: { x: number; y: number }) => `mark:query:${q.x}:${q.y}`,
   item: (id: number) => `mark:item:${id}`,
@@ -340,7 +340,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     for (const id of outlined) {
       const r = fine.get(id); if (!r) continue;
       const [x, y] = toScreen(r.x, r.y);
-      g.strokeStyle = id === marks.region ? ACCENT : "rgba(238, 234, 228, 0.45)";
+      g.strokeStyle = id === marks.region ? ACCENT : white(0.45);
       g.globalAlpha = id === marks.region ? opacity(markKey.region(id)) : 1;
       g.beginPath(); g.arc(x, y, Math.max(6, r.radius * fit.k * view.s), 0, Math.PI * 2); g.stroke();
       g.globalAlpha = 1;

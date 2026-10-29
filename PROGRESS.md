@@ -1489,3 +1489,20 @@ packaging gates are still open. Details, reproducible commands and limitations:
   linker warning. Relaunched the standalone app with its existing project history and
   dev model store. Live editor interaction/appearance remains unverified through the UI.
   No GitHub CI dispatched; Windows/Linux remain unverified.
+
+## 2026-10-29 — Cream light text, Inter and hidden content scrollbar
+
+- Unified the light-text ink/text/text-2 tokens at #F7F3EB, retaining muted grey labels
+  and semantic accent colours. Map ink and label/outline alpha colours use the same
+  cream palette.
+- Bundled @fontsource-variable/inter 5.3.0 and made Inter Variable the primary reading
+  font, ahead of system fallbacks. Inter is sans-serif; interpreted the owner's named
+  font choice as the intended font despite the word serif. Monospace codes/labels
+  continue using the existing Martian Mono. Font assets load locally/offline.
+- Hid native scrollbars on the left content menu and nested pages through Firefox
+  and WebKit scrollbar styles, retaining scrolling and keyboard access.
+- All 28 existing UI tests and frontend TypeScript/Vite build passed. npm installation
+  reported zero vulnerabilities. Live typography/scroll review remains with the owner.
+- The owner then requested changes only and no relaunch. Stopped the in-progress
+  native rebuild (exit 130); no native build success is claimed for this change, and
+  the running app was left untouched. No GitHub CI dispatched.

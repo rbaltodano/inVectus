@@ -5,9 +5,9 @@
   --surface-2: #292929;
   --line: #333333;
   --line-2: #48453f;
-  --ink: #eeeae4;
-  --text: #eeeae4;
-  --text-2: #d0cbc3;
+  --ink: #f7f3eb;
+  --text: #f7f3eb;
+  --text-2: #f7f3eb;
   --dim: #aaa59b;
   --dim-2: #aaa59b;
   --accent: #6edcaa;
@@ -346,6 +346,8 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .project-stage.is-resizing, .project-stage.is-resizing * { cursor: col-resize !important; user-select: none; }
 .project-console .banner { padding: 8px 16px; font-size: 13px; flex: none; }
 .project-console .menu { flex: 1; min-height: 0; max-height: none; padding: 16px; }
+.project-console .menu, .project-console .menu .page { scrollbar-width: none; }
+.project-console .menu::-webkit-scrollbar, .project-console .menu .page::-webkit-scrollbar { display: none; }
 .project-console .menu > .stack { flex-shrink: 0; }
 .project-console .menu .page { padding: 0; overflow: visible; flex: none; }
 .project-stage[data-stacked="true"] { display: flex; flex-direction: column; gap: 24px; overflow-y: auto; }
@@ -422,13 +424,13 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
   --surface-2: #1c1d20;
   --line: rgba(255, 255, 255, 0.1);
   --line-2: rgba(255, 255, 255, 0.2);
-  --ink: #f4f4f2;
-  --text: #e8e8e5;
-  --text-2: #c4c4bf;
+  --ink: #f7f3eb;
+  --text: #f7f3eb;
+  --text-2: #f7f3eb;
   --dim: #8f8f8a;
   --dim-2: #8f8f8a;
   --r: 2px;
-  --sans: -apple-system, "SF Pro Text", "Helvetica Neue", Inter, system-ui, sans-serif;
+  --sans: "Inter Variable", Inter, -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
   font-family: var(--sans);
   font-size: 13px;
   letter-spacing: 0.005em;
@@ -436,7 +438,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 h1 { font-family: var(--sans); font-size: 30px; font-weight: 300; letter-spacing: -0.015em; line-height: 1.1; }
 h2, .h1, .h2 { font-family: var(--sans); font-weight: 400; font-size: 15px; letter-spacing: 0; }
 .eyebrow, .tab-code, .search-rankings h2, .assessment-details summary, .section, .step, .mapping .th,
-.table th, .facts dt, .key, .index-status, .circle-sub, .circle-tip .dim, .verdict {
+.table th, .facts dt, .gap-stats dt, .breakdown-head span, .key, .index-status, .circle-sub, .circle-tip .dim, .verdict {
   font-family: var(--mono); font-size: 10.5px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase;
 }
 .eyebrow { color: var(--dim); margin-bottom: 6px; }
@@ -573,3 +575,14 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 .page-swap.in { animation: page-in 220ms ease-out both; }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .page-swap.out { transition: none; } .page-swap.in { animation: none; } }
+
+/* Gap assessment: the counts read as a row of figures, then the score and what makes it up. */
+.gap-stats { display: flex; flex-wrap: wrap; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.gap-stats > div { flex: 1 1 0; min-width: 96px; display: flex; flex-direction: column-reverse; gap: 6px; padding: 14px 16px 14px 0; }
+.gap-stats > div + div { padding-left: 16px; border-left: 1px solid var(--line); }
+.gap-stats dt { color: var(--dim); }
+.gap-stats dd { margin: 0; font-family: var(--sans); font-size: 20px; color: var(--text); font-variant-numeric: tabular-nums; }
+.gap-stats dd small { font-size: 13px; color: var(--dim); margin-left: 2px; }
+.breakdown-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: -4px; }
+.breakdown-head span { color: var(--dim); }
+.breakdown-head b { font-family: var(--sans); font-weight: 500; font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; }

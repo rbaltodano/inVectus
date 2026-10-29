@@ -5,7 +5,7 @@ import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, type Recent } from "./screens/Projects";
 import Panel from "./screens/Panel";
 import Settings from "./screens/Settings";
-import { Folder, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import "./App.css";
 
@@ -57,6 +57,8 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
   const [error, setError] = useState<string>();
   const jobs = useJobs();
   const job = jobs.current;
+  const switchingBlocked = isRunning(job) && !!job?.project;
+  const [opening, setOpening] = useState(false);
 
   useEffect(() => { if (project) { remember(project); setRecent(recentProjects()); } }, [project]);
 
@@ -66,30 +68,51 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     setRoute({ view: "project" });
   };
   const openRecent = async (r: Recent) => {
+    if (opening || (switchingBlocked && job?.project !== r.root)) return;
     setQuery(""); setError(undefined); setStack([{ kind: "home" }]);
     if (project?.root === r.root) { setRoute({ view: "project" }); return; }
+    setOpening(true);
     try { opened(await api.open(r.root, false)); } catch (e) { setError(String(e)); }
+    finally { setOpening(false); }
   };
-  const matches = query.trim() ? recent.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 8) : [];
-  const nav = (label: string, Icon: LucideIcon, current: boolean, onClick: () => void) =>
-    <button type="button" className="side-link" aria-current={current ? "page" : undefined} onClick={onClick}>
-      <Icon size={18} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span></button>;
+  const openProject = async () => {
+    if (opening || switchingBlocked) return;
+    setError(undefined); setOpening(true);
+    try { const path = await pickProject(); if (path) opened(await api.open(path, false)); }
+    catch (e) { setError(String(e)); }
+    finally { setOpening(false); }
+  };
+  const matches = recent.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const nav = (label: string, Icon: LucideIcon, current: boolean, onClick: () => void, disabled = false) =>
+    <button type="button" className="side-link" aria-current={current ? "page" : undefined} onClick={onClick} disabled={disabled}>
+      <Icon size={16} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span></button>;
 
   return <div className="shell">
     <nav aria-label="Main" className="sidebar">
       <div className="side-top">
         <div className="logo">inVectus</div>
         <div className="side-search">
-          <Search size={18} strokeWidth={1.5} aria-hidden="true" />
+          <Search size={16} strokeWidth={1.5} aria-hidden="true" />
           <label htmlFor="side-q" className="sr-only">Find a project</label>
           <input id="side-q" placeholder="Find a project" value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && matches[0]) openRecent(matches[0]); if (e.key === "Escape") setQuery(""); }} />
         </div>
-        {query.trim() && <ul className="side-results" aria-label="Matching projects">
-          {matches.map((r) => <li key={r.root}><button type="button" onClick={() => openRecent(r)}>{r.name}<span>{tilde(r.root)}</span></button></li>)}
-          {matches.length === 0 && <li className="dim small">No project matches.</li>}
-        </ul>}
-        {nav("Projects", Folder, route.view === "projects" || route.view === "new", () => setRoute({ view: "projects" }))}
+        <div className="side-actions">
+          {nav("New project", Plus, route.view === "new", () => setRoute({ view: "new" }), opening || switchingBlocked)}
+          {nav("Open project…", FolderOpen, false, openProject, opening || switchingBlocked)}
+        </div>
+        <div className="sidebar-projects">
+          {nav("Projects", Folder, route.view === "projects", () => setRoute({ view: "projects" }))}
+          <ul className="project-list" aria-label="Projects">
+            {matches.map((r) => <li key={r.root}>
+              <button type="button" className="project-link" aria-current={route.view === "project" && project?.root === r.root ? "page" : undefined}
+                title={`${r.name}\n${tilde(r.root)}`} disabled={opening || (switchingBlocked && job?.project !== r.root)} onClick={() => openRecent(r)}>
+                <span>{r.name}</span>
+              </button>
+            </li>)}
+          </ul>
+          {matches.length === 0 && <p className="side-empty">{query.trim() ? "No matching projects" : "No projects yet"}</p>}
+        </div>
         {error && <p className="side-error" role="alert">{error}</p>}
       </div>
       <div className="side-bottom">
@@ -102,11 +125,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
       {!inTauri && <p className="banner">Browser preview: the engine runs only in the desktop app.</p>}
       {route.view === "projects" && error && <p className="banner err" role="alert">{error}</p>}
       {route.view === "projects" && <ProjectsPage current={project} recent={recent} job={job}
-        onPick={openRecent} onNew={() => setRoute({ view: "new" })}
-        onOpen={async () => {
-          setError(undefined);
-          try { const path = await pickProject(); if (path) opened(await api.open(path, false)); } catch (e) { setError(String(e)); }
-        }} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
+        onPick={openRecent} onNew={() => setRoute({ view: "new" })} onOpen={openProject} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
       {route.view === "new" && <NewProject onCreated={opened} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
       {route.view === "settings" && <Settings project={project} setProject={setProject} />}
       {route.view === "project" && project && <Workspace key={project.root} project={project} setProject={setProject} refresh={refresh}
@@ -242,32 +261,34 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
   useEffect(() => { if (job && job.state !== "running" && prevJob.current === job.id) refresh(); prevJob.current = job?.id; }, [job?.state]);
 
   return <>
-    <header className="head">
-      <div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
-      <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
-        onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
-        title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
-        {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
-    </header>
-    {project.warning && <p className="banner">{project.warning}</p>}
-    {netError && <p className="banner err">{netError}</p>}
-    <div className="project-tabs" role="tablist" aria-label="Project sections">
-      {PROJECT_TABS.map((tab, i) => <button key={tab.id} id={`tab-${tab.id}`} type="button" role="tab"
-        aria-selected={activeTab === tab.id} aria-controls={tabStacks[tab.id] ? `panel-${tab.id}` : undefined} tabIndex={activeTab === tab.id ? 0 : -1}
-        onClick={() => selectTab(tab.id)} onKeyDown={(e) => {
-          const next = tabKeyIndex(e.key, i);
-          if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
-        }}>{tab.label}</button>)}
-    </div>
-    <div className="stage">
+    <div className="stage project-stage">
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey}
         showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
         empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
         idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}
         onGap={(id) => push({ kind: "gap", id })} onItem={(p) => push({ kind: "item", point: p })} />
-      {PROJECT_TABS.filter((tab) => tabStacks[tab.id]).map((tab) => <Panel key={tab.id} active={activeTab === tab.id} tabId={tab.id}
-        ctx={{ ...ctx, push: (p) => pushFrom(tab.id, p), back: () => setStack((s) => s.length > 1 ? s.slice(0, -1) : s, tab.id),
-          setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} job={job} />)}
+      <section className="project-console" aria-label="Project workspace">
+        <header className="console-head">
+          <div><h1>{project.name}</h1><div className="path">{tilde(project.root)}</div></div>
+          <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
+            onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
+            title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
+            {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
+        </header>
+        {project.warning && <p className="banner">{project.warning}</p>}
+        {netError && <p className="banner err">{netError}</p>}
+        <div className="project-tabs" role="tablist" aria-label="Project sections">
+          {PROJECT_TABS.map((tab, i) => <button key={tab.id} id={`tab-${tab.id}`} type="button" role="tab"
+            aria-selected={activeTab === tab.id} aria-controls={tabStacks[tab.id] ? `panel-${tab.id}` : undefined} tabIndex={activeTab === tab.id ? 0 : -1}
+            onClick={() => selectTab(tab.id)} onKeyDown={(e) => {
+              const next = tabKeyIndex(e.key, i);
+              if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
+            }}>{tab.label}</button>)}
+        </div>
+          {PROJECT_TABS.filter((tab) => tabStacks[tab.id]).map((tab) => <Panel key={tab.id} active={activeTab === tab.id} tabId={tab.id}
+            ctx={{ ...ctx, push: (p) => pushFrom(tab.id, p), back: () => setStack((s) => s.length > 1 ? s.slice(0, -1) : s, tab.id),
+              setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} job={job} />)}
+      </section>
     </div>
   </>;
 }

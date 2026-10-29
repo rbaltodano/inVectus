@@ -958,3 +958,26 @@ packaging gates are still open. Details, reproducible commands and limitations:
   interactive visual review is left to the owner. Windows/Linux remain unverified; no CI run.
 - Decisions and spec conflicts: the owner's approved palette/typography replaces the earlier
   Angrove/Figma-derived styling. No feature or engine behavior changed; no new spec conflict.
+
+## 2026-10-29 — Sidebar project list and panel-contained workspace
+
+- Added a persistent, searchable recent-project list to the sidebar with current-project
+  highlighting, full-name/path tooltips, empty/filter states and independent list scrolling.
+  New/Open project actions sit above it; Settings and job status stay at the bottom. Project
+  switches and opens respect running project jobs and pending open operations.
+- Read Angrove's `MacSidebarLayout.minimumWidth` (280 pt) and `BrandTypography.pointSize`
+  (13 pt for desktop sizes up to 18) from the canonical checkout without modifying it.
+  Matched the sidebar to 280 CSS px and 13 px regular labels, with 16 px icons. Reduced
+  semibold/bold interface weights to medium, retaining regular sidebar/tab labels.
+- Moved the project title, path, network switch, warnings and tabs into a bordered right-hand
+  working panel. The panel has its own scrolling body and takes 54% of the workspace, bounded
+  at 400–620 px; the map remains alongside it at normal desktop widths. Below 1040 px window
+  width, the workspace stacks and scrolls. Existing tab histories/state and keyboard behavior
+  are retained. The Projects overview remains accessible from the sidebar.
+- Frontend build, five existing navigation tests, diff checks and macOS release
+  `tauri build --no-bundle --ci` passed. The known upstream Apple linker `__eh_frame` warning
+  remains. Relaunched the rebuilt app with the existing dev model store. Visual review is left
+  to the owner; no live responsive-layout verification or Windows/Linux validation claimed.
+  No GitHub CI dispatched.
+- Decisions and spec conflicts: the owner requested the right panel as the primary project
+  workspace and the sidebar as the project switcher; no new spec conflict identified.

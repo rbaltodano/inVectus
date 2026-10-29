@@ -25,6 +25,8 @@ interface Props {
   showGaps: boolean;
   showLabels: boolean;
   showOutlines: boolean;
+  /** Emphasise gap rings while the Gaps tab is active. */
+  gapsActive?: boolean;
   /** The running job of this project, for the loading states. */
   job?: JobInfo;
   /** Nothing imported yet: the circle is a button that adds a dataset. */
@@ -48,6 +50,7 @@ const markKey = {
   query: (q: { x: number; y: number }) => `mark:query:${q.x}:${q.y}`,
   item: (id: number) => `mark:item:${id}`,
   region: (id: number) => `mark:region:${id}`,
+  gap: (run: string | undefined, id: number) => `mark:gap:${run}:${id}`,
 };
 /** A gap's code, shared by the map and the gap list (rank by score, 1-based). */
 export const gapCode = (rank: number) => `G-${String(rank + 1).padStart(2, "0")}`;
@@ -114,7 +117,7 @@ function disc(i: number): [number, number] {
   return [Math.cos(t) * r, Math.sin(t) * r];
 }
 
-export default function DataCircle({ data, gaps, marks, showGaps, showLabels, showOutlines, job, empty, idle, onGap, onItem, resetKey, focusRegion }: Props) {
+export default function DataCircle({ data, gaps, marks, showGaps, showLabels, showOutlines, gapsActive = false, job, empty, idle, onGap, onItem, resetKey, focusRegion }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const focusedRequest = useRef<Props["focusRegion"]>();
@@ -137,6 +140,24 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const [flicker] = useState(() => new DotFlicker());
   const [flickerFrame, setFlickerFrame] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const [gapEmphasis, setGapEmphasis] = useState(0);
+  const gapEmphasisRef = useRef(0);
+
+  useEffect(() => {
+    const target = gapsActive ? 1 : 0;
+    const start = gapEmphasisRef.current;
+    const update = (value: number) => { gapEmphasisRef.current = value; setGapEmphasis(value); };
+    if (reducedMotion) { update(target); return; }
+    const started = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - started) / 250);
+      update(start + (target - start) * progress);
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    if (start !== target) frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [gapsActive, reducedMotion]);
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -231,8 +252,12 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     if (marks.query) keys.push(markKey.query(marks.query));
     for (const id of marks.items ?? []) keys.push(markKey.item(id));
     if (marks.region !== undefined) keys.push(markKey.region(marks.region));
+    if (gapsActive && showGaps && !loading) for (const gap of gaps.slice(0, GAP_MARKS)) {
+      const position = gapPos(gap);
+      if (position && inside(position[0], position[1], 7)) keys.push(markKey.gap(data?.run.run_id, gap.gap_id));
+    }
     flicker.sync(keys, performance.now());
-  }, [renderedCells, showPlaceholders, placeholderCount, data?.run.run_id, flicker, marks]);
+  }, [renderedCells, showPlaceholders, placeholderCount, data?.run.run_id, flicker, marks, gapsActive, showGaps, loading, gaps]);
 
   useEffect(() => {
     const c = canvas.current;
@@ -249,6 +274,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     cells.current = list;
     const now = performance.now();
     const opacity = (key: string) => reducedMotion ? 1 : flicker.opacity(key, now);
+    const squareOpacity = (normal: number) => normal + (0.25 - normal) * gapEmphasis;
 
     // Region outlines: hidden until hover (or the toggle / a marked region).
     const majority = (c: Cell) => [...c.regions.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -276,7 +302,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         const [ux, uy] = disc(i);
         let x = R + ux * R, y = R + uy * R;
         if (glide > 0 && list.length) { const t = list[(i * 7919) % list.length]; x += (t.x - x) * ease; y += (t.y - y) * ease; }
-        g.globalAlpha = (loading ? 0.55 : 0.55 * (1 - ease) + 0.2) * opacity(`placeholder:${i}`);
+        g.globalAlpha = squareOpacity(loading ? 0.55 : 0.55 * (1 - ease) + 0.2) * opacity(`placeholder:${i}`);
         g.fillRect(x - 2, y - 2, 4, 4);
       }
       g.globalAlpha = 1;
@@ -288,7 +314,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       for (const c of list) {
         const s = side(c.n);
         g.fillStyle = INK;
-        g.globalAlpha = (c.n === 1 ? 0.62 : 0.88) * opacity(`item:${data?.run.run_id}:${c.first.item_id}`);
+        g.globalAlpha = squareOpacity(c.n === 1 ? 0.62 : 0.88) * opacity(`item:${data?.run.run_id}:${c.first.item_id}`);
         g.fillRect(c.x - s / 2, c.y - s / 2, s, s);
       }
       g.globalAlpha = 1;
@@ -308,14 +334,16 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
 
     // Gap marks: small rings with their codes.
     if (showGaps && !loading) {
-      g.lineWidth = 1.25; g.font = LABEL_FONT; g.textBaseline = "middle";
+      g.lineWidth = 4; g.font = LABEL_FONT; g.textBaseline = "middle";
       gaps.slice(0, GAP_MARKS).forEach((gp, i) => {
-        const p = gapPos(gp); if (!p || !inside(p[0], p[1], 4)) return;
+        const p = gapPos(gp); if (!p || !inside(p[0], p[1], 7)) return;
+        g.globalAlpha = gapsActive ? opacity(markKey.gap(data?.run.run_id, gp.gap_id)) : 1;
         g.strokeStyle = INK; g.fillStyle = "#0e0f10";
         g.beginPath(); g.arc(p[0], p[1], 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
         // Codes on the strongest few only; the rest show theirs on hover.
         if (i < 6) { g.fillStyle = white(0.55); g.fillText(gapCode(i), p[0] + 8, p[1]); }
       });
+      g.globalAlpha = 1;
     }
 
     // The searched idea: an accent crosshair with a glow, labelled.
@@ -342,7 +370,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       const frame = requestAnimationFrame(setFlickerFrame);
       return () => cancelAnimationFrame(frame);
     }
-  }, [data, size, view, gaps, marks, showGaps, showOutlines, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion]);
+  }, [data, size, view, gaps, marks, showGaps, showOutlines, gapsActive, gapEmphasis, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion]);
 
   // Pointer: drag to pan, wheel to zoom, hover to inspect, click to open.
   const at = (e: PE) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };

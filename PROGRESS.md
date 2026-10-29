@@ -1270,3 +1270,21 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker
   warning. Relaunched the standalone app with its existing project history and dev
   model store. No GitHub CI dispatched.
+
+## 2026-10-29 — Gap-map emphasis
+
+- While the Gaps tab is active (including its detail views), real, merged and placeholder
+  map squares fade to an absolute 25% opacity over 250 ms. Leaving restores their usual
+  opacity over the same interval; interrupted fades continue from the current value.
+  Square grouping remains memoized separately from animation frames.
+- Visible gap rings and their labels now join the existing DotFlicker tracker on Gaps
+  entry: independent uniform 0–250 ms delays followed by the existing 150 ms flicker.
+  Leaving prunes their entrance keys so returning replays it; camera redraws retain
+  timings for surviving rings. The existing top-12 marker limit is unchanged.
+- Gap-ring stroke is now 4 CSS px; edge visibility padding accounts for its outer radius.
+  Reduced motion skips both flicker and opacity transitions.
+- Frontend TypeScript/Vite build, all 23 existing UI tests and diff checks passed.
+  Live animation/appearance and frame-rate behavior remain unverified.
+- macOS release rebuild passed with the existing upstream Apple __eh_frame linker
+  warning. Relaunched the standalone app with its existing project history and dev
+  model store. No GitHub CI dispatched; Windows/Linux remain unverified.

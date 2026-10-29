@@ -308,6 +308,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute }: {
     </header>
     <div className="stage project-stage">
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey} focusRegion={mapFocus}
+        gapsActive={activeTab === "gaps"}
         showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
         empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}
         idle={mapError ? "Map unavailable" : importing && project.collections.length === 0 ? "Choose columns on the right →" : !anyIndex ? "Not indexed yet" : table && !table.regions ? "No map yet · see Collections" : map ? undefined : "Loading map…"}

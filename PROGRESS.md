@@ -1060,3 +1060,10 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - macOS release rebuild passed with the existing upstream Apple __eh_frame linker warning.
   Launched the rebuilt app with the existing dev model store (no old app process was running).
   No GitHub CI dispatched; Windows/Linux remain unverified.
+
+## 2026-10-29 — Quiet search input focus
+
+- Removed the project search input's focus outline so typing shows the caret without a
+  surrounding highlight. Other controls retain their existing keyboard focus indicators.
+- Frontend TypeScript/Vite build and diff checks passed. No native rebuild or relaunch,
+  as requested; visual review awaits the owner's next launch.

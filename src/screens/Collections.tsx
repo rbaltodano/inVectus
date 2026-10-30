@@ -60,23 +60,19 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     setReimported(`${fmt(r.inserted)} new, ${fmt(r.updated)} changed, ${fmt(r.unchanged)} unchanged${out.index_error ? ` · indexing did not start: ${out.index_error}` : ""}${!out.job && out.plan.missing.length ? " · indexing needs a model (below)" : ""}`);
     await ctx.refresh();
   });
-  const total = c.items + c.chunks;
   const overall: IndexStatus | "none" = indexingHere ? "indexing" : tables.length === 0 ? "none" : tables.some((t) => t.index_status === "indexed" || t.index_status === "imported") ? (tables.every((t) => t.index_status === "indexed" || t.index_status === "imported") ? "indexed" : "outdated") : tables[0].index_status;
 
   return <section className="collection-row stack gap" data-open={open} aria-labelledby={`c-${c.collection_id}`}>
     <div className="collection-title">
       <h3 id={`c-${c.collection_id}`}>{c.collection_id}</h3>
-      <span className="index-status"><StatusMark status={overall} />{overall === "none" ? "Not indexed" : overall === "outdated" ? "Partly indexed" : STATUS_LABEL[overall]}</span>
-    </div>
-    <div className="path">
-      {c.source_kind ?? "source unknown"}{c.source_path ? ` · ${c.source_path}` : ""}{c.updated_at ? ` · imported ${when(c.updated_at)}` : ""}
+      {overall !== "indexed" && overall !== "imported" && <span className="index-status"><StatusMark status={overall} />{overall === "none" ? "Not indexed" : overall === "outdated" ? "Partly indexed" : STATUS_LABEL[overall]}</span>}
     </div>
     <dl className="figures">
       <div><dt>Items</dt><dd>{fmt(c.items)}</dd></div>
-      <div><dt>Texts</dt><dd>{fmt(total)}</dd></div>
-      <div><dt>Indexes</dt><dd>{fmt(tables.length)}</dd></div>
+      <div><dt>Demand</dt><dd>{fmt(c.by_role.demand ?? 0)}</dd></div>
+      <div><dt>Coverage</dt><dd>{fmt(c.by_role.coverage ?? 0)}</dd></div>
+      {(c.by_role.neutral ?? 0) > 0 && <div><dt>Neutral</dt><dd>{fmt(c.by_role.neutral!)}</dd></div>}
     </dl>
-    <RoleBar c={c} />
 
     {indexingHere && <div className="activity"><div className="small">Indexing with <span className="mono">{job!.models.join(", ")}</span></div><JobProgress job={job!} />
       <button type="button" className="text-btn" onClick={() => api.cancel()}>Cancel</button></div>}
@@ -84,10 +80,8 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
       <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={() => index(lastHere.models, true)}>Retry</button></div>}
     {lastHere?.state === "cancelled" && <div className="note small">Indexing was cancelled. Finished batches were kept; indexing again resumes where it stopped.</div>}
 
-    <div className="index-list" role="group" aria-label={`Indexes of ${c.collection_id}`}>
-      {tables.map((t) => <SpaceRow key={t.space_id} t={t} total={total} busy={busy || isRunning(job)} indexingHere={indexingHere} onIndex={() => index([t.model_key])} />)}
-      {tables.length === 0 && !indexingHere && <p className="dim small">Not indexed yet. Search, regions and gaps need an index.</p>}
-    </div>
+    {tables.length === 0 && !indexingHere && <p className="dim">Not indexed yet. Search, regions and gaps need an index.</p>}
+    {tables.map((t) => <SpaceRow key={t.space_id} t={t} busy={busy || isRunning(job)} indexingHere={indexingHere} onIndex={() => index([t.model_key])} />)}
 
     {plan && plan.missing.length > 0 && !indexingHere && <div className="stack gap-s">
       <div className="note small">{tables.length === 0 ? "No embedding model is installed, so this collection was not indexed." : `This collection has an index made with ${plan.missing.map((m) => m.key).join(", ")}, which is not installed here; that index cannot be updated.`} Nothing downloads without your consent.</div>
@@ -109,28 +103,15 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
   </section>;
 }
 
-function SpaceRow({ t, total, busy, indexingHere, onIndex }: { t: TableInfo; total: number; busy: boolean; indexingHere: boolean; onIndex: () => void }) {
+/** Shown only when an index needs attention; a healthy index needs no row. */
+function SpaceRow({ t, busy, indexingHere, onIndex }: { t: TableInfo; busy: boolean; indexingHere: boolean; onIndex: () => void }) {
   const status: IndexStatus = indexingHere && t.index_status !== "imported" ? "indexing" : t.index_status;
   const resumable = ["interrupted", "cancelled", "outdated", "failed", "unknown"].includes(status) && t.origin === "embedded";
-  return <div className="index-row">
-    <StatusMark status={status} />
-    <div className="rank-title">
-      <span className="mono small">{t.model_key}</span>
-      <span className="dim">{t.dimensions}-d · {fmt(t.vectors)}{t.origin === "embedded" ? ` / ${fmt(total)}` : ""} vectors · {STATUS_LABEL[status]}{t.indexed_at && status !== "indexing" ? ` · ${when(t.indexed_at)}` : ""}</span>
-      {status === "failed" && t.index_error && <span className="error small">{t.index_error}</span>}
-      {status === "unknown" && <span className="dim small">No index job is recorded for these vectors.</span>}
-    </div>
-    {resumable && <button type="button" className="text-btn" disabled={busy} onClick={onIndex}>{status === "failed" ? "Retry" : status === "outdated" ? "Index changes" : "Resume"}</button>}
-  </div>;
-}
-
-function RoleBar({ c }: { c: Collection }) {
-  const d = c.by_role.demand ?? 0, v = c.by_role.coverage ?? 0, n = c.by_role.neutral ?? 0, all = Math.max(1, d + v + n);
-  return <div className="stack gap-s">
-    <div className="rolebar" aria-hidden="true">
-      <div className="demand" style={{ width: `${(d / all) * 100}%` }} /><div className="coverage" style={{ width: `${(v / all) * 100}%` }} />
-    </div>
-    <div className="row wrap role-keys"><span className="key demand">{fmt(d)} demand</span><span className="key coverage">{fmt(v)} coverage</span><span className="key neutral">{fmt(n)} neutral</span></div>
+  if (!resumable) return null;
+  return <div className="attention">
+    <span className="index-status"><StatusMark status={status} />{STATUS_LABEL[status]}</span>
+    {status === "failed" && t.index_error && <span className="error small">{t.index_error}</span>}
+    <button type="button" className="text-btn push" disabled={busy} onClick={onIndex}>{status === "failed" ? "Retry" : status === "outdated" ? "Index changes" : "Resume"}</button>
   </div>;
 }
 

@@ -1589,3 +1589,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   inside one, roomier figures, index rows, actions and details lines, and 1.6 line height.
 - The macOS release .app bundle build passed. Relaunched the standalone app with the dev
   model store; live appearance remains for owner review. No CI dispatched.
+
+## 2026-10-29 — Reserved Collections tab
+
+- Removed from each collection: the indexed status (shown only when not fully indexed),
+  source path and import time, the per-model index list with vector counts, and the role
+  bar. Figures are now items, demand and coverage (neutral only when present). An index
+  row appears only when it needs action (resume, retry, index changes). Model details
+  stay under Details. Rows are inset 16 px like the gap assessment's sections.
+- The macOS release .app bundle build passed. Relaunched the standalone app with the dev
+  model store; live appearance remains for owner review. No CI dispatched.

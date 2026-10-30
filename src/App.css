@@ -636,3 +636,10 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 .collection-row .details { padding-top: 32px; gap: 32px; }
 .collection-row .details > .stack { gap: 12px; }
 .detail-line { gap: 20px; padding: 16px 0; line-height: 1.6; }
+/* Collections, reserved: inset like the gap assessment's sections, only what reading needs. */
+.collections > .collection-list .collection-row { padding: 40px 16px; }
+.collections > .collection-list .collection-row:first-child { padding-top: 16px; }
+.collections > .row { padding: 0 16px; }
+.collection-title h3 { font-size: 24px; }
+.figures > div { padding-top: 24px; padding-bottom: 24px; }
+.attention { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }

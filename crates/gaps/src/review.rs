@@ -85,7 +85,7 @@ pub struct GapList {
     pub gaps: Vec<GapView>,
 }
 
-fn jaccard(a: &[i64], b: &[i64]) -> f64 {
+pub(crate) fn jaccard(a: &[i64], b: &[i64]) -> f64 {
     let a: HashSet<_> = a.iter().collect();
     let b: HashSet<_> = b.iter().collect();
     let union = a.union(&b).count();

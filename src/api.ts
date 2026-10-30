@@ -82,6 +82,11 @@ export interface GapView {
   momentum: number | null; similarity: number | null; bridge_items: number | null; timeline: YearCount[]; core: number[];
   verdict: GapVerdictRecord | null; verification: { matches: number; summary: string; closest: OutsideHit[] } | null;
 }
+export interface SavedBookmark {
+  kind: string; core_key: string; core: number[]; snapshot: Omit<GapView, "verdict" | "verification">; saved_at: string; gap_id: number | null;
+}
+export interface SavedDecision { core_key: string; label: string; gap_id: number | null; verdict: GapVerdictRecord }
+export interface SavedOverview { bookmarks: SavedBookmark[]; decisions: SavedDecision[] }
 export interface GapList { run_id: string; stats: Record<string, unknown>; gaps: GapView[] }
 export interface ItemSummary { item_id: number; title: string | null; date: string | null; role: Role; url: string | null }
 export type GapDetail = GapView & { core_items: ItemSummary[] };
@@ -133,6 +138,9 @@ export const api = {
   gap: (t: TableRef, gapId: number) => invoke<GapDetail>("gap_detail", { form: t, gapId }),
   setVerdict: (t: TableRef, gapId: number, verdict: string, note: string) =>
     invoke<GapView>("set_gap_verdict", { form: t, gapId, verdict, note }),
+  saved: (t: TableRef) => invoke<SavedOverview>("saved_overview", { form: t }),
+  bookmark: (t: TableRef, gapId: number) => invoke<void>("bookmark_gap", { form: t, gapId }),
+  removeBookmark: (t: TableRef, kind: string, coreKey: string) => invoke<void>("remove_gap_bookmark", { form: t, kind, coreKey }),
   describe: (t: TableRef, gapId: number, at: number | null) => invoke<DescribeResult>("describe_gap", { form: t, gapId, t: at }),
   verify: (t: TableRef, gapId: number) => invoke<Verification>("verify_gap", { form: t, gapId, network: false }),
   defaultWeights: () => invoke<Weights>("default_gap_weights"),

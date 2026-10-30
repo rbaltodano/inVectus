@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS gaps (
 CREATE TABLE IF NOT EXISTS gap_verdicts (
   collection_id TEXT, space_id TEXT, kind TEXT, core JSON, verdict TEXT, note TEXT,
   updated_at TIMESTAMP);
+CREATE TABLE IF NOT EXISTS gap_bookmarks (
+  collection_id TEXT, space_id TEXT, kind TEXT, core TEXT, snapshot JSON,
+  saved_at TIMESTAMP, PRIMARY KEY (collection_id, space_id, kind, core));
 CREATE TABLE IF NOT EXISTS verifications (
   collection_id TEXT, space_id TEXT, run_id TEXT, gap_id INTEGER, result JSON,
   created_at TIMESTAMP);
@@ -232,6 +235,16 @@ pub struct GapVerdictRecord {
     pub note: String,
     #[serde(default)]
     pub updated_at: Option<String>,
+}
+
+/// A deliberate bookmark, independent of the person's verdict. Snapshot retains its label
+/// and evidence identity when a later scan has no matching gap.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GapBookmarkRecord {
+    pub kind: String,
+    pub core: Vec<i64>,
+    pub snapshot: serde_json::Value,
+    pub saved_at: String,
 }
 
 pub const GAP_VERDICTS: &[&str] = &[
@@ -991,6 +1004,67 @@ impl Store {
             })
             .collect::<Result<_>>()?;
         Ok(Some((serde_json::from_str(&stats)?, gaps)))
+    }
+
+    pub fn set_gap_bookmark(
+        &self,
+        collection: &str,
+        space: &str,
+        kind: &str,
+        core: &[i64],
+        snapshot: Option<&serde_json::Value>,
+    ) -> Result<()> {
+        let mut core = core.to_vec();
+        core.sort_unstable();
+        core.dedup();
+        if core.is_empty() {
+            bail!("cannot bookmark a gap without core items");
+        }
+        let key = serde_json::to_string(&core)?;
+        if let Some(snapshot) = snapshot {
+            self.conn.execute(
+                "INSERT INTO gap_bookmarks VALUES (?, ?, ?, ?, CAST(? AS JSON), now())
+                 ON CONFLICT DO NOTHING",
+                params![
+                    collection,
+                    space,
+                    kind,
+                    key,
+                    serde_json::to_string(snapshot)?
+                ],
+            )?;
+        } else {
+            self.conn.execute(
+                "DELETE FROM gap_bookmarks WHERE collection_id = ? AND space_id = ? AND kind = ? AND core = ?",
+                params![collection, space, kind, key],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn gap_bookmarks(&self, collection: &str, space: &str) -> Result<Vec<GapBookmarkRecord>> {
+        let mut st = self.conn.prepare(
+            "SELECT kind, core, snapshot::VARCHAR, saved_at::VARCHAR FROM gap_bookmarks
+             WHERE collection_id = ? AND space_id = ? ORDER BY saved_at DESC",
+        )?;
+        let rows = st.query_map([collection, space], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })?;
+        rows.map(|r| {
+            let (kind, core, snapshot, saved_at) = r?;
+            Ok(GapBookmarkRecord {
+                kind,
+                core: serde_json::from_str(&core)?,
+                snapshot: serde_json::from_str(&snapshot)?,
+                saved_at,
+            })
+        })
+        .collect()
     }
 
     pub fn save_gap_verdict(&self, v: &GapVerdictRecord) -> Result<()> {

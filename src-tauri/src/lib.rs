@@ -74,6 +74,17 @@ fn with_session<T>(
     f(s).map_err(|e| format!("{e:#}"))
 }
 
+/// Background-only reads/writes wait for other short session operations instead of
+/// misreporting ordinary read contention as a running job. Never call on the UI thread.
+fn with_session_wait<T>(
+    session: &Shared,
+    f: impl FnOnce(&mut Session) -> anyhow::Result<T>,
+) -> CmdResult<T> {
+    let mut guard = session.lock().map_err(err)?;
+    let s = guard.as_mut().ok_or("no project is open")?;
+    f(s).map_err(err)
+}
+
 #[tauri::command]
 fn engine_version() -> &'static str {
     invectus_core::VERSION
@@ -1229,7 +1240,7 @@ async fn region_map(
 ) -> CmdResult<MapData> {
     let session = state.session.clone();
     off_thread(move || {
-        with_session(&session, |s| {
+        with_session_wait(&session, |s| {
             let table = select_table(&s.project, &collection, space.as_deref())?;
             map_data(&s.project, &table)
         })
@@ -1271,9 +1282,59 @@ async fn scan_gaps(
 async fn list_gaps(state: State<'_, AppState>, form: TableForm) -> CmdResult<GapList> {
     let session = state.session.clone();
     off_thread(move || {
-        with_session(&session, |s| {
+        with_session_wait(&session, |s| {
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             invectus_gaps::list(&s.project, &table)
+        })
+    })
+    .await
+}
+
+/// Project-local bookmarks and decisions for this collection and embedding space.
+#[tauri::command]
+async fn saved_overview(
+    state: State<'_, AppState>,
+    form: TableForm,
+) -> CmdResult<invectus_gaps::saved::SavedOverview> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session_wait(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::saved::overview(&s.project, &table)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn bookmark_gap(state: State<'_, AppState>, form: TableForm, gap_id: i32) -> CmdResult<()> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session_wait(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::saved::bookmark(&s.project, &table, gap_id)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_gap_bookmark(
+    state: State<'_, AppState>,
+    form: TableForm,
+    kind: String,
+    core_key: String,
+) -> CmdResult<()> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session_wait(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::saved::remove_bookmark(
+                &s.project,
+                &table,
+                &kind,
+                &serde_json::from_str::<Vec<i64>>(&core_key)?,
+            )
         })
     })
     .await
@@ -1288,7 +1349,7 @@ async fn gap_detail(
 ) -> CmdResult<GapDetail> {
     let session = state.session.clone();
     off_thread(move || {
-        with_session(&session, |s| {
+        with_session_wait(&session, |s| {
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             invectus_gaps::detail(&s.project, &table, gap_id)
         })
@@ -1307,7 +1368,7 @@ async fn set_gap_verdict(
 ) -> CmdResult<GapView> {
     let session = state.session.clone();
     off_thread(move || {
-        with_session(&session, |s| {
+        with_session_wait(&session, |s| {
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             invectus_gaps::set_verdict(&s.project, &table, gap_id, &verdict, &note)
         })
@@ -1510,6 +1571,9 @@ pub fn run() {
             scan_gaps,
             list_gaps,
             gap_detail,
+            saved_overview,
+            bookmark_gap,
+            remove_gap_bookmark,
             set_gap_verdict,
             describe_gap,
             verify_gap

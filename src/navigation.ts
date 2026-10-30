@@ -1,12 +1,13 @@
 import type { Page } from "./App";
 
-export type ProjectTab = "search" | "gaps" | "collections";
+export type ProjectTab = "search" | "gaps" | "saved" | "collections";
 export const PROJECT_TABS: { id: ProjectTab; label: string; page: Page }[] = [
   { id: "search", label: "Search", page: { kind: "search" } },
   { id: "gaps", label: "Gaps", page: { kind: "gaps" } },
+  { id: "saved", label: "Saved", page: { kind: "saved" } },
   { id: "collections", label: "Collections", page: { kind: "index" } },
 ];
-export const pageTab = (p: Page): ProjectTab => p.kind === "search" ? "search" : p.kind === "gaps" || p.kind === "gap" ? "gaps" : p.kind === "index" || p.kind === "import" ? "collections" : "search";
+export const pageTab = (p: Page): ProjectTab => p.kind === "saved" ? "saved" : p.kind === "search" ? "search" : p.kind === "gaps" || p.kind === "gap" ? "gaps" : p.kind === "index" || p.kind === "import" ? "collections" : "search";
 
 
 export type TabStacks = Partial<Record<ProjectTab, Page[]>>;
@@ -19,11 +20,11 @@ export function navigateTo(stacks: TabStacks, from: ProjectTab, page: Page): { t
   return { tab, stacks: { ...stacks, [tab]: page.kind === root.kind ? [page] : [...pages, page] } };
 }
 
-/** The visible Back button skips selected details: from a gap it returns to the gap list,
- *  from anywhere else to the existing Search. */
+/** Saved and Gaps details return to their lists; other details return to Search. */
 export function returnFromDetail(stacks: TabStacks, from: ProjectTab): { tab: ProjectTab; stacks: TabStacks } {
   const root = PROJECT_TABS.find((t) => t.id === from)!.page;
   const sourceRoot = stacks[from]?.find((p) => p.kind === root.kind) ?? root;
+  if (from === "saved") return { tab: "saved", stacks: { ...stacks, saved: [sourceRoot] } };
   if (from === "gaps") return { tab: "gaps", stacks: { ...stacks, gaps: [sourceRoot] } };
   const search = stacks.search?.find((p) => p.kind === "search") ?? { kind: "search" };
   return { tab: "search", stacks: { ...stacks, [from]: [sourceRoot], search: [search] } };

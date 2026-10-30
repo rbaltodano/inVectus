@@ -13,10 +13,10 @@ import { ArrowLeft, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, 
 import { PROJECT_TABS, pageTab, navigateTo, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import "./App.css";
 
-/** A page of the menu beside the circle; Back skips details: to the gap list from a gap, otherwise to Search. */
+/** A page beside the circle; Saved and Gaps retain their own detail return paths. */
 export type Page =
   | { kind: "search"; query?: string } | { kind: "import"; path?: string }
-  | { kind: "index"; collection?: string } | { kind: "gaps" }
+  | { kind: "index"; collection?: string } | { kind: "gaps" } | { kind: "saved" }
   | { kind: "gap"; id: number } | { kind: "item"; point: MapPoint };
 
 export type Route = { view: "projects" } | { view: "new" } | { view: "settings" } | { view: "project" };
@@ -363,7 +363,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
               setMarks: (m) => setTabMarks((prev) => ({ ...prev, [tab.id]: m })) }} stack={tabStacks[tab.id]!} />)}
       </section>
       <DataCircle data={map} gaps={gaps} marks={marks} job={job} resetKey={resetKey} focusRegion={mapFocus}
-        gapsActive={activeTab === "gaps"}
+        gapsActive={activeTab === "gaps" || (activeTab === "saved" && currentPage.kind === "gap")}
         selectedGapId={currentPage.kind === "gap" ? currentPage.id : undefined}
         showGaps={opts.showGaps} showLabels={opts.showLabels} showOutlines={opts.showOutlines}
         empty={noData ? { title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: addData } : undefined}

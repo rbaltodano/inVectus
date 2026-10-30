@@ -276,19 +276,74 @@ fn planted_gaps_are_found_explained_and_keep_their_verdicts() {
         .unwrap();
     assert!(a.timeline.iter().map(|y| y.demand).sum::<usize>() == a.demand);
 
+    invectus_gaps::saved::bookmark(&p, &table, a.gap_id).unwrap();
+    let bookmarked = invectus_gaps::saved::overview(&p, &table).unwrap();
+    assert_eq!(bookmarked.bookmarks.len(), 1);
+    assert!(
+        bookmarked.decisions.is_empty(),
+        "bookmarking must not create a decision"
+    );
+
     // Verdicts: validated, stored, and carried over to the same gap after re-clustering.
     assert!(set_verdict(&p, &table, a.gap_id, "maybe", "").is_err());
     set_verdict(&p, &table, a.gap_id, "confirmed_gap", "checked PubMed").unwrap();
     let d = detail(&p, &table, a.gap_id).unwrap();
     assert_eq!(d.view.verdict.as_ref().unwrap().verdict, "confirmed_gap");
     assert!(d.core_items.len() >= 10 && d.core_items[0].title.is_some());
+    // Bookmarks are independent of verdicts, idempotent and persisted across reopening.
+    invectus_gaps::saved::bookmark(&p, &table, a.gap_id).unwrap();
+    invectus_gaps::saved::bookmark(&p, &table, a.gap_id).unwrap();
+    let reopened = Project::open(&p.root).unwrap();
+    let saved = invectus_gaps::saved::overview(&reopened, &table).unwrap();
+    assert_eq!(saved.bookmarks.len(), 1);
+    let serialized = serde_json::to_value(&saved).unwrap();
+    let exact_core: Vec<i64> =
+        serde_json::from_str(serialized["bookmarks"][0]["core_key"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        exact_core, saved.bookmarks[0].record.core,
+        "opaque keys preserve 63-bit ids through JavaScript"
+    );
+    assert_eq!(saved.bookmarks[0].gap_id, Some(a.gap_id));
+    assert_eq!(saved.decisions.len(), 1);
+    assert_eq!(saved.decisions[0].verdict.note, "checked PubMed");
+    let mut other_space = table.clone();
+    other_space.space_id = "another-embedding-space".into();
+    let isolated = invectus_gaps::saved::overview(&reopened, &other_space).unwrap();
+    assert!(isolated.bookmarks.is_empty() && isolated.decisions.is_empty());
+    let mut other_collection = table.clone();
+    other_collection.collection_id = "another-collection".into();
+    let isolated = invectus_gaps::saved::overview(&reopened, &other_collection).unwrap();
+    assert!(isolated.bookmarks.is_empty() && isolated.decisions.is_empty());
+    drop(reopened);
+
     regions(&mut p, &v);
+    let pending_scan = invectus_gaps::saved::overview(&p, &table).unwrap();
+    assert_eq!(pending_scan.bookmarks.len(), 1);
+    assert!(pending_scan.bookmarks[0].gap_id.is_none());
+    assert_eq!(pending_scan.decisions.len(), 1);
+    assert!(pending_scan.decisions[0].gap_id.is_none());
     scan(&mut p, &v, &table, &ScanOptions::default()).unwrap();
     let l = list(&p, &table).unwrap();
     let carried: Vec<_> = l.gaps.iter().filter(|g| g.verdict.is_some()).collect();
     assert_eq!(carried.len(), 1);
     assert_eq!(topic_of(&carried[0].gap.label), 0);
     assert_eq!(carried[0].verdict.as_ref().unwrap().note, "checked PubMed");
+
+    let saved = invectus_gaps::saved::overview(&p, &table).unwrap();
+    assert_eq!(saved.bookmarks[0].gap_id, Some(carried[0].gap.gap_id));
+    let bookmark = &saved.bookmarks[0].record;
+    invectus_gaps::saved::remove_bookmark(&p, &table, &bookmark.kind, &bookmark.core).unwrap();
+    let saved = invectus_gaps::saved::overview(&p, &table).unwrap();
+    assert!(saved.bookmarks.is_empty());
+    assert_eq!(
+        saved.decisions.len(),
+        1,
+        "removing a bookmark preserves its decision"
+    );
+    set_verdict(&p, &table, carried[0].gap.gap_id, "selected", "pursue this").unwrap();
+    let saved = invectus_gaps::saved::overview(&p, &table).unwrap();
+    assert_eq!(saved.decisions.len(), 1, "show the latest decision per gap");
+    assert_eq!(saved.decisions[0].verdict.verdict, "selected");
 
     // Reports carry titles, verdicts and explanations, never the source text.
     let csv = invectus_gaps::export::csv(&l);

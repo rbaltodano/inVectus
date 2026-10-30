@@ -33,15 +33,15 @@ test("cross-tab destinations replace the root without accumulating Back steps", 
 });
 
 test("tab keyboard navigation wraps and handles Home and End", () => {
-  assert.equal(tabKeyIndex("ArrowRight", 2), 0);
-  assert.equal(tabKeyIndex("ArrowLeft", 0), 2);
+  assert.equal(tabKeyIndex("ArrowRight", 3), 0);
+  assert.equal(tabKeyIndex("ArrowLeft", 0), 3);
   assert.equal(tabKeyIndex("Home", 2), 0);
-  assert.equal(tabKeyIndex("End", 1), 2);
+  assert.equal(tabKeyIndex("End", 1), 3);
   assert.equal(tabKeyIndex("Tab", 1), undefined);
 });
 
-test("only Search, Gaps and Collections remain", () => {
-  assert.deepEqual(PROJECT_TABS.map((t) => t.id), ["search", "gaps", "collections"]);
+test("project tabs include Saved between Gaps and Collections", () => {
+  assert.deepEqual(PROJECT_TABS.map((t) => t.id), ["search", "gaps", "saved", "collections"]);
 });
 
 test("Back skips successive point selections and preserves the existing Search query", () => {
@@ -66,4 +66,16 @@ test("Back creates Search when it has not been visited", () => {
   const next = returnFromDetail({ collections: [{ kind: "index" }, { kind: "import" }] }, "collections");
   assert.deepEqual(next.stacks.search, [{ kind: "search" }]);
   assert.deepEqual(next.stacks.collections, [{ kind: "index" }]);
+});
+
+test("Saved details return to Saved and preserve other tab histories", () => {
+  assert.equal(pageTab({ kind: "saved" }), "saved");
+  const stacks: TabStacks = { saved: [{ kind: "saved" }], search: [{ kind: "search", query: "existing" }] };
+  const opened = navigateTo(stacks, "saved", { kind: "gap", id: 42 });
+  assert.equal(opened.tab, "saved");
+  assert.deepEqual(opened.stacks.saved, [{ kind: "saved" }, { kind: "gap", id: 42 }]);
+  const back = returnFromDetail(opened.stacks, "saved");
+  assert.equal(back.tab, "saved");
+  assert.deepEqual(back.stacks.saved, [{ kind: "saved" }]);
+  assert.equal(back.stacks.search, stacks.search);
 });

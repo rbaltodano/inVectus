@@ -1,11 +1,12 @@
 // The menu beside the data circle. Pages stack: choosing a row replaces the menu with that
-// page, and Back skips details (to the gap list or Search). The circle stays in view beside the details.
+// page, and Back returns to Saved, Gaps or Search. The circle stays beside the details.
 import { useEffect, useMemo, useRef, useState, Fragment, type CSSProperties, type FormEvent } from "react";
 import { api, fmt, local, year, KIND_LABEL, verdictLabel, type CheckResult, type GapKind, type Role, type SearchResult, type Weights } from "../api";
 import { ErrorLine, useAction, type Ctx, type Page } from "../App";
 import Link from "../Link";
 import Import from "./Import";
 import Collections from "./Collections";
+import SavedPage from "./Saved";
 import GapDetailView from "./GapDetail";
 import { assessmentCopy } from "../search-presentation";
 import { gapCode } from "../DataCircle";
@@ -45,7 +46,8 @@ export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: 
     {shown.kind === "import" && <Import ctx={ctx} initialPath={shown.path} onCancel={ctx.back} onDone={() => ctx.back()} />}
     {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={shown.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
     {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={shown.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} active={active && shown.kind === "gaps"} /></div>}
-    {shown.kind === "gap" && <GapDetailView ctx={ctx} id={shown.id} />}
+    {shown.kind === "saved" && <SavedPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} active={active} />}
+    {shown.kind === "gap" && <GapDetailView key={`${ctx.tref?.collection}:${ctx.tref?.space}:${shown.id}`} ctx={ctx} id={shown.id} />}
     {shown.kind === "item" && <ItemPage ctx={ctx} page={shown} />}
     </div>
   </aside>;

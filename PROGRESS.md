@@ -1600,6 +1600,56 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - The macOS release .app bundle build passed. Relaunched the standalone app with the dev
   model store; live appearance remains for owner review. No CI dispatched.
 
+
+## 2026-10-29 — Saved gaps and decision log
+
+- Added Saved between Gaps and Collections, using numbered sections, ruled records and
+  the existing instrument typography. Includes project-local gap bookmarks, latest human
+  decisions and notes/dates, status filters, selected-first ordering, and a small highest-ranked
+  unreviewed gap section. A collection/index selector makes the scope explicit.
+- Added an additive gap_bookmarks table in project.duckdb and shared engine operations.
+  Bookmarks use gap kind and core-item identity within a collection and embedding space,
+  matching the verdict carry-over threshold (Jaccard >= 0.5); scan-local gap IDs are only
+  navigation targets. Repeated saves are idempotent. Removing a bookmark preserves decisions.
+  Saved snapshots and unmatched decisions remain listed when the latest scan has no match.
+- Gap assessment now offers Save gap / Remove bookmark separately from Save decision.
+  Saving a decision refreshes the shared gap list. Evidence opens inside Saved, Back returns
+  there, and map highlighting follows the opened gap. Saved refreshes on entry; its overview
+  and current-gap reads run in sequence. Background map/gap operations queue on the session
+  mutex instead of falsely reporting normal concurrent reads as a running job.
+- Native visual review caught clipped navigation at the 436 px pane width. Added a console
+  container query to keep all four tabs visible and move the indexing indicator onto its own
+  row below 620 px. Wide panes keep the existing toolbar layout.
+- Decisions and spec conflicts: owner approved the Saved tab and first-version scope;
+  updated SPEC §8. LLM discussion and detailed change tracking remain deferred. No chat or
+  network behavior added.
+- Validation: 27 core/gaps release tests and 29 UI tests passed locally on macOS, including
+  reopen persistence, idempotency, independent bookmarking, rescan matching, collection/space
+  isolation and exact 63-bit bookmark identities across the JavaScript boundary. Frontend
+  build, formatting and diff checks passed. Targeted core/gaps/app Clippy passed with warnings
+  denied. First native bundle built; live bookmarking, removal and Saved evidence/Back paths
+  passed on Research Test without changing its decision. Final native rebuild/relaunch pending.
+  No CI dispatched;
+  Windows/Linux remain unverified.
+
+## 2026-10-29 — One macOS app launch path
+
+- The loose target/release/invectus-app executable and the .app bundle used separate
+  WebKit profiles (invectus-app versus app.invectus.desktop), explaining the populated and
+  blank recent-project lists. Project databases were not duplicated by these launch paths.
+- Owner requested one version. Release macOS loose executables now open the sibling .app
+  bundle through Launch Services when it exists, preserving explicit model-store/offline
+  environment overrides. Future relaunches use the bundle's stable application identity.
+- Stopped both old app processes and migrated the populated WebKit Default profile into
+  the previously empty bundle profile, retaining both originals under the git-ignored
+  .spike-data/launch-profile-backup-20261029-221753/. Verified the migrated recent list contains
+  Research Test (10,000 items) and Medical School Research Topic; project folders stay put.
+- Linked ~/Library/Application Support/inVectus/models to the existing dev model store so
+  Finder/Dock launches use the same verified local files. No model or dataset copies/downloads.
+  First native launch visibly showed both migrated projects. Starting the loose executable
+  while the bundle was open exited successfully and kept exactly one app process (the bundle).
+  Final rebuild/relaunch pending the navigation/read-contention fixes.
+
 ## 2026-10-29 — Token chunking by default
 
 - New desktop and CLI imports use the verified, installed BGE-small tokenizer with a

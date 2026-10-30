@@ -334,7 +334,8 @@ Planned, not built.
 | Map | WebGL scatter; colour by region, role, date or gap score; region labels; gap markers; lasso selection |
 | Search | One search box. The verdict card shows exists / near / open, P(exists), the 5 nearest items with similarity, the regions it sits between, and actions (save, midpoint, verify) |
 | Gaps | Ranked table by type; filters (type, region, verdict, score); the explanation in each row |
-| Gap detail | Explanation, score breakdown, timeline (demand vs coverage per year), nearest items, midpoint with a `t` slider, verification results, verdict and note |
+| Saved | Project-local gap bookmarks, latest decisions and notes with status filters (selected first), links back to evidence, and the highest-ranked unreviewed gap; scoped by collection and embedding space |
+| Gap detail | Bookmark independently of a verdict; explanation, score breakdown, timeline (demand vs coverage per year), nearest items, midpoint with a `t` slider, verification results, verdict and note |
 | Settings | Models, LLM provider, network switch, weights, calibration status |
 
 Design rule from gapmap: **put the evidence and the verdict controls on the same screen**, so checking a gap never requires leaving the app.

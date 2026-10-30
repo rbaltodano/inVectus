@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { api, fmt, year, KIND_LABEL, VERDICTS, type DescribeResult, type GapDetail, type Verification } from "../api";
+import { api, fmt, year, KIND_LABEL, VERDICTS, type SavedBookmark, type DescribeResult, type GapDetail, type Verification } from "../api";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import Link from "../Link";
 import { stagger } from "../motion";
@@ -20,6 +20,8 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const [gap, setGap] = useState<GapDetail>();
   const [verdict, setVerdict] = useState("open");
   const [note, setNote] = useState("");
+  const [bookmark, setBookmark] = useState<SavedBookmark>();
+  const pin = useAction();
   const [saved, setSaved] = useState(false);
   const [t, setT] = useState(50);
   const [described, setDescribed] = useState<DescribeResult>();
@@ -33,6 +35,8 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
     load.run(async () => {
       const g = await api.gap(tref, id);
       setGap(g); setVerdict(g.verdict?.verdict ?? "open"); setNote(g.verdict?.note ?? "");
+      const kept = await api.saved(tref);
+      setBookmark(kept.bookmarks.find((b) => b.gap_id === id));
       ctx.setMarks({ region: g.region_a });
       setDescribed(undefined); setVerification(undefined);
     });
@@ -51,7 +55,13 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
     ? { summary: verification.summary, hits: verification.hits.slice(0, 8) }
     : gap.verification && { summary: gap.verification.summary, hits: gap.verification.closest.map((h) => ({ ...h, looks_like_match: false })) };
 
-  const saveVerdict = () => save.run(async () => { await api.setVerdict(tref, id, verdict, note); setSaved(true); setTimeout(() => setSaved(false), 2000); });
+  const toggleBookmark = () => pin.run(async () => {
+    if (bookmark) await api.removeBookmark(tref, bookmark.kind, bookmark.core_key);
+    else await api.bookmark(tref, id);
+    const kept = await api.saved(tref);
+    setBookmark(kept.bookmarks.find((b) => b.gap_id === id));
+  });
+  const saveVerdict = () => save.run(async () => { const updated = await api.setVerdict(tref, id, verdict, note); setGap({ ...gap, verdict: updated.verdict }); await ctx.reloadGaps(); setSaved(true); setTimeout(() => setSaved(false), 2000); });
 
   return <div className="page wide">
     <div className="title-row">
@@ -127,7 +137,11 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
 
       <div className="stack gap">
         <section aria-labelledby="vd" className="panel stack gap">
-          <div className="label">Your decision</div>
+          <div className="row wrap"><div className="label">Your decision</div>
+            <button type="button" className="text-btn push" aria-pressed={!!bookmark} disabled={pin.busy} onClick={toggleBookmark}>{bookmark ? "Remove bookmark" : "Save gap"}</button>
+          </div>
+          <p className="dim small">{bookmark ? "Bookmarked in Saved." : "Save this gap to review later, with or without a decision."}</p>
+          <ErrorLine error={pin.error} />
           <h2 id="vd">Decision and note</h2>
           <div className="muted small">Yours, kept apart from the engine’s score; it carries over when gaps are scanned again.</div>
           <div role="radiogroup" aria-labelledby="vd" className="stack gap-s">

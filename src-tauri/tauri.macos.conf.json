@@ -10,8 +10,8 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "trafficLightPosition": {
-          "x": 16,
-          "y": 20
+          "x": 24,
+          "y": 33
         },
         "theme": "Dark",
         "windowEffects": {

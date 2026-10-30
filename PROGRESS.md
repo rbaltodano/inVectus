@@ -1875,3 +1875,16 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - A native drag check was interrupted by user interaction; dragging and full-screen
   transitions remain for owner verification. No full Rust suite or cross-platform
   execution was needed for this configuration/CSS change. No CI or push performed.
+
+## 2026-10-30 — Sidebar glass tint and window-control spacing
+
+- Owner requested matching 24 px top/left spacing. Native macOS sidebar content now
+  has 24 px side insets, and traffic lights start at x=24. Tao's y setting sizes the
+  title-bar container rather than setting the button's top directly: y=33 compensates
+  for the native button's 9 px origin to give a 24 px top inset on this Mac.
+- Applied a 45% near-black translucent tint above the native Sidebar material for a
+  darker frosted appearance. Native blur and activation behavior remain in use.
+- Frontend, macOS release bundle, 29 UI tests and diff checks passed. Existing upstream
+  compact-unwind linker warning persists. No CI or push performed.
+- Relaunched and visually confirmed the controls' 24 px top/left inset, matching
+  sidebar content alignment, and darker material while opening the medical project.

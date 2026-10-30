@@ -335,20 +335,11 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
 
   return <>
     <header className="head">
-      <div className="project-heading">
-        <button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button>
-        <div className="dataset-header">
-          <h1><ProjectName name={project.name} onSave={onRename} /></h1>
-          <button type="button" className="btn" disabled={isRunning(job) || importing} onClick={() => push({ kind: "import" })}><Plus size={14} aria-hidden="true" />Add to Dataset</button>
-        </div>
-        <div className="dataset-meta">
-          <div className="path">{tilde(project.root)}</div>
-          <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
-            onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
-            title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
-            {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
-        </div>
-      </div>
+      <div className="project-heading"><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1><ProjectName name={project.name} onSave={onRename} /></h1><div className="path">{tilde(project.root)}</div></div>
+      <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
+        onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
+        title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
+        {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
     </header>
     <WorkspaceSplit>
       <section className="project-console" aria-label="Project workspace">

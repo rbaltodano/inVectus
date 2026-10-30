@@ -1718,6 +1718,10 @@ packaging gates are still open. Details, reproducible commands and limitations:
   indexing preview. Current recent-project history was retained; one bundled app process
   remains. Screenshot inspection timed out, so pixel-level layout review remains with the
   owner. No CI run.
+- Follow-up (owner correction): moved Add to Dataset out of the project header into the
+  Collections tab's own header row (label left, button right, space-between); restored the
+  original project header. Disabled while a project job runs. Updated SPEC §8. Frontend
+  build and 29 UI tests passed.
 
 ## 2026-10-30 — Public repository presentation and MIT licensing
 

@@ -10,8 +10,8 @@ export function MatrixLoader() {
   </span>;
 }
 
-export default function IndexingIndicator({ job, preview = false }: { job?: JobInfo; preview?: boolean }) {
-  const progress = indexingProgress(job, preview);
+export default function IndexingIndicator({ job }: { job?: JobInfo }) {
+  const progress = indexingProgress(job);
   if (!progress) return null;
   const { percent, label } = progress;
   return <div className="indexing-indicator" title={label}>

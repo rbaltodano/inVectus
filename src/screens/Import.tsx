@@ -127,7 +127,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   };
 
   return <div className="page narrow">
-    <div className="title-row"><h2 className="h1">Add collection</h2><span className="label">into {ctx.project.name}</span></div>
+    <div className="title-row"><h2 className="h1">Add to Dataset</h2><span className="label">into {ctx.project.name}</span></div>
     <ol aria-label="Steps" className="steps">{STEPS.map((_, i) => pill(i))}</ol>
     <ErrorLine error={error} />
 
@@ -156,13 +156,6 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
         <span className="strong">{path.split("/").pop()}</span>
         <span className="muted">{source.kind.toUpperCase()} · {source.rows_read >= 1000 ? "1,000+" : fmt(source.rows_read)} {folder ? "files" : "rows"} · {source.columns.length} columns{source.unreadable ? ` · ${source.unreadable} unreadable` : ""}</span>
       </div>}
-      <section aria-labelledby="later" className="stack gap-s">
-        <h2 id="later" className="h3">Other sources <span className="muted normal">· coming later</span></h2>
-        <div className="row wrap">
-          {[["PubMed query", "Download papers matching a search"], ["Steam catalogue", "Games and player reviews"], ["gapmap project", "Reuse its stored vectors (CLI: invectus import-gapmap)"]].map(([t, d]) =>
-            <button key={t} type="button" disabled className="tile">{t}<div className="small">{d}</div></button>)}
-        </div>
-      </section>
       <div className="row end">
         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
         <button type="button" className="btn primary" disabled={!source || !validName} onClick={() => setStep(1)}>Next</button>

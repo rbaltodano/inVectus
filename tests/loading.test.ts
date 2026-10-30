@@ -14,20 +14,19 @@ test("loader loops clockwise around all six squares", () => {
   assert.equal(new Set(LOADER_ORDER).size, 6);
 });
 
-test("preview is visible when idle without claiming an actual job", () => {
-  assert.equal(indexingProgress(undefined, false), undefined);
-  assert.deepEqual(indexingProgress(undefined, true), { percent: 84, preview: true, label: "Indexing animation preview" });
+test("idle has no progress indicator", () => {
+  assert.equal(indexingProgress(undefined), undefined);
 });
 
-test("real indexing takes precedence over preview and clamps completed work", () => {
-  assert.deepEqual(indexingProgress(job(), true), { percent: 42, preview: false, label: "Embedding" });
-  assert.equal(indexingProgress(job({ done: 110 }), false)?.percent, 100);
-  assert.equal(indexingProgress(job({ done: -10 }), false)?.percent, 0);
+test("real indexing reports progress and clamps completed work", () => {
+  assert.deepEqual(indexingProgress(job()), { percent: 42, label: "Embedding" });
+  assert.equal(indexingProgress(job({ done: 110 }))?.percent, 100);
+  assert.equal(indexingProgress(job({ done: -10 }))?.percent, 0);
 });
 
-test("unknown totals stay indeterminate and finished jobs disappear outside preview", () => {
-  assert.equal(indexingProgress(job({ total: 0 }), false)?.percent, undefined);
-  assert.equal(indexingProgress(job({ state: "completed" }), false), undefined);
-  assert.equal(indexingProgress(job({ state: "failed" }), false), undefined);
-  assert.equal(indexingProgress(job({ kind: "download" }), false), undefined);
+test("unknown totals stay indeterminate and finished jobs disappear", () => {
+  assert.equal(indexingProgress(job({ total: 0 }))?.percent, undefined);
+  assert.equal(indexingProgress(job({ state: "completed" })), undefined);
+  assert.equal(indexingProgress(job({ state: "failed" })), undefined);
+  assert.equal(indexingProgress(job({ kind: "download" })), undefined);
 });

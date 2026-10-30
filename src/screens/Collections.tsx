@@ -3,7 +3,6 @@ import { api, fmt, when, STATUS_LABEL, type Collection, type IndexStatus, type M
 import { ErrorLine, useStartJob, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent, useIndexPlan } from "../models";
-import Import from "./Import";
 import LineArt from "../LineArt";
 
 /** A status mark: filled = done, half = partial or running, ring = nothing yet, cross = failed. */
@@ -14,24 +13,17 @@ export function StatusMark({ status }: { status: IndexStatus | "none" }) {
   return <span className={`mark ${shape}`} aria-hidden="true" />;
 }
 
-export default function Collections({ ctx, focus, adding: startAdding }: { ctx: Ctx; focus?: string; adding?: boolean }) {
+export default function Collections({ ctx, focus }: { ctx: Ctx; focus?: string }) {
   const { project } = ctx;
-  const [adding, setAdding] = useState(!!startAdding);
   const [open, setOpen] = useState<string | undefined>(focus ?? (project.collections.length === 1 ? project.collections[0].collection_id : undefined));
-  useEffect(() => { setAdding(!!startAdding); }, [startAdding]);
-
-  if (adding) return <Import ctx={ctx} onCancel={() => setAdding(false)}
-    onDone={(c) => { setAdding(false); setOpen(c); }} />;
-
   return <div className="page collections">
     <div className="row">
       <span className="section">Collections{project.collections.length ? ` · ${fmt(project.collections.length)}` : ""}</span>
-      <button type="button" className="text-btn push" onClick={() => setAdding(true)}>Add collection</button>
     </div>
     {project.collections.length === 0 && <div className="empty-state">
       <LineArt kind="grid" />
       <span className="dim">A collection is a set of items (papers, notes, products) imported from a CSV, Parquet file or folder of text files. It is indexed automatically after import.</span>
-      <button type="button" className="btn primary" onClick={() => setAdding(true)}>Add the first collection</button>
+      <span className="dim small">Choose “Add to Dataset” above to import your first collection.</span>
     </div>}
     {project.collections.length > 0 && <div className="collection-list">
     {project.collections.map((c) => <CollectionPanel key={c.collection_id} ctx={ctx} c={c}

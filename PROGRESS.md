@@ -1696,3 +1696,21 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - A fixed 448-token body budget reserves space for titles and prefixes, but unusually long
   titles or another model's tokenizer can still exceed its cap. No universal no-truncation
   guarantee or general search-quality improvement is claimed.
+
+
+## 2026-10-30 — Unified Add to Dataset entry point
+
+- Removed the disabled PubMed query, Steam catalogue and gapmap import tiles from the
+  import wizard. Removed the idle 84% indexing animation preview and its preview-only API;
+  genuine job progress and the active-job loader remain.
+- The project header now pairs its editable dataset/project title on the left with one
+  Add to Dataset button on the right, using flex justify-content: space-between. The shared
+  import wizard opens in Collections from any tab; the action is disabled during a running
+  project job or while the wizard is already open. Folder/file picking and existing-collection
+  updates continue through that wizard. Removed duplicate collection-add buttons and the
+  second local import flow from Collections; empty collections direct users to the header.
+- Decisions and spec conflicts: owner requested the unified header action and removal of
+  unavailable-source placeholders. Updated SPEC §8; no connectors or import behavior added.
+- Validation: frontend TypeScript/Vite build, all 29 existing UI tests and diff checks
+  passed. No native rebuild/relaunch or CI run for this change; native appearance remains
+  unverified until the next app rebuild.

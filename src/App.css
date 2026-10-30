@@ -666,3 +666,12 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
   .project-tabs button .tab-code { margin-right: 6px; }
   .project-toolbar > .indexing-indicator { margin: 0 24px 8px auto; }
 }
+
+
+/* One import action beside the dataset title, shared by every project tab. */
+.dataset-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.dataset-header h1 { flex: 1; min-width: 0; }
+.dataset-header > .btn { flex: none; white-space: nowrap; }
+.dataset-meta { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 8px; }
+.dataset-meta .path { min-width: 0; margin-top: 0; }
+.dataset-meta .net { flex: none; }

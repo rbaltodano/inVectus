@@ -338,6 +338,8 @@ Planned, not built.
 | Gap detail | Bookmark independently of a verdict; explanation, score breakdown, timeline (demand vs coverage per year), nearest items, midpoint with a `t` slider, verification results, verdict and note |
 | Settings | Models, LLM provider, network switch, weights, calibration status |
 
+The project header pairs its title with one **Add to Dataset** action, opening the shared import wizard from every tab. Only available sources are shown; progress indicators represent actual running work.
+
 Design rule from gapmap: **put the evidence and the verdict controls on the same screen**, so checking a gap never requires leaving the app.
 
 ---

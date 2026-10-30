@@ -1888,3 +1888,12 @@ packaging gates are still open. Details, reproducible commands and limitations:
   compact-unwind linker warning persists. No CI or push performed.
 - Relaunched and visually confirmed the controls' 24 px top/left inset, matching
   sidebar content alignment, and darker material while opening the medical project.
+
+## 2026-10-30 — Rounded sidebar selections
+
+- Chose a 4 px radius for sidebar navigation and project-row hover/selected backgrounds.
+  The instrument theme's general control radius remains 2 px; 4 px gives these larger
+  selection targets a restrained softness without the stronger 8 px rounding.
+- Frontend and macOS release .app builds passed (existing upstream compact-unwind
+  linker warning). No application behavior or workflow changes; no CI or push.
+- Relaunched and visually verified the 4 px New project selection in the native app.

@@ -683,3 +683,8 @@ html.native-macos, .native-macos body, .native-macos #root { background: transpa
   display: block; position: absolute; top: 0; left: 0; right: 0; height: 48px;
   cursor: default;
 }
+
+/* A small, consistent radius for sidebar hover and selection backgrounds. */
+.sidebar .side-link,
+.sidebar .project-link,
+.sidebar .project-sidebar-row { border-radius: 4px; }

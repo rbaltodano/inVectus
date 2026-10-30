@@ -1628,8 +1628,12 @@ packaging gates are still open. Details, reproducible commands and limitations:
   isolation and exact 63-bit bookmark identities across the JavaScript boundary. Frontend
   build, formatting and diff checks passed. Targeted core/gaps/app Clippy passed with warnings
   denied. First native bundle built; live bookmarking, removal and Saved evidence/Back paths
-  passed on Research Test without changing its decision. Final native rebuild/relaunch pending.
-  No CI dispatched;
+  passed on Research Test without changing its decision. Final native bundle rebuild passed
+  with the existing upstream Apple __eh_frame linker warning. Relaunched and verified all four
+  tabs fit the 436 px console, the existing decision and highest-ranked unreviewed gap appear,
+  status filtering works, and switching Gaps/Saved loads the 23-gap scan without false busy
+  errors. Saved displays UTC database timestamps in local time (verified 9:49 PM, Oct 29).
+  Left the app on Saved. No CI dispatched;
   Windows/Linux remain unverified.
 
 ## 2026-10-29 — One macOS app launch path
@@ -1648,7 +1652,9 @@ packaging gates are still open. Details, reproducible commands and limitations:
   Finder/Dock launches use the same verified local files. No model or dataset copies/downloads.
   First native launch visibly showed both migrated projects. Starting the loose executable
   while the bundle was open exited successfully and kept exactly one app process (the bundle).
-  Final rebuild/relaunch pending the navigation/read-contention fixes.
+  Final rebuilt bundle was relaunched and visibly retained both projects. Repeated the loose
+  launcher check with no environment overrides: exactly one bundled app process remains.
+  The app is left open on Research Test → Saved.
 
 ## 2026-10-29 — Token chunking by default
 

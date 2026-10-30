@@ -3,6 +3,9 @@ import { api, KIND_LABEL, VERDICTS, verdictLabel, when, type SavedOverview } fro
 import { ErrorLine, tableKey, useAction, type Ctx } from "../App";
 import LineArt from "../LineArt";
 
+// DuckDB TIMESTAMP records are UTC; attach the zone before formatting in local time.
+const recordedAt = (value: string | null) => when(value ? `${value}Z` : null);
+
 export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }) {
   const { tref, table, project, gaps, gapsLoading, gapsError } = ctx;
   const [saved, setSaved] = useState<SavedOverview>();
@@ -53,7 +56,7 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
           const current = gaps.find((g) => g.gap_id === b.gap_id);
           return <article className="saved-entry" key={`${b.kind}:${b.core_key}`}>
             <div className="row saved-entry-heading"><span className="saved-title">{current?.label ?? b.snapshot.label}</span><span className="score">{(current?.score ?? b.snapshot.score).toFixed(2)}</span></div>
-            <p className="dim small">{KIND_LABEL[b.kind as keyof typeof KIND_LABEL]}{current?.verdict ? ` · ${verdictLabel(current.verdict.verdict)}` : ""} · Saved {when(b.saved_at)}</p>
+            <p className="dim small">{KIND_LABEL[b.kind as keyof typeof KIND_LABEL]}{current?.verdict ? ` · ${verdictLabel(current.verdict.verdict)}` : ""} · Saved {recordedAt(b.saved_at)}</p>
             <div className="row wrap">
               {b.gap_id !== null ? <button type="button" className="text-btn" onClick={() => ctx.push({ kind: "gap", id: b.gap_id! })}>Review evidence</button> : <span className="dim small">No matching gap in the current scan</span>}
               <button type="button" className="text-btn push" disabled={action.busy} onClick={() => action.run(async () => {
@@ -72,7 +75,7 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
         <p className="dim small">Your latest decision for each gap. Selected opportunities appear first.</p>
         {decisions.length === 0 && <p className="dim small">{saved.decisions.length ? "No decisions with this status." : "No decisions yet. Decisions and notes you save while reviewing evidence appear here automatically."}</p>}
         {decisions.map((d) => <article className="saved-entry" key={`${d.verdict.kind}:${d.core_key}`}>
-          <div className="row wrap"><span className="label">{verdictLabel(d.verdict.verdict)}</span><span className="dim small push">{when(d.verdict.updated_at)}</span></div>
+          <div className="row wrap"><span className="label">{verdictLabel(d.verdict.verdict)}</span><span className="dim small push">{recordedAt(d.verdict.updated_at)}</span></div>
           <h3 className="saved-title">{d.label}</h3>
           {d.verdict.note && <p className="saved-note">{d.verdict.note}</p>}
           {d.gap_id !== null ? <button type="button" className="text-btn" onClick={() => ctx.push({ kind: "gap", id: d.gap_id! })}>Review evidence / edit decision</button> : <span className="dim small">No matching gap in the current scan · decision retained</span>}

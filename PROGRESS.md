@@ -1801,3 +1801,10 @@ packaging gates are still open. Details, reproducible commands and limitations:
   collection counts/calibration/readiness, and left the app on its 23-gap list/map.
   Project files and generated reports are local user data and are not committed.
   No app code/build changes, network downloads, CI or push were needed.
+
+## 2026-10-30 — Ophthalmology Research screenshots
+
+- Added four owner-supplied captures of the native app on the Ophthalmology Research
+  project to docs/screenshots/ (ophthalmology-search, -gap, -item, -collections). They
+  are copies from the Desktop; the existing screenshots and README are unchanged.
+  They show the real 5,000-paper collection, not the synthetic demo data.

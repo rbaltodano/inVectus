@@ -1599,3 +1599,44 @@ packaging gates are still open. Details, reproducible commands and limitations:
   stay under Details. Rows are inset 16 px like the gap assessment's sections.
 - The macOS release .app bundle build passed. Relaunched the standalone app with the dev
   model store; live appearance remains for owner review. No CI dispatched.
+
+## 2026-10-29 — Token chunking by default
+
+- New desktop and CLI imports use the verified, installed BGE-small tokenizer with a
+  448-token budget and 48-token overlap. Character chunking remains an explicit option
+  for model-free imports; no model is downloaded implicitly. The ingest crate's legacy
+  `ChunkPolicy::default()` and stored hashes remain unchanged.
+- Reimports retain the collection's recorded chunk policy. The desktop preview now counts
+  actual chunks with that policy instead of estimating from character length. Folder
+  imports expose the same chunk controls as table imports.
+- Added a reproducible local comparison in `crates/cli/examples/chunking_eval.rs`: up to
+  5,000 local CSV papers, separate parent/chunk truncation counts, and exact cosine search
+  collapsed by parent using the final 24 words of the first 100 abstracts over 2,000
+  characters. These verbatim queries diagnose coverage, not general semantic relevance.
+- Local macOS validation: frontend build and formatting passed; clean full workspace
+  release test run passed (98 tests). An earlier workspace run passed runtime tests but
+  exited abnormally during doc tests; a separate doc-test run and the clean full rerun
+  passed. Existing upstream macOS linker warning about compact unwind offsets persists.
+- Corpus comparison: Apple M4 Pro, 24 GiB RAM, macOS, BGE ONNX CPU, 4 threads,
+  batch 32, existing 5,000-paper CSV (SHA-256
+  `a263b0d857ee176dd472d7ed636481e7127598cb656ce08aae1abc0f16fe91b5`).
+  Character mode produced 947 chunks, **120 truncated chunks**, and 464 truncated parents;
+  token mode produced 1,366 chunks, **0 truncated chunks**, and the same 464 truncated
+  parents. Every chunk was actually embedded with its title; parent and chunk counts were
+  measured separately. Thus no chunk truncation occurred on this sample.
+- For the same 100 abstract-ending queries, character/token recall@1 was 0.85/0.81,
+  recall@10 was 0.94/0.94, and MRR was 0.8837/0.8541. This diagnostic did **not** show a
+  ranking improvement. Token sizing improves measured text coverage; relevance gains remain
+  unvalidated. Raw output: `.spike-data/p1/chunking-eval-2026-10-29.json` (ignored).
+  Measured run times were 366.6/312.3 s with concurrent compilation; these are not clean
+  throughput comparisons. The comparison reads the local CSV copy and writes no project data.
+- Full-workspace release Clippy (`--all-targets -- -D warnings`), final frontend build,
+  formatting and diff checks passed. The standalone app bundle was not rebuilt or
+  relaunched in this change. No CI dispatched.
+
+### Decisions and spec conflicts
+- Owner approved token chunking as the default for new imports. SPEC §3 requires chunk and
+  parent vectors but does not prescribe character sizing; no spec change is needed.
+- A fixed 448-token body budget reserves space for titles and prefixes, but unusually long
+  titles or another model's tokenizer can still exceed its cap. No universal no-truncation
+  guarantee or general search-quality improvement is claimed.

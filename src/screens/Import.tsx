@@ -27,7 +27,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const [path, setPath] = useState("");
   const [source, setSource] = useState<SourceInfo>();
   const [map, setMap] = useState({ text: "", title: "", id: "", date: "", url: "" });
-  const [chunk, setChunk] = useState({ chars: 2000, overlap: 200 });
+  const [chunk, setChunk] = useState({ mode: "tokens", tokens: 448, tokenOverlap: 48, chars: 2000, overlap: 200 });
   const [defaultRole, setDefaultRole] = useState<Role>("neutral");
   const [roleColumn, setRoleColumn] = useState("");
   const [rules, setRules] = useState<Rule[]>([]);
@@ -76,6 +76,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     collection, source_path: path, text: [map.text], title: map.title, id: map.id, date: map.date, url: map.url,
     role: defaultRole, role_column: rules.length ? roleColumn : "",
     role_rules: rules.filter((r) => r.value.trim()).map((r) => `${r.value.trim()}=${r.role}`).join(","),
+    chunk_tokenizer: chunk.mode === "tokens" ? "bge-small-en-v1.5" : null,
+    chunk_tokens: chunk.tokens, chunk_token_overlap: chunk.tokenOverlap,
     chunk_chars: chunk.chars, chunk_overlap: chunk.overlap, limit: null,
   };
   const formKey = JSON.stringify(form);
@@ -192,15 +194,25 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
             </div>
           </div>
           <div className="muted small">All other columns are kept as metadata.</div>
-          <details>
-            <summary>Long items: split into chunks of {fmt(chunk.chars)} characters ({fmt(chunk.overlap)} overlap)</summary>
+        </section>}
+      <section className="panel">
+        {exists ? <div className="muted small">This collection keeps its saved chunking settings.</div> : <details>
+            <summary>Long items: {chunk.mode === "tokens" ? `${fmt(chunk.tokens)} tokens (${fmt(chunk.tokenOverlap)} overlap)` : `${fmt(chunk.chars)} characters (${fmt(chunk.overlap)} overlap)`}</summary>
+            <label>Chunking<select value={chunk.mode} onChange={(e) => setChunk({ ...chunk, mode: e.target.value })}>
+              <option value="tokens">Tokens (recommended)</option><option value="characters">Characters</option>
+            </select></label>
             <div className="row wrap">
+              {chunk.mode === "tokens" ? <>
+                <label>Chunk above (tokens)<input type="number" min={1} value={chunk.tokens} onChange={(e) => setChunk({ ...chunk, tokens: Number(e.target.value) })} /></label>
+                <label>Overlap (tokens)<input type="number" min={0} value={chunk.tokenOverlap} onChange={(e) => setChunk({ ...chunk, tokenOverlap: Number(e.target.value) })} /></label>
+              </> : <>
               <label>Chunk above (characters, 0 = never)<input type="number" min={0} value={chunk.chars} onChange={(e) => setChunk({ ...chunk, chars: Number(e.target.value) })} /></label>
               <label>Overlap (characters)<input type="number" min={0} value={chunk.overlap} onChange={(e) => setChunk({ ...chunk, overlap: Number(e.target.value) })} /></label>
+              </>}
             </div>
-            <div className="muted small">Chunks are searched separately and roll up to their item in results.</div>
-          </details>
-        </section>}
+            <div className="muted small">Chunks are searched separately and roll up to their item in results. Token chunking requires BGE-small to be installed in Models.</div>
+          </details>}
+      </section>
 
       <section aria-labelledby="roles" className="panel stack gap">
         <div>
@@ -255,12 +267,12 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
         <div className="scroll-x">
           <table className="table">
             <thead><tr><th>Role</th><th>Title</th><th>Date</th><th>Text</th><th className="right">Chunks</th></tr></thead>
-            <tbody>{preview.rows.map((r) => <tr key={r.source_id}>
+            <tbody>{preview.rows.map((r, i) => <tr key={r.source_id}>
               <td><span className={`chip role ${r.role}`}>{r.role}</span></td>
               <td className="strong">{r.title ?? <span className="muted">{r.source_id}</span>}</td>
               <td className="muted nowrap">{r.date ?? (r.unparsed_date ? <span className="warn-text" title="Could not read this date">{r.unparsed_date}?</span> : "")}</td>
               <td className="muted clip w-320">{r.text.slice(0, 200)}</td>
-              <td className="right">{chunk.chars > 0 && r.text.length > chunk.chars ? Math.ceil((r.text.length - chunk.overlap) / (chunk.chars - chunk.overlap)) : 1}</td>
+              <td className="right">{preview.chunk_counts[i]}</td>
             </tr>)}</tbody>
           </table>
         </div>

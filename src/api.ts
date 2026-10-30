@@ -40,10 +40,10 @@ export interface LlmInfo { key: string; repo: string; megabytes: number; install
 export interface SourceInfo { kind: "csv" | "parquet" | "folder"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number }
 export interface ImportForm {
   collection: string; source_path: string; text: string[]; title: string; id: string; date: string; url: string;
-  role: Role; role_column: string; role_rules: string; chunk_chars: number; chunk_overlap: number; limit: number | null;
+  role: Role; role_column: string; role_rules: string; chunk_tokenizer: string | null; chunk_tokens: number; chunk_token_overlap: number; chunk_chars: number; chunk_overlap: number; limit: number | null;
 }
 export interface MappedRow { source_id: string; title: string | null; text: string; date: string | null; unparsed_date: string | null; role: Role }
-export interface Preview { columns: string[]; rows: MappedRow[]; skipped: Record<string, number> }
+export interface Preview { chunk_counts: number[]; columns: string[]; rows: MappedRow[]; skipped: Record<string, number> }
 export interface ImportOutcome { report: ImportReport; plan: IndexPlan; job: JobInfo | null; index_error: string | null }
 export interface ImportReport {
   collection: string; source_rows: number; items: number; inserted: number; updated: number; unchanged: number;

@@ -4,7 +4,9 @@ mod jobs;
 
 use invectus_core::store::{CollectionSummary, JobRecord, VectorTableRecord};
 use invectus_core::{CancelToken, Project, Role};
-use invectus_embed::{EmbedOptions, ModelStore, OnnxEmbedder, query_encoder, registry};
+use invectus_embed::{
+    EmbedOptions, ModelStore, ModelTokenizer, OnnxEmbedder, query_encoder, registry,
+};
 use invectus_gaps::{GapDetail, GapList, GapView, ScanOptions, ScanReport};
 use invectus_index::{
     EmbedJobOptions, SearchMode, SearchOptions, SearchResult, VectorStore, run_embed,
@@ -12,6 +14,7 @@ use invectus_index::{
 };
 use invectus_ingest::{
     ChunkPolicy, ImportReport, ImportRequest, Mapping, MetaMapping, Preview, RoleMapping, Source,
+    TokenChunking,
 };
 use invectus_regions::{MapData, RegionOptions, map_data, run_regions};
 use invectus_unsearch::{CalibrateOptions, CheckOptions, CheckResult, check, run_calibration};
@@ -351,12 +354,50 @@ struct ImportForm {
     role: Option<Role>,
     role_column: Option<String>,
     role_rules: Option<String>,
+    #[serde(default)]
+    chunk_tokenizer: Option<String>,
+    #[serde(default = "default_chunk_tokens")]
+    chunk_tokens: usize,
+    #[serde(default = "default_chunk_token_overlap")]
+    chunk_token_overlap: usize,
     chunk_chars: usize,
     chunk_overlap: usize,
     limit: Option<usize>,
 }
 
+fn default_chunk_tokens() -> usize {
+    TokenChunking::DEFAULT_MAX_TOKENS
+}
+fn default_chunk_token_overlap() -> usize {
+    TokenChunking::DEFAULT_OVERLAP_TOKENS
+}
+
+fn load_chunk_tokenizer(policy: &ChunkPolicy) -> anyhow::Result<Option<ModelTokenizer>> {
+    policy
+        .tokens
+        .as_ref()
+        .map(|t| ModelTokenizer::load(&ModelStore::new(ModelStore::default_root()?), &t.model_key))
+        .transpose()
+}
+
+#[cfg(test)]
 fn request(f: ImportForm) -> anyhow::Result<ImportRequest> {
+    request_with_policy(f, None)
+}
+
+fn request_for_session(session: &Shared, f: ImportForm) -> CmdResult<ImportRequest> {
+    let saved = with_session(session, |s| {
+        s.project
+            .store
+            .collection(&f.collection)?
+            .map(|c| serde_json::from_value::<ChunkPolicy>(c.chunking))
+            .transpose()
+            .map_err(Into::into)
+    })?;
+    request_with_policy(f, saved).map_err(err)
+}
+
+fn request_with_policy(f: ImportForm, saved: Option<ChunkPolicy>) -> anyhow::Result<ImportRequest> {
     let source = Source::detect(&user_path(&f.source_path))?;
     let blank = |o: Option<String>| o.filter(|s| !s.trim().is_empty());
     let role = match blank(f.role_column) {
@@ -389,20 +430,63 @@ fn request(f: ImportForm) -> anyhow::Result<ImportRequest> {
         collection: f.collection,
         source,
         mapping,
-        chunking: ChunkPolicy {
-            max_chars: f.chunk_chars,
-            overlap_chars: f.chunk_overlap,
-            tokens: None,
+        chunking: if let Some(policy) = saved {
+            policy
+        } else {
+            match f.chunk_tokenizer {
+                Some(key) => {
+                    let tokenizer =
+                        ModelTokenizer::load(&ModelStore::new(ModelStore::default_root()?), &key)?;
+                    ChunkPolicy::tokens(&tokenizer, f.chunk_tokens, f.chunk_token_overlap)
+                }
+                None => ChunkPolicy {
+                    max_chars: f.chunk_chars,
+                    overlap_chars: f.chunk_overlap,
+                    tokens: None,
+                },
+            }
         },
         limit: f.limit,
     })
 }
 
+#[derive(Serialize)]
+struct ImportPreview {
+    #[serde(flatten)]
+    preview: Preview,
+    chunk_counts: Vec<usize>,
+}
+
 #[tauri::command]
-async fn preview_import(form: ImportForm, rows: Option<usize>) -> CmdResult<Preview> {
+async fn preview_import(
+    state: State<'_, AppState>,
+    form: ImportForm,
+    rows: Option<usize>,
+) -> CmdResult<ImportPreview> {
+    let session = state.session.clone();
     off_thread(move || {
-        let req = request(form).map_err(err)?;
-        invectus_ingest::preview(&req, rows.unwrap_or(20)).map_err(err)
+        let req = request_for_session(&session, form)?;
+        let preview = invectus_ingest::preview(&req, rows.unwrap_or(20)).map_err(err)?;
+        let tokenizer = load_chunk_tokenizer(&req.chunking).map_err(err)?;
+        let chunk_counts = preview
+            .rows
+            .iter()
+            .map(|r| {
+                req.chunking
+                    .split(
+                        &r.text,
+                        tokenizer
+                            .as_ref()
+                            .map(|t| t as &dyn invectus_core::TokenOffsets),
+                    )
+                    .map(|chunks| chunks.len())
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map_err(err)?;
+        Ok(ImportPreview {
+            preview,
+            chunk_counts,
+        })
     })
     .await
 }
@@ -434,7 +518,8 @@ async fn import_collection(
     state: State<'_, AppState>,
     form: ImportForm,
 ) -> CmdResult<ImportOutcome> {
-    let req = request(form).map_err(err)?;
+    let session = state.session.clone();
+    let req = off_thread(move || request_for_session(&session, form)).await?;
     import_then_index(app, state.session.clone(), state.board.clone(), req).await
 }
 
@@ -480,7 +565,14 @@ async fn import_then_index(
     let (report, plan) = off_thread(move || {
         with_session(&s2, |s| {
             ensure_idle(&b2, &s.project)?;
-            let report = invectus_ingest::import(&mut s.project, &req)?;
+            let tokenizer = load_chunk_tokenizer(&req.chunking)?;
+            let report = invectus_ingest::import_with(
+                &mut s.project,
+                &req,
+                tokenizer
+                    .as_ref()
+                    .map(|t| t as &dyn invectus_core::TokenOffsets),
+            )?;
             let plan = plan_for(s, &req.collection)?;
             Ok((report, plan))
         })
@@ -1493,7 +1585,8 @@ mod tests {
             serde_json::from_value(serde_json::json!({
                 "collection": "notes", "source_path": csv, "text": ["text"], "title": "title",
                 "id": "id", "date": null, "url": null, "role": "neutral", "role_column": null,
-                "role_rules": null, "chunk_chars": 2000, "chunk_overlap": 200, "limit": null
+                "role_rules": null, "chunk_tokenizer": registry::DEFAULT_MODEL,
+                "chunk_chars": 2000, "chunk_overlap": 200, "limit": null
             }))
             .unwrap()
         };
@@ -1501,7 +1594,17 @@ mod tests {
             let mut g = session.lock().unwrap();
             let s = g.as_mut().unwrap();
             ensure_idle(&board, &s.project).unwrap();
-            invectus_ingest::import(&mut s.project, &request(form()).unwrap()).unwrap();
+            let req = request(form()).unwrap();
+            assert_eq!(req.chunking.tokens.as_ref().unwrap().max_tokens, 448);
+            let tokenizer = load_chunk_tokenizer(&req.chunking).unwrap();
+            invectus_ingest::import_with(
+                &mut s.project,
+                &req,
+                tokenizer
+                    .as_ref()
+                    .map(|t| t as &dyn invectus_core::TokenOffsets),
+            )
+            .unwrap();
             plan_for(s, "notes").unwrap()
         };
         let status = || {
@@ -1670,7 +1773,10 @@ mod tests {
             "chunk_chars": 2000, "chunk_overlap": 200, "limit": null
         }))
         .unwrap();
-        let req = request(form).unwrap();
+        let mut form = form;
+        form.chunk_tokenizer = Some("not-installed".into());
+        let req = request_with_policy(form, Some(ChunkPolicy::default())).unwrap();
+        assert!(req.chunking.tokens.is_none());
         assert_eq!(req.mapping.text, vec!["t"]);
         assert_eq!(req.mapping.title, None);
         let pv = invectus_ingest::preview(&req, 5).unwrap();

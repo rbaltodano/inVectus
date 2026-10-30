@@ -154,19 +154,19 @@ struct ImportArgs {
     /// Metadata columns: all (unmapped columns), none, or a comma-separated list.
     #[arg(long, default_value = "all")]
     meta: String,
-    /// Split texts longer than this many characters (0 = never).
-    #[arg(long, default_value_t = ChunkPolicy::default().max_chars)]
-    chunk_chars: usize,
-    #[arg(long, default_value_t = ChunkPolicy::default().overlap_chars)]
-    chunk_overlap: usize,
-    /// Size chunks in this model's tokens instead of characters (its tokenizer must be
-    /// installed), e.g. bge-small-en-v1.5.
+    /// Use character chunks instead of the default token chunks (0 = never).
+    #[arg(long, conflicts_with = "chunk_tokenizer")]
+    chunk_chars: Option<usize>,
+    /// Use character chunks with this overlap (default: 200 characters).
+    #[arg(long, conflicts_with = "chunk_tokenizer")]
+    chunk_overlap: Option<usize>,
+    /// Tokenizer for new collections (default: bge-small-en-v1.5; must be installed).
     #[arg(long)]
     chunk_tokenizer: Option<String>,
-    /// With --chunk-tokenizer: split texts longer than this many tokens.
+    /// Split texts longer than this many tokens (new token-chunked collections).
     #[arg(long, default_value_t = TokenChunking::DEFAULT_MAX_TOKENS)]
     chunk_tokens: usize,
-    /// With --chunk-tokenizer: tokens repeated at the start of the next chunk.
+    /// Tokens repeated at the start of the next chunk.
     #[arg(long, default_value_t = TokenChunking::DEFAULT_OVERLAP_TOKENS)]
     chunk_token_overlap: usize,
     /// Read at most this many rows/files.
@@ -859,9 +859,33 @@ fn status(p: &Project, json: bool) -> Result<()> {
 
 fn cmd_import(a: ImportArgs, models_dir: &Option<PathBuf>) -> Result<()> {
     let source = Source::detect(&a.source)?;
-    let tokenizer = a
-        .chunk_tokenizer
-        .as_deref()
+    let mut project = open(&a.p)?;
+    // Reimports keep their recorded policy unless a chunking mode is explicitly selected.
+    let saved_policy =
+        if a.chunk_chars.is_none() && a.chunk_overlap.is_none() && a.chunk_tokenizer.is_none() {
+            project
+                .store
+                .collection(&a.collection)?
+                .map(|c| serde_json::from_value::<ChunkPolicy>(c.chunking))
+                .transpose()?
+        } else {
+            None
+        };
+    let tokenizer_key = saved_policy
+        .as_ref()
+        .and_then(|p| p.tokens.as_ref().map(|t| t.model_key.as_str()))
+        .or_else(|| {
+            if saved_policy.is_some() || a.chunk_chars.is_some() || a.chunk_overlap.is_some() {
+                None
+            } else {
+                Some(
+                    a.chunk_tokenizer
+                        .as_deref()
+                        .unwrap_or(registry::DEFAULT_MODEL),
+                )
+            }
+        });
+    let tokenizer = tokenizer_key
         .map(|key| ModelTokenizer::load(&models(models_dir)?, key))
         .transpose()?;
     let role = match (&a.role, &a.role_column) {
@@ -909,14 +933,16 @@ fn cmd_import(a: ImportArgs, models_dir: &Option<PathBuf>) -> Result<()> {
         collection: a.collection,
         source,
         mapping,
-        chunking: match &tokenizer {
+        chunking: saved_policy.unwrap_or_else(|| match &tokenizer {
             Some(t) => ChunkPolicy::tokens(t, a.chunk_tokens, a.chunk_token_overlap),
             None => ChunkPolicy {
-                max_chars: a.chunk_chars,
-                overlap_chars: a.chunk_overlap,
+                max_chars: a.chunk_chars.unwrap_or(ChunkPolicy::default().max_chars),
+                overlap_chars: a
+                    .chunk_overlap
+                    .unwrap_or(ChunkPolicy::default().overlap_chars),
                 tokens: None,
             },
-        },
+        }),
         limit: a.limit,
     };
     if let Some(n) = a.preview {
@@ -941,7 +967,6 @@ fn cmd_import(a: ImportArgs, models_dir: &Option<PathBuf>) -> Result<()> {
         }
         return Ok(());
     }
-    let mut project = open(&a.p)?;
     let t = Instant::now();
     let r = import_with(
         &mut project,

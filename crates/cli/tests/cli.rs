@@ -62,6 +62,8 @@ fn setup() -> (tempfile::TempDir, PathBuf, String) {
             "title",
             "--text",
             "body",
+            "--chunk-chars",
+            "2000",
             "--role-column",
             "kind",
             "--role-rules",
@@ -255,7 +257,7 @@ fn embed_and_search_with_the_pinned_bge_model() {
     ));
     assert!(e.contains("30 or more"), "{e}");
 
-    // Token-sized chunks: every chunk fits the token budget, so nothing is truncated.
+    // New collections default to token chunks without an explicit tokenizer flag.
     let long = dir.path().join("long.csv");
     let body = "Orthokeratology lenses reshape the cornea overnight to slow axial elongation. "
         .repeat(120);
@@ -276,13 +278,39 @@ fn embed_and_search_with_the_pinned_bge_model() {
             "title",
             "--text",
             "body",
-            "--chunk-tokenizer",
-            "bge-small-en-v1.5",
             "--json",
         ],
     ));
     let r: serde_json::Value = serde_json::from_str(&o).unwrap();
     assert_eq!(r["items_chunked"], 1);
+    {
+        let p = invectus_core::Project::open(std::path::Path::new(&project)).unwrap();
+        let policy = p.store.require_collection("tok").unwrap().chunking;
+        assert_eq!(policy["tokens"]["model_key"], "bge-small-en-v1.5");
+        assert_eq!(policy["tokens"]["max_tokens"], 448);
+        assert_eq!(policy["tokens"]["overlap_tokens"], 48);
+    }
+    let again: serde_json::Value = serde_json::from_str(&ok(cli(
+        &models,
+        &[
+            "--offline",
+            "import",
+            "-p",
+            &project,
+            long.to_str().unwrap(),
+            "-c",
+            "tok",
+            "--id",
+            "id",
+            "--title",
+            "title",
+            "--text",
+            "body",
+            "--json",
+        ],
+    )))
+    .unwrap();
+    assert_eq!(again["unchanged"], 1);
     let chunks = r["chunks_written"].as_u64().unwrap();
     assert!((3..=8).contains(&chunks), "{chunks}");
     let r: serde_json::Value = serde_json::from_str(&ok(cli(

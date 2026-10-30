@@ -64,8 +64,11 @@ invectus gaps show -p … -c papers 3
 invectus gaps verdict -p … -c papers 3 confirmed_gap --note "checked PubMed"
 invectus gaps export -p … -c papers --out gaps.md   # titles and links only
 invectus eval backtest -p … -c papers --cutoff 2018-12-31,2020-12-31 --horizon-years 2
-# Optional: size chunks in the model's tokens instead of characters (new collections only)
-invectus import -p … notes/ -c notes --chunk-tokenizer bge-small-en-v1.5
+# New collections default to BGE-small token chunks (448 tokens, 48 overlap).
+# For imports without an installed model, explicitly choose character chunks:
+invectus import -p … notes/ -c notes --chunk-chars 2000 --chunk-overlap 200
+# Select another installed tokenizer for a new collection:
+invectus import -p … notes/ -c notes --chunk-tokenizer nomic-embed-text-v1.5
 invectus gapmap import -p … --source ~/Documents/Medical\ Paper\ Vector\ Database --limit 2000
 invectus parity -p … -c gapmap      # required before searching imported gapmap vectors
 ```

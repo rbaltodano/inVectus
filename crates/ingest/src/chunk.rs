@@ -1,10 +1,10 @@
 //! Chunking of long documents (SPEC §3: "long documents are split into chunks, and both chunks and
 //! parent items have vectors").
 //!
-//! By default chunks are sized in characters, so import does not need a tokenizer. A policy can
-//! instead size chunks in one model's tokens ([`TokenChunking`]), which keeps every chunk inside
-//! that model's token cap. Either way the embedder enforces the cap (head truncation) and reports
-//! truncation counts.
+//! New CLI and desktop imports use a verified local tokenizer ([`TokenChunking`]). The legacy
+//! character policy stays available for model-free imports and existing collections. Token
+//! budgets reserve room for the title and prefixes, but unusually long titles can still exceed
+//! a model's cap. The embedder enforces that cap and reports truncation counts.
 
 use anyhow::{Result, bail};
 use invectus_core::TokenOffsets;
@@ -42,7 +42,7 @@ impl TokenChunking {
 }
 
 impl Default for ChunkPolicy {
-    /// ~2,000 characters is roughly 400-500 English tokens, inside a 512-token model cap.
+    /// Legacy, model-free character policy; character counts do not guarantee a token limit.
     fn default() -> Self {
         Self {
             max_chars: 2000,

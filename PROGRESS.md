@@ -1562,3 +1562,11 @@ packaging gates are still open. Details, reproducible commands and limitations:
   generated source; diff checks passed. Relaunched the standalone app with its existing
   project history and dev model store. Live sidebar/Dock review remains with the owner;
   no CI dispatched.
+
+## 2026-10-29 — Updated sidebar logo (884×246)
+
+- Replaced src/assets/branding/invectus-logo.png with the owner's new Desktop PNG,
+  removing the Desktop copy. Existing width-based sidebar CSS keeps its natural aspect.
+- Frontend and macOS release .app bundle builds passed (existing upstream linker warning).
+  Relaunched the standalone app with the dev model store; live appearance remains for
+  owner review. No CI dispatched.

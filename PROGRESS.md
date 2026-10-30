@@ -1779,3 +1779,25 @@ packaging gates are still open. Details, reproducible commands and limitations:
   preserved. No AI-generated replacement or app asset changes.
 - Verified local image references and SVG structure; diff checks passed. No build,
   app relaunch, CI or push was needed for this documentation-only change.
+
+## 2026-10-30 — Separate ophthalmology research project
+
+- Owner selected the same 5,000-paper medical sample used by Research Test and asked
+  to keep Urban Futures Demo in the sidebar. Created a separate local project at
+  ~/inVectus Projects/Ophthalmology Research.invectus with one papers collection;
+  did not import the duplicate character/token test collections.
+- Imported the existing local papers-5k.csv copy (SHA-256
+  a263b0d857ee176dd472d7ed636481e7127598cb656ce08aae1abc0f16fe91b5).
+  Preserved the old mapping: PMID IDs, title/abstract/pub_date, Systematic Review
+  and Meta-Analysis as coverage, Journal Article as demand, otherwise neutral.
+  Result: 5,000 parents (4,922 demand / 66 coverage / 12 neutral), 1,366 token-sized
+  chunks using the pinned BGE tokenizer (448 tokens, 48 overlap).
+- Completed offline BGE embedding (6,366 vectors), no-LLM calibration (300 sampled
+  items), regions (71 fine / 8 broad), and a scan (20 coverage / 3 stale candidates).
+  These are collection outputs, not validation that the candidates are real gaps.
+  Existing local model files were used; source CSV fingerprint is unchanged.
+- Native verification: opened the project, confirmed both it and Urban Futures Demo
+  in the sidebar, verified a semantic query returns medical-paper matches, checked
+  collection counts/calibration/readiness, and left the app on its 23-gap list/map.
+  Project files and generated reports are local user data and are not committed.
+  No app code/build changes, network downloads, CI or push were needed.

@@ -668,3 +668,15 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 }
 
 .collections-head { justify-content: space-between; }
+
+/* Native macOS sidebar material is supplied by NSVisualEffectView, behind the webview.
+   Keep every ancestor transparent; the main pane masks the material with solid ink. */
+.sidebar-window-drag { display: none; }
+html.native-macos, .native-macos body, .native-macos #root { background: transparent; }
+.native-macos .shell { background: transparent; }
+.native-macos .main { background: var(--bg); }
+.native-macos .sidebar { background: transparent; padding-top: 64px; }
+.native-macos .sidebar-window-drag {
+  display: block; position: absolute; top: 0; left: 0; right: 0; height: 48px;
+  cursor: default;
+}

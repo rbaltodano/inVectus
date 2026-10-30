@@ -1858,3 +1858,20 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Confirmed the GitHub About description and six relevant topics are set, and private
   vulnerability reporting reads enabled=true. Remaining owner choices are a personal
   motivation paragraph, a short recording, profile pinning, and the first manual CI run.
+
+## 2026-10-30 — Native macOS glass sidebar and integrated window controls
+
+- Added a macOS-only Tauri window override: transparent webview, native Sidebar visual
+  effect following window activation, dark appearance, overlay title bar with hidden
+  title, and native traffic lights positioned at (16, 20) inside the sidebar.
+- Scoped transparent document/sidebar backgrounds to native macOS. The main pane stays
+  opaque. Reserved 64 px above sidebar content and added a 48 px draggable top strip
+  with the window start-dragging capability. Browser/Windows/Linux styling retains its
+  existing background and title-bar configuration.
+- Frontend build, 29 UI tests, diff checks and macOS release .app bundle passed with
+  the existing upstream compact-unwind linker warning. Relaunched the bundle and
+  visually verified the material sidebar, traffic lights and absence of a separate
+  title strip. Both recent projects remained available and the medical map opened.
+- A native drag check was interrupted by user interaction; dragging and full-screen
+  transitions remain for owner verification. No full Rust suite or cross-platform
+  execution was needed for this configuration/CSS change. No CI or push performed.

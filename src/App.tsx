@@ -105,6 +105,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
 
   return <div className="shell">
     <nav aria-label="Main" className="sidebar">
+      <div className="sidebar-window-drag" data-tauri-drag-region aria-hidden="true" />
       <div className="side-top">
         <div className="logo"><img src={brandLogo} alt="inVectus" /></div>
         <div className="side-search">

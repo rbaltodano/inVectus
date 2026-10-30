@@ -1897,3 +1897,19 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Frontend and macOS release .app builds passed (existing upstream compact-unwind
   linker warning). No application behavior or workflow changes; no CI or push.
 - Relaunched and visually verified the 4 px New project selection in the native app.
+
+## 2026-10-30 — Consistent control corners and project navigation
+
+- Set the shared control radius to 4 px, including sidebar search, buttons and fields.
+- Added Command-K (Control-K also supported): inside a project it restores the Search
+  tab's root without discarding its query, focuses/selects the query field, and works
+  from other tabs/details. Outside a project it focuses Find a project. The existing
+  slash shortcut is retained; composing input is ignored.
+- Project-name single clicks open/select the project; double clicks edit its name.
+  A short deferred mouse click allows double-click detection without opening first.
+  Keyboard activation opens the sidebar project, F2 renames, and Enter/Escape/blur
+  editing behavior is preserved. Header names use double-click/F2 for editing too.
+- Frontend, native macOS release bundle and 29 UI tests passed (existing upstream
+  compact-unwind linker warning). Relaunched the bundle and confirmed single-click
+  project opening and Command-K navigation. Owner requested no further computer-use
+  verification and will review visual/interaction behavior directly. No CI or push.

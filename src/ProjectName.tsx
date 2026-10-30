@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 
 /** Shared inline project-title editor: Enter/blur saves; Escape cancels. */
-export default function ProjectName({ name, onSave, className = "", disabled = false }: {
-  name: string; onSave: (name: string) => Promise<void>; className?: string; disabled?: boolean;
+export default function ProjectName({ name, onSave, onSelect, className = "", disabled = false }: {
+  name: string; onSelect?: () => void; onSave: (name: string) => Promise<void>; className?: string; disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const input = useRef<HTMLInputElement>(null);
+  const clickTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(clickTimer.current), []);
+  const beginRename = () => {
+    clearTimeout(clickTimer.current);
+    cancelled.current = false; setDraft(name); setError(undefined); setEditing(true);
+  };
   const pending = useRef(false);
   const cancelled = useRef(false);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
@@ -30,8 +36,15 @@ export default function ProjectName({ name, onSave, className = "", disabled = f
         if (event.key === "Enter") { event.preventDefault(); void save(); }
         if (event.key === "Escape") { event.preventDefault(); cancelled.current = true; setError(undefined); setEditing(false); }
       }} />
-      : <button type="button" className="project-name-button" disabled={disabled} title="Click to rename project"
-        aria-label={`Rename project ${name}`} onClick={() => { cancelled.current = false; setDraft(name); setError(undefined); setEditing(true); }}>{name}</button>}
+      : <button type="button" className="project-name-button" disabled={disabled} title={onSelect ? "Click to open; double-click to rename" : "Double-click to rename project"}
+        aria-label={`${onSelect ? "Open" : "Rename"} project ${name}`}
+        onClick={(event) => {
+          if (event.detail === 0) { if (onSelect) onSelect(); else beginRename(); return; }
+          clearTimeout(clickTimer.current);
+          if (event.detail === 1 && onSelect) clickTimer.current = setTimeout(onSelect, 300);
+        }}
+        onDoubleClick={beginRename}
+        onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); beginRename(); } }}>{name}</button>}
     {error && <span className="project-name-error" role="alert">{error}</span>}
   </span>;
 }

@@ -688,3 +688,7 @@ html.native-macos, .native-macos body, .native-macos #root { background: transpa
 .sidebar .side-link,
 .sidebar .project-link,
 .sidebar .project-sidebar-row { border-radius: 4px; }
+
+/* Shared small radius for interactive controls, including the sidebar search. */
+:root { --r: 4px; }
+button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-radius: var(--r); }

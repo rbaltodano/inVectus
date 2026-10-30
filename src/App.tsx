@@ -60,6 +60,16 @@ export default function App() {
 function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void> }) {
   const [route, setRoute] = useState<Route>({ view: "projects" });
   const [recent, setRecent] = useState<Recent[]>(recentProjects);
+  useEffect(() => {
+    if (route.view === "project") return;
+    const shortcut = (event: KeyboardEvent) => {
+      if (!event.isComposing && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
+        event.preventDefault(); document.querySelector<HTMLInputElement>("#side-q")?.focus();
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, [route.view]);
   const [stack, setStack] = useState<Page[]>([{ kind: "search" }]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string>();
@@ -125,7 +135,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
               <div className="project-sidebar-row" data-current={route.view === "project" && project?.root === r.root}>
                 <button type="button" className="project-open" aria-label={`Open project ${r.name}`} title={tilde(r.root)}
                   disabled={opening || (switchingBlocked && job?.project !== r.root)} onClick={() => openRecent(r)}><Folder size={14} aria-hidden="true" /></button>
-                <ProjectName name={r.name} className="sidebar-project-name" disabled={opening} onSave={(name) => renameProject(r.root, name)} />
+                <ProjectName name={r.name} className="sidebar-project-name" disabled={opening || (switchingBlocked && job?.project !== r.root)} onSelect={() => void openRecent(r)} onSave={(name) => renameProject(r.root, name)} />
               </div>
             </li>)}
           </ul>
@@ -219,6 +229,23 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const gapsRequest = useRef(0);
   const initialTab = pageTab(initialStack[initialStack.length - 1]);
   const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (event.isComposing || !(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      setTabStacks((prev) => ({ ...prev, search: [prev.search?.find((p) => p.kind === "search") ?? { kind: "search" }] }));
+      setActiveTab("search"); setSearchFocusRequest((n) => n + 1);
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
+  useLayoutEffect(() => {
+    if (searchFocusRequest) {
+      const input = document.querySelector<HTMLInputElement>("#panel-q") ?? document.querySelector<HTMLInputElement>("#side-q");
+      input?.focus(); input?.select();
+    }
+  }, [searchFocusRequest]);
   const tabsRef = useRef<HTMLDivElement>(null);
   const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number; top: number }>();
   useLayoutEffect(() => {

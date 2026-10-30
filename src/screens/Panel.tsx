@@ -115,7 +115,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
   return <div className="search-page" aria-busy={busy}>
     <form role="search" className="search-command" onSubmit={go}>
       <label htmlFor="panel-q" className="sr-only">Describe an idea</label>
-      <input ref={queryInput} id="panel-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="/ to Search" />
+      <input ref={queryInput} id="panel-q" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" />
       {busy && <span role="status" aria-label="Searching"><MatrixLoader /></span>}
       <label className="search-scope">
         <span className="sr-only">Compare with</span>

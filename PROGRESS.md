@@ -1927,3 +1927,15 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Frontend build, macOS .app bundle, 29 existing UI tests and diff checks passed.
   Native interaction verification is left to the owner as requested; no computer-use
   actions, CI, or push were performed. Restart the app to load the rebuilt bundle.
+
+## 2026-10-30 — More robust Command shortcut hints
+
+- Owner reported that project numbers were not appearing. Confirmed the built assets
+  include project-shortcut labels; native visibility was not independently reproduced.
+- Explicitly recognize Meta/MetaLeft/MetaRight keydown, rather than depending solely
+  on the modifier flag for the modifier's own event. Keyboard handlers now run in
+  capture phase; mouse movement/clicks recover Command state if held before focus.
+  Keyup, window blur and visibility changes still clear the hints.
+- Rebuilt the macOS bundle and passed 29 existing UI tests and diff checks. Following
+  the owner's preference, no computer-use verification/relaunch was performed; the
+  updated bundle needs a full quit/reopen before testing. No CI or push performed.

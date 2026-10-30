@@ -102,7 +102,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
   const matches = recent.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()));
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
-      setCommandHeld(event.metaKey);
+      setCommandHeld(event.metaKey || event.key === "Meta" || event.code === "MetaLeft" || event.code === "MetaRight");
       if (event.isComposing || event.altKey || event.shiftKey) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -118,13 +118,19 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     };
     const up = (event: KeyboardEvent) => setCommandHeld(event.metaKey);
     const reset = () => setCommandHeld(false);
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
+    // Recover modifier state when Command was pressed before the window gained focus.
+    const pointerModifiers = (event: MouseEvent) => setCommandHeld(event.metaKey);
+    window.addEventListener("keydown", down, true);
+    window.addEventListener("keyup", up, true);
+    window.addEventListener("mousemove", pointerModifiers);
+    window.addEventListener("mousedown", pointerModifiers);
     window.addEventListener("blur", reset);
     document.addEventListener("visibilitychange", reset);
     return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
+      window.removeEventListener("keydown", down, true);
+      window.removeEventListener("keyup", up, true);
+      window.removeEventListener("mousemove", pointerModifiers);
+      window.removeEventListener("mousedown", pointerModifiers);
       window.removeEventListener("blur", reset);
       document.removeEventListener("visibilitychange", reset);
     };

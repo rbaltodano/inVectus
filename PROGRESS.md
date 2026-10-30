@@ -1832,3 +1832,14 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Owner asked about making the repository public, then chose to hold off pending a
   review of the commit author identity and local paths in history. Visibility is
   unchanged (private); nothing was changed on GitHub settings.
+
+## 2026-10-30 — Repository made public
+
+- Owner approved publishing with the existing history. Set the global git email to the
+  GitHub noreply address for new commits; the 97 earlier commits still carry the owner's
+  Gmail address (no history rewrite; the same address is already in other public repos).
+- Pushed main (150261f) and changed rbaltodano/inVectus visibility to Public with
+  `gh repo edit`. Confirmed visibility reads PUBLIC afterwards.
+- Not done: no workflow was dispatched (both stay manual), so Windows/Linux remain
+  unverified. About text, topics, vulnerability reporting and the GitHub email-privacy
+  settings are for the owner to set in the web UI.

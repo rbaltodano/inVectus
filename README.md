@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="src-tauri/icons/icon.png" alt="inVectus app icon" width="128">
+</p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="src/assets/branding/invectus-logo.png">
+    <img src="docs/branding/invectus-logo-dark-text.svg" alt="inVectus" width="360">
+  </picture>
+</p>
+
 # inVectus
 
 **Explore a collection. Find areas with limited coverage. Inspect the evidence.**

@@ -1765,3 +1765,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   this conversation. Public presentation does not expand platform support, claim a signed
   release, validate synthetic relevance, or change SPEC behavior. Publication, profile/About
   settings and first public manual CI runs remain owner actions in docs/publication.md.
+
+## 2026-10-30 — README brand header
+
+- Matched the Angrove iOS README's centered brand stack: the existing app icon at
+  128 px, then the full inVectus wordmark at 360 px, above the project heading.
+- Dark themes use the original light-text PNG. Light themes use an SVG that embeds
+  the same logo with a constant dark-color filter; geometry and transparency are
+  preserved. No AI-generated replacement or app asset changes.
+- Verified local image references and SVG structure; diff checks passed. No build,
+  app relaunch, CI or push was needed for this documentation-only change.

@@ -1808,3 +1808,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   project to docs/screenshots/ (ophthalmology-search, -gap, -item, -collections). They
   are copies from the Desktop; the existing screenshots and README are unchanged.
   They show the real 5,000-paper collection, not the synthetic demo data.
+
+## 2026-10-30 — README wordmark rendered blank on GitHub mobile
+
+- The README's light-theme wordmark was an SVG embedding a base64 PNG through an SVG
+  colour filter; the GitHub iOS app showed it as a broken image. Replaced it with a plain
+  PNG (docs/branding/invectus-logo-dark-text.png, 884×246) made from the existing logo
+  by keeping its alpha and setting the ink to the same near-black the SVG filter used.
+  The dark-theme source (src/assets/branding/invectus-logo.png) is unchanged.
+- Not verified on GitHub itself: the repository is private and nothing was viewed there
+  after the push. Checked only that the file is a valid PNG and renders correctly locally.

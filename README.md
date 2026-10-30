@@ -4,7 +4,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="src/assets/branding/invectus-logo.png">
-    <img src="docs/branding/invectus-logo-dark-text.svg" alt="inVectus" width="360">
+    <img src="docs/branding/invectus-logo-dark-text.png" alt="inVectus" width="360">
   </picture>
 </p>
 

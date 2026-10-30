@@ -1822,3 +1822,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
   The dark-theme source (src/assets/branding/invectus-logo.png) is unchanged.
 - Not verified on GitHub itself: the repository is private and nothing was viewed there
   after the push. Checked only that the file is a valid PNG and renders correctly locally.
+
+## 2026-10-30 — Screenshot caveat removed; repository stays private
+
+- Owner chose to keep the four Ophthalmology Research screenshots and drop the README
+  caption saying all records are synthetic. Removed that caption; the demo docs still
+  describe the Urban Futures data as fictional. docs/publication.md now notes the
+  ophthalmology screenshots show real PubMed titles.
+- Owner asked about making the repository public, then chose to hold off pending a
+  review of the commit author identity and local paths in history. Visibility is
+  unchanged (private); nothing was changed on GitHub settings.

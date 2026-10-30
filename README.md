@@ -21,9 +21,6 @@ one workspace.
 
 ![inVectus showing ranked gaps beside an interactive collection map](docs/screenshots/workspace.png)
 
-*Native macOS app with the fictional Urban Futures demo. All records are synthetic;
-these screenshots are workflow examples, not research findings or accuracy benchmarks.*
-
 ## What works today
 
 - **Bring your own collection.** Import CSV/TSV, Parquet, or folders of text and

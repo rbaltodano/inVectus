@@ -44,8 +44,9 @@ The owner should decide whether that public identity is acceptable before publis
 
 ## Owner actions
 
-1. Review the README/screenshots and the commit author identity. The images contain
-   fictional data; confirm the presentation and branding are what you want public.
+1. Review the README/screenshots and the commit author identity. Most images show
+   the fictional demo; the four `ophthalmology-*` screenshots show real PubMed paper
+   titles. Confirm the presentation and branding are what you want public.
 2. Push the reviewed commits, then change repository visibility to Public in GitHub
    Settings. Visibility has not been changed and no push is performed by this preparation.
 3. Set the repository's About description and topics, enable private vulnerability

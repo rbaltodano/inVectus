@@ -1855,3 +1855,6 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Checked local README image/link targets and diff formatting. No application code or
   workflow triggers changed. Public repository topics/About and private vulnerability
   reporting are handled separately from source changes; no CI was dispatched here.
+- Confirmed the GitHub About description and six relevant topics are set, and private
+  vulnerability reporting reads enabled=true. Remaining owner choices are a personal
+  motivation paragraph, a short recording, profile pinning, and the first manual CI run.

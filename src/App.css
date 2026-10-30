@@ -65,7 +65,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .shell { display: flex; min-height: 100vh; }
 .sidebar { flex: 0 0 240px; background: var(--surface); border-right: 1px solid var(--line); padding: 24px 16px; display: flex; flex-direction: column; justify-content: space-between; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .side-top, .side-bottom { display: flex; flex-direction: column; gap: 24px; }
-.logo { align-self: flex-start; width: 100%; max-width: 175px; padding: 0; }
+.logo { align-self: flex-start; width: 100px; padding: 0; }
 .logo img { display: block; width: 100%; height: auto; }
 .side-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--r); padding: 0 12px; }
 .side-search input { border: none; background: none; padding: 10px 0; font-size: 13px; font-weight: 400; color: var(--text); width: 100%; min-width: 0; }

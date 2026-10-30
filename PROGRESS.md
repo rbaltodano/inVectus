@@ -1913,3 +1913,17 @@ packaging gates are still open. Details, reproducible commands and limitations:
   compact-unwind linker warning). Relaunched the bundle and confirmed single-click
   project opening and Command-K navigation. Owner requested no further computer-use
   verification and will review visual/interaction behavior directly. No CI or push.
+
+## 2026-10-30 — Global project search and Command-number navigation
+
+- Corrected Command-K to focus/select the sidebar's global Find a project field on
+  every screen, without switching project tabs. Control-K remains an alternative;
+  the slash shortcut still focuses collection search when its page is active.
+- Holding Command displays right-aligned 1–9 hints for the first nine visible sidebar
+  projects. Command plus that number opens the corresponding visible project using
+  existing opening/job guards. Repeated keydown events do not repeatedly navigate;
+  hints clear on Command release, window blur and visibility changes. Filtered list
+  numbering follows the displayed order, with accessible shortcut metadata on rows.
+- Frontend build, macOS .app bundle, 29 existing UI tests and diff checks passed.
+  Native interaction verification is left to the owner as requested; no computer-use
+  actions, CI, or push were performed. Restart the app to load the rebuilt bundle.

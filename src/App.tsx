@@ -60,16 +60,7 @@ export default function App() {
 function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void> }) {
   const [route, setRoute] = useState<Route>({ view: "projects" });
   const [recent, setRecent] = useState<Recent[]>(recentProjects);
-  useEffect(() => {
-    if (route.view === "project") return;
-    const shortcut = (event: KeyboardEvent) => {
-      if (!event.isComposing && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
-        event.preventDefault(); document.querySelector<HTMLInputElement>("#side-q")?.focus();
-      }
-    };
-    window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
-  }, [route.view]);
+  const [commandHeld, setCommandHeld] = useState(false);
   const [stack, setStack] = useState<Page[]>([{ kind: "search" }]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string>();
@@ -109,6 +100,35 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     finally { setOpening(false); }
   };
   const matches = recent.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()));
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      setCommandHeld(event.metaKey);
+      if (event.isComposing || event.altKey || event.shiftKey) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        const input = document.querySelector<HTMLInputElement>("#side-q");
+        input?.focus(); input?.select();
+      } else if (event.metaKey && /^[1-9]$/.test(event.key)) {
+        const target = matches[Number(event.key) - 1];
+        if (target) {
+          event.preventDefault();
+          if (!event.repeat) void openRecent(target);
+        }
+      }
+    };
+    const up = (event: KeyboardEvent) => setCommandHeld(event.metaKey);
+    const reset = () => setCommandHeld(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", reset);
+    document.addEventListener("visibilitychange", reset);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", reset);
+      document.removeEventListener("visibilitychange", reset);
+    };
+  }, [matches, opening, switchingBlocked, job?.project]);
   const nav = (label: string, Icon: LucideIcon, current: boolean, onClick: () => void, disabled = false) =>
     <button type="button" className="side-link" aria-current={current ? "page" : undefined} onClick={onClick} disabled={disabled}>
       <Icon size={16} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span></button>;
@@ -131,11 +151,12 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         <div className="sidebar-projects">
           {nav("Projects", Folder, route.view === "projects", () => setRoute({ view: "projects" }))}
           <ul className="project-list" aria-label="Projects">
-            {matches.map((r) => <li key={r.root}>
-              <div className="project-sidebar-row" data-current={route.view === "project" && project?.root === r.root}>
+            {matches.map((r, index) => <li key={r.root}>
+              <div className="project-sidebar-row" aria-keyshortcuts={index < 9 ? `Meta+${index + 1}` : undefined} data-current={route.view === "project" && project?.root === r.root}>
                 <button type="button" className="project-open" aria-label={`Open project ${r.name}`} title={tilde(r.root)}
                   disabled={opening || (switchingBlocked && job?.project !== r.root)} onClick={() => openRecent(r)}><Folder size={14} aria-hidden="true" /></button>
                 <ProjectName name={r.name} className="sidebar-project-name" disabled={opening || (switchingBlocked && job?.project !== r.root)} onSelect={() => void openRecent(r)} onSave={(name) => renameProject(r.root, name)} />
+                {commandHeld && index < 9 && <kbd className="project-shortcut" aria-hidden="true">{index + 1}</kbd>}
               </div>
             </li>)}
           </ul>
@@ -229,23 +250,6 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const gapsRequest = useRef(0);
   const initialTab = pageTab(initialStack[initialStack.length - 1]);
   const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
-  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
-  useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      if (event.isComposing || !(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== "k") return;
-      event.preventDefault();
-      setTabStacks((prev) => ({ ...prev, search: [prev.search?.find((p) => p.kind === "search") ?? { kind: "search" }] }));
-      setActiveTab("search"); setSearchFocusRequest((n) => n + 1);
-    };
-    window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
-  }, []);
-  useLayoutEffect(() => {
-    if (searchFocusRequest) {
-      const input = document.querySelector<HTMLInputElement>("#panel-q") ?? document.querySelector<HTMLInputElement>("#side-q");
-      input?.focus(); input?.select();
-    }
-  }, [searchFocusRequest]);
   const tabsRef = useRef<HTMLDivElement>(null);
   const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number; top: number }>();
   useLayoutEffect(() => {

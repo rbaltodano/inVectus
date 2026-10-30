@@ -10,3 +10,11 @@ models/
 .fastembed_cache/
 spikes/target/
 *.log
+
+# Local credentials and Python tooling
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/

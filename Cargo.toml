@@ -5,6 +5,7 @@ exclude = ["third_party", "spikes"]
 default-members = ["crates/cli"]
 
 [workspace.package]
+license = "MIT"
 version = "0.1.0"
 edition = "2024"
 

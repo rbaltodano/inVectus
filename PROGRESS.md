@@ -1714,3 +1714,54 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Validation: frontend TypeScript/Vite build, all 29 existing UI tests and diff checks
   passed. No native rebuild/relaunch or CI run for this change; native appearance remains
   unverified until the next app rebuild.
+
+## 2026-10-30 — Public repository presentation and MIT licensing
+
+- Owner requested public-facing preparation and then explicitly chose open source;
+  applied MIT to original code, root/npm metadata, all in-house workspace packages and
+  the separate spike package. Preserved third-party terms. Restored the missing
+  LanceDB Apache-2.0 license verbatim from upstream v0.40.0, retained its copyright,
+  and added prominent modification notices to the three patched vendored files.
+  Copied the installed Inter/Martian Mono OFL and Lucide/Feather notices byte-for-byte.
+  THIRD_PARTY_NOTICES.md distinguishes these from a future full binary-license inventory.
+- Rewrote README.md around the product, actual workflow, four native screenshots,
+  engineering choices and experimental limits. Added development, architecture, demo,
+  publication handoff, contribution and security-reporting guides, plus issue templates.
+  Corrected the old README's implied Windows/Linux/CI validation. Workflows remain
+  manual-only and were not dispatched; no push or visibility change was performed.
+- Added scripts/create_demo.py: standard-library-only original fictional urban-research
+  records, deterministic IDs/CSV, optional offline CLI project build and clear missing-model
+  failure. Final fresh project has 540 items in 12 topics (CSV SHA-256
+  b06cdb1a503e67b70faedaeebf3708968a80d309a6f1941b86cfa1bbd3a4b321).
+  Used the already installed BGE model. No model/dataset download or real collection text
+  is required. Generated inputs, project and reports stay in ignored .spike-data/public-demo/.
+- Demo pipeline on Apple M4 Pro / 24 GiB macOS: import, embeddings, no-LLM calibration,
+  regions and gap scan completed offline; the synthetic scan emitted 3 coverage, 5 stale
+  and 5 bridge candidates. These demonstrate mechanics, not discovery accuracy.
+  During fixture iteration, reimport retained removed source rows as designed; the first
+  preview project was kept under initial-preview.invectus and a fresh final project was
+  created. The guide documents that reruns are not destructive resets.
+- Built the current macOS .app bundle (existing upstream compact-unwind linker warning),
+  reopened it, and captured actual workspace/evidence/search/Saved views with only the
+  demo visible in the filtered sidebar. Created a real demo bookmark and a clearly
+  illustrative Selected decision through the UI. Screenshots are authorized public
+  presentation assets; no source dataset/project/model is committed. Exported PNGs are
+  3024×1898; removed EXIF/text metadata while preserving compressed pixel data.
+- Added scripts/audit_publication.py and checked all reachable local history/current
+  non-ignored files offline: 120 commits, 768 text blobs, 52 binary blobs skipped, no
+  oversized history text blobs or suspicious model/project/credential file paths. Five
+  distinct literal-token candidates in two unchanged vendored test files were verified
+  byte-for-byte against the pinned crates.io archive (whose SHA-256 also matches).
+  The report retains these candidates for review. It is a heuristic, not a comprehensive
+  secret scan; binary contents, unreachable objects and remote hosting metadata are outside
+  its scope. Owner review of public commit identity remains in docs/publication.md.
+- Validation: 29 UI tests, frontend build, native macOS bundle, Cargo metadata/lock checks
+  (root and spike workspace), formatting/diff checks and local Markdown targets passed.
+  Verified deterministic 540 unique IDs, 12 topics, explicit fictional content, no external
+  source links, and the builder's missing-model failure without downloads/tracebacks.
+  Full Rust tests were not repeated for documentation/license/comment changes; the actual
+  demo exercised the existing Rust CLI and the native app. The app is left on demo Search.
+- Decisions/spec conflicts: MIT supersedes the owner's brief rights-reserved choice in
+  this conversation. Public presentation does not expand platform support, claim a signed
+  release, validate synthetic relevance, or change SPEC behavior. Publication, profile/About
+  settings and first public manual CI runs remain owner actions in docs/publication.md.

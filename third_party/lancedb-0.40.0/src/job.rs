@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright The LanceDB Authors
+// Modified for inVectus (2026): Unreachable server-job errors use Error::Runtime when the remote feature is disabled.
 
 //! Handles to operations a server may run asynchronously.
 

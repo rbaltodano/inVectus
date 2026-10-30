@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright The LanceDB Authors
+// Modified for inVectus (2026): Local-only build permits dead server API code when the remote feature is disabled.
 
 //! [LanceDB](https://github.com/lancedb/lancedb) is an open-source database for vector-search built with persistent storage,
 //! which greatly simplifies retrieval, filtering and management of embeddings.

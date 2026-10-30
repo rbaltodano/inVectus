@@ -4,6 +4,7 @@ import { ErrorLine, useStartJob, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent, useIndexPlan } from "../models";
 import Import from "./Import";
+import LineArt from "../LineArt";
 
 /** A status mark: filled = done, half = partial or running, ring = nothing yet, cross = failed. */
 export function StatusMark({ status }: { status: IndexStatus | "none" }) {
@@ -22,19 +23,16 @@ export default function Collections({ ctx, focus, adding: startAdding }: { ctx: 
   if (adding) return <Import ctx={ctx} onCancel={() => setAdding(false)}
     onDone={(c) => { setAdding(false); setOpen(c); }} />;
 
-  return <div className="page">
-    <div className="title-row">
-      <h2 className="h1">Collections</h2>
-      <span className="label">{project.collections.length} in this project</span>
-      <button type="button" className="btn primary push" onClick={() => setAdding(true)}>+ Add collection</button>
+  return <div className="page collections">
+    <div className="row">
+      <span className="section">Collections{project.collections.length ? ` · ${fmt(project.collections.length)}` : ""}</span>
+      <button type="button" className="text-btn push" onClick={() => setAdding(true)}>Add collection</button>
     </div>
-    <p className="muted small">Source files are not watched. To bring in changes, use “Update from source”, which imports the same file or folder again and re-indexes only what changed.</p>
-    {project.collections.length === 0 && <section className="panel empty">
-      <span className="ring" aria-hidden="true" />
-      <h2>No collections yet</h2>
-      <p className="muted">A collection is a set of items (papers, notes, products) imported from a CSV, Parquet file or folder of text files. It is indexed automatically after import.</p>
+    {project.collections.length === 0 && <div className="empty-state">
+      <LineArt kind="grid" />
+      <span className="dim">A collection is a set of items (papers, notes, products) imported from a CSV, Parquet file or folder of text files. It is indexed automatically after import.</span>
       <button type="button" className="btn primary" onClick={() => setAdding(true)}>Add the first collection</button>
-    </section>}
+    </div>}
     {project.collections.length > 0 && <div className="collection-list">
     {project.collections.map((c) => <CollectionPanel key={c.collection_id} ctx={ctx} c={c}
       open={open === c.collection_id} onToggle={() => setOpen(open === c.collection_id ? undefined : c.collection_id)} />)}
@@ -65,31 +63,31 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
   const total = c.items + c.chunks;
   const overall: IndexStatus | "none" = indexingHere ? "indexing" : tables.length === 0 ? "none" : tables.some((t) => t.index_status === "indexed" || t.index_status === "imported") ? (tables.every((t) => t.index_status === "indexed" || t.index_status === "imported") ? "indexed" : "outdated") : tables[0].index_status;
 
-  return <section className="panel collection-row stack gap" data-open={open} aria-labelledby={`c-${c.collection_id}`}>
-    <div className="row wrap">
-      <StatusMark status={overall} />
-      <h3 id={`c-${c.collection_id}`} className="mono">{c.collection_id}</h3>
-      <span className="muted small mono">{fmt(c.items)} items · {fmt(total)} texts with chunks</span>
-      <button type="button" className="link push" aria-expanded={open} onClick={onToggle}>{open ? "Hide details" : "Details"}</button>
+  return <section className="collection-row stack gap" data-open={open} aria-labelledby={`c-${c.collection_id}`}>
+    <div className="collection-title">
+      <h3 id={`c-${c.collection_id}`}>{c.collection_id}</h3>
+      <span className="index-status"><StatusMark status={overall} />{overall === "none" ? "Not indexed" : overall === "outdated" ? "Partly indexed" : STATUS_LABEL[overall]}</span>
     </div>
-    <div className="muted small mono">
-      {c.source_kind ? `${c.source_kind}` : "source unknown"}{c.source_path ? ` · ${c.source_path}` : ""}{c.updated_at ? ` · last imported ${when(c.updated_at)}` : ""}
+    <div className="path">
+      {c.source_kind ?? "source unknown"}{c.source_path ? ` · ${c.source_path}` : ""}{c.updated_at ? ` · imported ${when(c.updated_at)}` : ""}
     </div>
+    <dl className="figures">
+      <div><dt>Items</dt><dd>{fmt(c.items)}</dd></div>
+      <div><dt>Texts</dt><dd>{fmt(total)}</dd></div>
+      <div><dt>Indexes</dt><dd>{fmt(tables.length)}</dd></div>
+    </dl>
     <RoleBar c={c} />
 
-    {indexingHere && <div className="activity"><div className="small"><b>Indexing</b> with {job!.models.join(", ")}</div><JobProgress job={job!} />
-      <button type="button" className="btn small start" onClick={() => api.cancel()}>Cancel</button></div>}
+    {indexingHere && <div className="activity"><div className="small">Indexing with <span className="mono">{job!.models.join(", ")}</span></div><JobProgress job={job!} />
+      <button type="button" className="text-btn" onClick={() => api.cancel()}>Cancel</button></div>}
     {lastHere?.state === "failed" && <div className="error stack gap-s"><span>Indexing failed: {lastHere.error}</span>
-      <button type="button" className="btn small start" disabled={busy || isRunning(job)} onClick={() => index(lastHere.models, true)}>Retry</button></div>}
+      <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={() => index(lastHere.models, true)}>Retry</button></div>}
     {lastHere?.state === "cancelled" && <div className="note small">Indexing was cancelled. Finished batches were kept; indexing again resumes where it stopped.</div>}
 
-    <table className="table compact">
-      <thead><tr><th>Index</th><th>Model</th><th>Vectors</th><th>State</th><th><span className="sr-only">Actions</span></th></tr></thead>
-      <tbody>
-        {tables.map((t) => <SpaceRow key={t.space_id} t={t} total={total} busy={busy || isRunning(job)} indexingHere={indexingHere} onIndex={() => index([t.model_key])} />)}
-        {tables.length === 0 && !indexingHere && <tr><td colSpan={5} className="muted small">Not indexed yet. Search, regions and gaps need an index.</td></tr>}
-      </tbody>
-    </table>
+    <div className="index-list" role="group" aria-label={`Indexes of ${c.collection_id}`}>
+      {tables.map((t) => <SpaceRow key={t.space_id} t={t} total={total} busy={busy || isRunning(job)} indexingHere={indexingHere} onIndex={() => index([t.model_key])} />)}
+      {tables.length === 0 && !indexingHere && <p className="dim small">Not indexed yet. Search, regions and gaps need an index.</p>}
+    </div>
 
     {plan && plan.missing.length > 0 && !indexingHere && <div className="stack gap-s">
       <div className="note small">{tables.length === 0 ? "No embedding model is installed, so this collection was not indexed." : `This collection has an index made with ${plan.missing.map((m) => m.key).join(", ")}, which is not installed here; that index cannot be updated.`} Nothing downloads without your consent.</div>
@@ -98,13 +96,14 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     </div>}
     {plan?.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
 
-    <div className="row wrap">
-      {tables.length === 0 && plan && plan.models.length > 0 && <button type="button" className="btn primary" disabled={busy || isRunning(job)} onClick={() => index(null, true)}>Index and map with {plan.models.join(", ")}</button>}
-      {c.reimportable && <button type="button" className="btn" disabled={busy || isRunning(job)} onClick={reimport}
+    {tables.length === 0 && plan && plan.models.length > 0 && <button type="button" className="btn primary start" disabled={busy || isRunning(job)} onClick={() => index(null, true)}>Index and map with {plan.models.join(", ")}</button>}
+    <div className="collection-actions">
+      {c.reimportable && <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={reimport}
         title={c.source_path ? `Imports ${c.source_path} again with the same columns and roles` : undefined}>Update from source</button>}
-      {tables.some((t) => t.origin === "embedded") && <button type="button" className="btn" onClick={() => { const t = tables[0]; ctx.pickTable(t); ctx.go({ view: "project", tab: "search" }); }}>Search this collection</button>}
+      {tables.some((t) => t.origin === "embedded") && <button type="button" className="text-btn" onClick={() => { const t = tables[0]; ctx.pickTable(t); ctx.go({ view: "project", tab: "search" }); }}>Search this collection</button>}
+      <button type="button" className="text-btn push" aria-expanded={open} onClick={onToggle}>{open ? "Hide details" : "Details"}</button>
     </div>
-    {reimported && <div className="small mono">Updated: {reimported}</div>}
+    {reimported && <div className="dim small">Updated: {reimported}</div>}
     <ErrorLine error={error} />
     {open && <Details ctx={ctx} c={c} tables={tables} />}
   </section>;
@@ -113,15 +112,16 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
 function SpaceRow({ t, total, busy, indexingHere, onIndex }: { t: TableInfo; total: number; busy: boolean; indexingHere: boolean; onIndex: () => void }) {
   const status: IndexStatus = indexingHere && t.index_status !== "imported" ? "indexing" : t.index_status;
   const resumable = ["interrupted", "cancelled", "outdated", "failed", "unknown"].includes(status) && t.origin === "embedded";
-  return <tr>
-    <td><StatusMark status={status} /></td>
-    <td className="mono small">{t.model_key}<div className="muted">{t.dimensions}-d · space {t.space_id.slice(0, 12)}</div></td>
-    <td className="mono small">{fmt(t.vectors)}{t.origin === "embedded" && <span className="muted"> / {fmt(total)}</span>}</td>
-    <td className="small">{STATUS_LABEL[status]}{t.indexed_at && status !== "indexing" && <div className="muted">{when(t.indexed_at)}</div>}
-      {status === "failed" && t.index_error && <div className="error small">{t.index_error}</div>}
-      {status === "unknown" && <div className="muted">No index job is recorded for these vectors.</div>}</td>
-    <td className="right">{resumable && <button type="button" className="btn small" disabled={busy} onClick={onIndex}>{status === "failed" ? "Retry" : status === "outdated" ? "Index changes" : "Resume"}</button>}</td>
-  </tr>;
+  return <div className="index-row">
+    <StatusMark status={status} />
+    <div className="rank-title">
+      <span className="mono small">{t.model_key}</span>
+      <span className="dim">{t.dimensions}-d · {fmt(t.vectors)}{t.origin === "embedded" ? ` / ${fmt(total)}` : ""} vectors · {STATUS_LABEL[status]}{t.indexed_at && status !== "indexing" ? ` · ${when(t.indexed_at)}` : ""}</span>
+      {status === "failed" && t.index_error && <span className="error small">{t.index_error}</span>}
+      {status === "unknown" && <span className="dim small">No index job is recorded for these vectors.</span>}
+    </div>
+    {resumable && <button type="button" className="text-btn" disabled={busy} onClick={onIndex}>{status === "failed" ? "Retry" : status === "outdated" ? "Index changes" : "Resume"}</button>}
+  </div>;
 }
 
 function RoleBar({ c }: { c: Collection }) {
@@ -130,7 +130,7 @@ function RoleBar({ c }: { c: Collection }) {
     <div className="rolebar" aria-hidden="true">
       <div className="demand" style={{ width: `${(d / all) * 100}%` }} /><div className="coverage" style={{ width: `${(v / all) * 100}%` }} />
     </div>
-    <div className="row wrap small mono"><span><i className="swatch demand" />{fmt(d)} demand</span><span><i className="swatch coverage" />{fmt(v)} coverage</span><span><i className="swatch neutral" />{fmt(n)} neutral</span></div>
+    <div className="row wrap role-keys"><span className="key demand">{fmt(d)} demand</span><span className="key coverage">{fmt(v)} coverage</span><span className="key neutral">{fmt(n)} neutral</span></div>
   </div>;
 }
 
@@ -146,31 +146,38 @@ function Details({ ctx, c, tables }: { ctx: Ctx; c: Collection; tables: TableInf
   const llmReady = llms.some((l) => l.installed);
   const others = models.filter((m) => !tables.some((t) => t.model_key === m.key));
 
+  const cal = (t: TableInfo, llm: boolean) => start(() => api.startCalibration({ collection: c.collection_id, space: t.space_id }, llm));
   return <div className="details stack gap">
-    {tables.length > 0 && <div className="label">Per index</div>}
-    {tables.map((t) => <div key={t.space_id} className="stack gap-s sub">
-      <div className="mono small strong">{t.model_key} · {t.space_id.slice(0, 12)}</div>
-      <div className="row wrap small">
-        <span className="grow">Calibration: {t.calibration ? `${t.calibration.method}, ${fmt(t.calibration.sample)} items${t.calibration.holdout_auc ? `, held-out AUC ${t.calibration.holdout_auc.toFixed(3)}` : ""}${t.calibration.vectors !== t.vectors ? " — the collection changed since" : ""}` : "none (search shows similarity only, no verdict)"}</span>
-        <button type="button" className="btn small" disabled={running || busy || t.vectors === 0} onClick={() => start(() => api.startCalibration({ collection: c.collection_id, space: t.space_id }, false))}>{t.calibration ? "Recalibrate" : "Calibrate"}</button>
-        {llmReady && <button type="button" className="btn small" disabled={running || busy || t.vectors === 0} onClick={() => start(() => api.startCalibration({ collection: c.collection_id, space: t.space_id }, true))}>With language model</button>}
+    <p className="dim small">Source files are not watched. “Update from source” imports the same file or folder again and re-indexes only what changed.</p>
+    {tables.map((t) => <div key={t.space_id} className="stack gap-s">
+      <span className="section">{t.model_key} · {t.space_id.slice(0, 12)}</span>
+      <div className="detail-line">
+        <span className="eyebrow">Calibration</span>
+        <span>{t.calibration ? `${t.calibration.method}, ${fmt(t.calibration.sample)} items${t.calibration.holdout_auc ? `, held-out AUC ${t.calibration.holdout_auc.toFixed(3)}` : ""}${t.calibration.vectors !== t.vectors ? " — the collection changed since" : ""}` : "None. Search shows similarity only, no verdict."}</span>
+        <span className="row wrap">
+          <button type="button" className="text-btn" disabled={running || busy || t.vectors === 0} onClick={() => cal(t, false)}>{t.calibration ? "Recalibrate" : "Calibrate"}</button>
+          {llmReady && <button type="button" className="text-btn" disabled={running || busy || t.vectors === 0} onClick={() => cal(t, true)}>With language model</button>}
+        </span>
       </div>
-      <div className="row wrap small">
-        <span className="grow">Regions: {t.regions ? `${fmt(Number(t.regions.stats.fine ?? 0))} regions, ${when(t.regions.created_at)}${t.regions.scanned ? "; gaps scored" : ""}` : "none (the map and gaps need them)"}</span>
-        <button type="button" className="btn small" disabled={running || busy || t.vectors === 0} onClick={() => start(() => api.startRegions({ collection: c.collection_id, space: t.space_id }))}>{t.regions ? "Find again" : "Find regions"}</button>
+      <div className="detail-line">
+        <span className="eyebrow">Regions</span>
+        <span>{t.regions ? `${fmt(Number(t.regions.stats.fine ?? 0))} regions, ${when(t.regions.created_at)}${t.regions.scanned ? "; gaps scored" : ""}` : "None. The map and gaps need them."}</span>
+        <button type="button" className="text-btn" disabled={running || busy || t.vectors === 0} onClick={() => start(() => api.startRegions({ collection: c.collection_id, space: t.space_id }))}>{t.regions ? "Find again" : "Find regions"}</button>
       </div>
       {isRunning(current) && current!.collection === c.collection_id && current!.space === t.space_id && <JobProgress job={current!} />}
     </div>)}
-    {others.length > 0 && <>
-      <div className="label">Index with another model</div>
-      <div className="muted small">Each model keeps its own index; nothing is combined or overwritten.</div>
-      {others.map((m) => <div key={m.key} className="row wrap small">
-        <span className="mono grow">{m.key} <span className="muted">· {m.dimensions}-d · ≈{fmt(m.megabytes)} MB · {m.installed ? "installed" : "not installed"}</span></span>
-        {m.installed ? <button type="button" className="btn small" disabled={running || busy} onClick={() => start(() => api.startIndex(c.collection_id, [m.key]))}>Index</button>
-          : <button type="button" className="btn small" onClick={() => setConsent(m)}>Download…</button>}
-      </div>)}
+    {others.length > 0 && <div className="stack gap-s">
+      <span className="section">Index with another model</span>
+      <span className="dim small">Each model keeps its own index; nothing is combined or overwritten.</span>
+      <div className="index-list">
+        {others.map((m) => <div key={m.key} className="index-row">
+          <div className="rank-title"><span className="mono small">{m.key}</span><span className="dim">{m.dimensions}-d · ≈{fmt(m.megabytes)} MB · {m.installed ? "installed" : "not installed"}</span></div>
+          {m.installed ? <button type="button" className="text-btn" disabled={running || busy} onClick={() => start(() => api.startIndex(c.collection_id, [m.key]))}>Index</button>
+            : <button type="button" className="text-btn" onClick={() => setConsent(m)}>Download…</button>}
+        </div>)}
+      </div>
       {consent && <DownloadConsent model={{ key: consent.key, repo: consent.repo, megabytes: consent.megabytes }} project={project} onClose={() => setConsent(undefined)} />}
-    </>}
+    </div>}
     <ErrorLine error={error} />
   </div>;
 }

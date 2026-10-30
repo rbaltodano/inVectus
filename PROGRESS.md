@@ -1570,3 +1570,13 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Frontend and macOS release .app bundle builds passed (existing upstream linker warning).
   Relaunched the standalone app with the dev model store; live appearance remains for
   owner review. No CI dispatched.
+
+## 2026-10-29 — Collections tab in the instrument theme
+
+- Restyled src/screens/Collections.tsx to match the Gaps tab and gap assessment: a coded
+  section header with a text "Add collection" action, a line-art empty state, light sans
+  collection names, a figures row (items, texts, indexes), a 2 px role split with keys,
+  index rows on hairlines with dot status marks (ink instead of mint), and text-button
+  actions. The details panel uses labelled calibration and regions lines. Behaviour is
+  unchanged. The sidebar logo is now a fixed 100 px wide.
+- `npm run build` (tsc + Vite) passed. Not yet checked visually in the running app.

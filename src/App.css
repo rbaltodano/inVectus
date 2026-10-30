@@ -586,3 +586,36 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 .breakdown-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: -4px; }
 .breakdown-head span { color: var(--dim); }
 .breakdown-head b { font-family: var(--sans); font-weight: 500; font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Collections: each collection reads like the gap assessment — a name, a row of figures, the
+   role split as line work, then its indexes as hairline rows. */
+.collection-list .collection-row, .project-console .collection-row { padding: 24px 0; }
+.collection-list .collection-row:first-child { border-top: none; padding-top: 8px; }
+.collection-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; }
+.collection-title h3 { font-family: var(--sans); font-size: 20px; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); overflow-wrap: anywhere; }
+.collection-row .path { font-size: 11px; color: var(--dim); overflow-wrap: anywhere; margin-top: -8px; }
+.figures { display: flex; flex-wrap: wrap; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.figures > div { flex: 1 1 0; min-width: 88px; display: flex; flex-direction: column-reverse; gap: 6px; padding: 14px 16px 14px 0; }
+.figures > div + div { padding-left: 16px; border-left: 1px solid var(--line); }
+.figures dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.figures dd { margin: 0; font-family: var(--sans); font-size: 20px; color: var(--text); font-variant-numeric: tabular-nums; }
+.rolebar { height: 2px; background: var(--line); }
+.role-keys { gap: 16px; }
+.key.neutral::before { background: var(--line-2); }
+.index-status { gap: 8px; }
+.mark { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--dim); vertical-align: middle; flex: none; }
+.mark.full { background: var(--ink); border-color: var(--ink); }
+.mark.half { border-color: var(--ink); background: linear-gradient(90deg, var(--ink) 50%, transparent 50%); }
+.mark.cross { border-color: var(--danger); background: var(--danger); }
+.index-list { display: flex; flex-direction: column; }
+.index-row { display: flex; align-items: baseline; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.index-row:last-child { border-bottom: 1px solid var(--line); }
+.index-row .rank-title { flex: 1; }
+.index-row .text-btn, .detail-line .text-btn { padding: 0; font-size: 13px; }
+.collection-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; }
+.collection-actions .text-btn, .collection-row .activity .text-btn, .collection-row .error .text-btn { font-size: 13px; }
+.collection-row .activity { border-left-color: var(--ink); background: none; }
+.collection-row .details { border-top: 1px solid var(--line); padding-top: 20px; gap: 24px; }
+.detail-line { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 16px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.detail-line .eyebrow { margin: 0; }
+.collections .empty-state .btn { margin-top: 8px; }

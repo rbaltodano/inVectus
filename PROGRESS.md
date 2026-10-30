@@ -1582,3 +1582,10 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - `npm run build` (tsc + Vite) and the macOS release .app bundle build passed (existing
   upstream linker warning). Relaunched the standalone app with the dev model store; live
   appearance remains for owner review. No CI dispatched.
+
+## 2026-10-29 — More spacing on the Collections tab
+
+- Increased spacing on the Collections tab: 40 px between collections, 24 px between groups
+  inside one, roomier figures, index rows, actions and details lines, and 1.6 line height.
+- The macOS release .app bundle build passed. Relaunched the standalone app with the dev
+  model store; live appearance remains for owner review. No CI dispatched.

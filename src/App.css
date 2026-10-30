@@ -619,3 +619,20 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 .detail-line { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 16px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
 .detail-line .eyebrow { margin: 0; }
 .collections .empty-state .btn { margin-top: 8px; }
+/* Collections spacing: more air between groups so each collection reads in steps. */
+.collections { gap: 32px; line-height: 1.6; }
+.collection-row.stack { gap: 24px; }
+.collection-list .collection-row, .project-console .collection-row { padding: 40px 0; }
+.collection-list .collection-row:first-child { padding-top: 8px; }
+.collection-title { gap: 8px 20px; }
+.collection-row .path { margin-top: -12px; line-height: 1.6; }
+.figures > div { gap: 8px; padding: 20px 20px 20px 0; }
+.figures > div + div { padding-left: 20px; }
+.role-keys { gap: 24px; margin-top: 4px; }
+.index-row { gap: 20px; padding: 18px 0; }
+.index-row .rank-title { gap: 6px; }
+.collection-actions { gap: 12px 28px; padding-top: 4px; }
+.collection-row .activity { padding: 12px 16px; gap: 12px; }
+.collection-row .details { padding-top: 32px; gap: 32px; }
+.collection-row .details > .stack { gap: 12px; }
+.detail-line { gap: 20px; padding: 16px 0; line-height: 1.6; }

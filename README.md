@@ -19,7 +19,11 @@ one workspace.
 
 **Working prototype · MIT licensed · macOS tested locally · Windows/Linux targets unverified**
 
-![inVectus showing ranked gaps beside an interactive collection map](docs/screenshots/workspace.png)
+![inVectus showing ranked gaps beside an interactive collection map](docs/screenshots/ophthalmology-gap.png)
+
+*Current native macOS views of a 5,000-paper ophthalmology collection. Gap scores
+are collection-level candidates for review, not validated discoveries. The Saved
+example below uses the separately reproducible fictional Urban Futures demo.*
 
 ## What works today
 
@@ -44,15 +48,19 @@ one workspace.
 4. Save it for review, record your decision, and optionally check outside sources.
 
 <details>
-<summary>More screenshots: evidence, search, and saved decisions</summary>
+<summary>More screenshots: search, source items, collections, and saved decisions</summary>
 
-### Inspect the evidence
+### Inspect a source item
 
-![A coverage gap showing demand, coverage, a timeline, score breakdown and selected map region](docs/screenshots/evidence.png)
+![A source paper and its position in the collection map](docs/screenshots/ophthalmology-item.png)
 
 ### Search within the collection
 
-![A semantic search assessment with supporting matches in the synthetic collection](docs/screenshots/search.png)
+![Semantic search and supporting medical-paper matches](docs/screenshots/ophthalmology-search.png)
+
+### Inspect collection readiness
+
+![The indexed medical collection, role counts and calibration details](docs/screenshots/ophthalmology-collections.png)
 
 ### Keep a decision log
 
@@ -100,7 +108,7 @@ npm run tauri dev
 If `protoc` is not on `PATH`, set `PROTOC` to its absolute executable path.
 No model weights are bundled. See [development and model setup](docs/development.md)
 for installation commands, local checks, CLI examples and native packaging.
-There is no signed/notarized end-user release promised by this repository.
+The current evaluation path is building from source; signed installers are a later milestone.
 
 ## Engineering choices
 

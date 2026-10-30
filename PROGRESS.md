@@ -1843,3 +1843,15 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Not done: no workflow was dispatched (both stay manual), so Windows/Linux remain
   unverified. About text, topics, vulnerability reporting and the GitHub email-privacy
   settings are for the owner to set in the web UI.
+
+## 2026-10-30 — Current screenshots and repository presentation
+
+- Located and visually reviewed the four owner-supplied ophthalmology captures already
+  in docs/screenshots/. Updated the public README to use the current gap view as its
+  hero and link the current search, source-item and Collections captures. Kept the
+  synthetic Saved example labelled separately; added collection-level evidence context.
+- Kept AGENTS.md/CLAUDE.md and the root ledger in place: these are active contributor
+  instructions and the documented source of truth, rather than disposable clutter.
+- Checked local README image/link targets and diff formatting. No application code or
+  workflow triggers changed. Public repository topics/About and private vulnerability
+  reporting are handled separately from source changes; no CI was dispatched here.

@@ -1579,4 +1579,6 @@ packaging gates are still open. Details, reproducible commands and limitations:
   index rows on hairlines with dot status marks (ink instead of mint), and text-button
   actions. The details panel uses labelled calibration and regions lines. Behaviour is
   unchanged. The sidebar logo is now a fixed 100 px wide.
-- `npm run build` (tsc + Vite) passed. Not yet checked visually in the running app.
+- `npm run build` (tsc + Vite) and the macOS release .app bundle build passed (existing
+  upstream linker warning). Relaunched the standalone app with the dev model store; live
+  appearance remains for owner review. No CI dispatched.

@@ -1712,8 +1712,12 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Decisions and spec conflicts: owner requested the unified header action and removal of
   unavailable-source placeholders. Updated SPEC §8; no connectors or import behavior added.
 - Validation: frontend TypeScript/Vite build, all 29 existing UI tests and diff checks
-  passed. No native rebuild/relaunch or CI run for this change; native appearance remains
-  unverified until the next app rebuild.
+  passed. On the owner's subsequent relaunch request, rebuilt the macOS .app bundle
+  successfully (existing upstream Apple __eh_frame linker warning) and launched the canonical
+  bundle. Accessibility inspection verified Add to Dataset in the project header and no idle
+  indexing preview. Current recent-project history was retained; one bundled app process
+  remains. Screenshot inspection timed out, so pixel-level layout review remains with the
+  owner. No CI run.
 
 ## 2026-10-30 — Public repository presentation and MIT licensing
 

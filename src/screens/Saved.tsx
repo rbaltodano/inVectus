@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, KIND_LABEL, VERDICTS, verdictLabel, when, type SavedOverview } from "../api";
+import { agentName, api, KIND_LABEL, VERDICTS, verdictLabel, when, type SavedOverview } from "../api";
 import { ErrorLine, tableKey, useAction, type Ctx } from "../App";
 import LineArt from "../LineArt";
 
@@ -30,6 +30,7 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
     Number(b.gap_id !== null && selectedIds.has(b.gap_id)) - Number(a.gap_id !== null && selectedIds.has(a.gap_id)));
   const decisions = [...(saved?.decisions ?? [])].filter((d) => !filter || d.verdict.verdict === filter)
     .sort((a, b) => Number(b.verdict.verdict === "selected") - Number(a.verdict.verdict === "selected"));
+  const suggested = gapsLoading || gapsError ? [] : gaps.filter((g) => g.suggestion);
   const next = !gapsLoading && !gapsError && saved ? [...gaps].sort((a, b) => b.score - a.score)
     .find((g) => !g.verdict && !saved.bookmarks.some((b) => b.gap_id === g.gap_id)) : undefined;
 
@@ -81,8 +82,18 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
           {d.gap_id !== null ? <button type="button" className="text-btn" onClick={() => ctx.push({ kind: "gap", id: d.gap_id! })}>Review evidence / edit decision</button> : <span className="dim small">No matching gap in the current scan · decision retained</span>}
         </article>)}
       </section>
+      {suggested.length > 0 && <section className="saved-section" aria-labelledby="saved-suggested">
+        <div className="row wrap"><h2 id="saved-suggested" className="section">03 / Agent suggestions</h2><span className="dim small push">Waiting for you</span></div>
+        <p className="dim small">Suggested by an AI agent connected to this project. They are not decisions until you accept them.</p>
+        {suggested.map((g) => <article className="saved-entry agent" key={g.gap_id}>
+          <div className="row wrap"><span className="label">Suggests {verdictLabel(g.suggestion!.verdict).toLowerCase()}</span><span className="dim small push">{agentName(g.suggestion!.author)} · {recordedAt(g.suggestion!.updated_at)}</span></div>
+          <h3 className="saved-title">{g.label}</h3>
+          <p className="saved-note">{g.suggestion!.note}</p>
+          <button type="button" className="text-btn" onClick={() => ctx.push({ kind: "gap", id: g.gap_id })}>Review evidence and respond</button>
+        </article>)}
+      </section>}
       {next && <section className="saved-section" aria-labelledby="saved-next">
-        <div className="row wrap"><h2 id="saved-next" className="section">03 / Next to review</h2><span className="dim small push">Highest ranked · not saved</span></div>
+        <div className="row wrap"><h2 id="saved-next" className="section">{suggested.length ? "04" : "03"} / Next to review</h2><span className="dim small push">Highest ranked · not saved</span></div>
         <article className="saved-entry"><div className="row saved-entry-heading"><h3 className="saved-title">{next.label}</h3><span className="score">{next.score.toFixed(2)}</span></div>
           <p className="dim small">{next.explanation}</p><button type="button" className="text-btn" onClick={() => ctx.push({ kind: "gap", id: next.gap_id })}>Review evidence</button></article>
       </section>}

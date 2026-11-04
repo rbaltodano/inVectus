@@ -359,7 +359,7 @@ fn mcp_server_over_stdio() {
         "one reply per request, none for the notification"
     );
     assert_eq!(replies[0]["result"]["serverInfo"]["name"], "invectus");
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 14);
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 15);
     assert_eq!(replies[2]["result"]["isError"], true);
     assert!(String::from_utf8_lossy(&o.stderr).contains("ready on stdio"));
 }
@@ -393,7 +393,7 @@ impl Mcp {
         };
         m.request(
             "initialize",
-            serde_json::json!({ "protocolVersion": "2025-06-18" }),
+            serde_json::json!({ "protocolVersion": "2025-06-18", "clientInfo": { "name": "t", "version": "0" } }),
         );
         m
     }
@@ -524,12 +524,32 @@ fn agent_imports_a_csv_and_reports_gaps_over_mcp() {
     );
     assert!(verdict["verdict"].is_string());
     // Verification needs the network: refused here (offline, and the switch is off).
-    if let Some(id) = gaps["gaps"][0]["gap"]["gap_id"].as_i64() {
+    let id = gaps["gaps"][0]["gap_id"]
+        .as_i64()
+        .expect("the scan found gaps");
+    {
         let e = m.tool_error(
             "verify_gap",
             serde_json::json!({ "collection": "notes", "gap_id": id }),
         );
         assert!(e.contains("network") || e.contains("offline"), "{e}");
+    }
+    // Provenance: the suggestion is recorded as the agent's and leaves the decision alone.
+    {
+        let v = m.tool(
+            "suggest_decision",
+            serde_json::json!({
+                "collection": "notes", "gap_id": id, "verdict": "already_exists",
+                "reasoning": "Study 0 already covers this.", "model": "test-model"
+            }),
+        );
+        assert_eq!(v["suggestion"]["author"], "agent:t/test-model", "{v}");
+        assert!(v["verdict"].is_null());
+        let d = m.tool(
+            "gap_detail",
+            serde_json::json!({ "collection": "notes", "gap_id": id }),
+        );
+        assert_eq!(d["suggestion"]["note"], "Study 0 already covers this.");
     }
     let exported = m.tool(
         "export_gaps",

@@ -68,9 +68,12 @@ pub fn overview(project: &Project, table: &VectorTableRecord) -> Result<SavedOve
             })
         })
         .collect::<Result<_>>()?;
+    // The decision log holds the person's decisions; suggestions show on their gaps.
     let records = project
         .store
-        .gap_verdicts(&table.collection_id, &table.space_id)?;
+        .gap_verdicts(&table.collection_id, &table.space_id)?
+        .into_iter()
+        .filter(|v| v.entry == "decision");
     let mut decisions: Vec<SavedDecision> = vec![];
     for verdict in records {
         // Records arrive newest first; retain the latest judgment for each matching gap.

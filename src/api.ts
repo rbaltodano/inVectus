@@ -75,15 +75,22 @@ export type GapKind = "coverage" | "stale" | "bridge";
 export interface Term { name: string; value: number; z: number; weight: number; contribution: number }
 export interface YearCount { year: number; demand: number; coverage: number }
 export interface OutsideHit { title: string; source: string; year: number | null; url: string | null; similarity: number }
-export interface GapVerdictRecord { kind: string; verdict: string; note: string; updated_at: string | null }
+/** A decision (the person's), an agent's suggestion, or the person's dismissal of one. */
+export interface GapVerdictRecord {
+  kind: string; verdict: string; note: string; updated_at: string | null;
+  /** `person`, or `agent:<client>/<model>`. */
+  author: string; entry: "decision" | "suggestion" | "dismissal";
+}
 export interface GapView {
   gap_id: number; kind: GapKind; score: number; terms: Term[]; region_a: number; region_b: number | null; label: string;
   explanation: string; demand: number; coverage: number; demand_since: number; last_coverage: string | null;
   momentum: number | null; similarity: number | null; bridge_items: number | null; timeline: YearCount[]; core: number[];
-  verdict: GapVerdictRecord | null; verification: { matches: number; summary: string; closest: OutsideHit[] } | null;
+  verdict: GapVerdictRecord | null;
+  /** An agent's suggestion waiting for the person; never the decision itself. */
+  suggestion: GapVerdictRecord | null; verification: { matches: number; summary: string; closest: OutsideHit[] } | null;
 }
 export interface SavedBookmark {
-  kind: string; core_key: string; core: number[]; snapshot: Omit<GapView, "verdict" | "verification">; saved_at: string; gap_id: number | null;
+  kind: string; core_key: string; core: number[]; snapshot: Omit<GapView, "verdict" | "suggestion" | "verification">; saved_at: string; gap_id: number | null;
 }
 export interface SavedDecision { core_key: string; label: string; gap_id: number | null; verdict: GapVerdictRecord }
 export interface SavedOverview { bookmarks: SavedBookmark[]; decisions: SavedDecision[] }
@@ -138,6 +145,7 @@ export const api = {
   gap: (t: TableRef, gapId: number) => invoke<GapDetail>("gap_detail", { form: t, gapId }),
   setVerdict: (t: TableRef, gapId: number, verdict: string, note: string) =>
     invoke<GapView>("set_gap_verdict", { form: t, gapId, verdict, note }),
+  dismissSuggestion: (t: TableRef, gapId: number) => invoke<GapView>("dismiss_gap_suggestion", { form: t, gapId }),
   saved: (t: TableRef) => invoke<SavedOverview>("saved_overview", { form: t }),
   bookmark: (t: TableRef, gapId: number) => invoke<void>("bookmark_gap", { form: t, gapId }),
   removeBookmark: (t: TableRef, kind: string, coreKey: string) => invoke<void>("remove_gap_bookmark", { form: t, kind, coreKey }),
@@ -176,6 +184,8 @@ export const VERDICTS: [string, string][] = [
   ["open", "Open: not decided"], ["confirmed_gap", "Confirmed gap"], ["already_exists", "Already exists"],
   ["not_viable", "Not viable"], ["selected", "Selected to work on"],
 ];
+/** "claude-code · claude-opus-5-5" from `agent:claude-code/claude-opus-5-5`. */
+export const agentName = (author: string) => author.replace(/^agent:/, "").split("/").filter(Boolean).join(" · ") || "an agent";
 export const verdictLabel = (v: string | undefined) => VERDICTS.find(([id]) => id === v)?.[1].replace(": not decided", "") ?? "Not decided";
 
 /** The system's own file or folder picker (never a web upload form). Returns a path or null. */

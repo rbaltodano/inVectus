@@ -16,7 +16,11 @@ pub const CARRY_OVER_AT: f64 = 0.5;
 pub struct GapView {
     #[serde(flatten)]
     pub gap: Gap,
+    /// The person's decision (the newest one carried over to this gap).
     pub verdict: Option<GapVerdictRecord>,
+    /// An agent's suggestion the person has not acted on yet: shown beside the decision,
+    /// never in its place (target product §7).
+    pub suggestion: Option<GapVerdictRecord>,
     /// The latest outside-source check of this gap (`invectus gaps verify`), summarised.
     pub verification: Option<VerificationSummary>,
 }
@@ -95,12 +99,29 @@ pub(crate) fn jaccard(a: &[i64], b: &[i64]) -> f64 {
     a.intersection(&b).count() as f64 / union as f64
 }
 
-/// The newest verdict of the same type whose core overlaps the gap's enough.
-fn matching(gap: &Gap, verdicts: &[GapVerdictRecord]) -> Option<GapVerdictRecord> {
+/// Records (newest first) of the same type whose core overlaps the gap's enough.
+fn matching<'a>(
+    gap: &'a Gap,
+    verdicts: &'a [GapVerdictRecord],
+) -> impl Iterator<Item = &'a GapVerdictRecord> {
     verdicts
         .iter()
-        .find(|v| v.kind == gap.kind.as_str() && jaccard(&v.core, &gap.core) >= CARRY_OVER_AT)
-        .cloned()
+        .filter(|v| v.kind == gap.kind.as_str() && jaccard(&v.core, &gap.core) >= CARRY_OVER_AT)
+}
+
+/// The newest decision, and a suggestion that is newer than any decision or dismissal.
+fn decision_and_suggestion(
+    gap: &Gap,
+    verdicts: &[GapVerdictRecord],
+) -> (Option<GapVerdictRecord>, Option<GapVerdictRecord>) {
+    let decision = matching(gap, verdicts)
+        .find(|v| v.entry == "decision")
+        .cloned();
+    let suggestion = matching(gap, verdicts)
+        .next()
+        .filter(|v| v.entry == "suggestion")
+        .cloned();
+    (decision, suggestion)
 }
 
 /// Gaps of the latest scan with their verdicts.
@@ -128,8 +149,10 @@ pub fn list(project: &Project, table: &VectorTableRecord) -> Result<GapList> {
         .into_iter()
         .map(|r| {
             let gap: Gap = serde_json::from_value(r.data)?;
+            let (verdict, suggestion) = decision_and_suggestion(&gap, &verdicts);
             Ok(GapView {
-                verdict: matching(&gap, &verdicts),
+                verdict,
+                suggestion,
                 verification: project
                     .store
                     .latest_verification(&run.run_id, gap.gap_id)?
@@ -168,7 +191,8 @@ pub fn detail(project: &Project, table: &VectorTableRecord, gap_id: i32) -> Resu
     Ok(GapDetail { view, core_items })
 }
 
-/// Record a verdict on a gap of the latest scan.
+/// Record the person's decision on a gap of the latest scan. Any pending suggestion is
+/// settled by it.
 pub fn set_verdict(
     project: &Project,
     table: &VectorTableRecord,
@@ -176,26 +200,87 @@ pub fn set_verdict(
     verdict: &str,
     note: &str,
 ) -> Result<GapView> {
-    let mut view = list(project, table)?
+    record(project, table, gap_id, verdict, note, "person", "decision")
+}
+
+/// Record an agent's suggested decision and its reasoning. It waits for the person: it never
+/// changes the gap's decision.
+pub fn suggest(
+    project: &Project,
+    table: &VectorTableRecord,
+    gap_id: i32,
+    verdict: &str,
+    reasoning: &str,
+    author: &str,
+) -> Result<GapView> {
+    if reasoning.trim().is_empty() {
+        bail!("a suggestion needs its reasoning");
+    }
+    record(
+        project,
+        table,
+        gap_id,
+        verdict,
+        reasoning,
+        author,
+        "suggestion",
+    )
+}
+
+/// The person sets a gap's pending suggestion aside without deciding.
+pub fn dismiss_suggestion(
+    project: &Project,
+    table: &VectorTableRecord,
+    gap_id: i32,
+) -> Result<GapView> {
+    let view = find(project, table, gap_id)?;
+    let s = view
+        .suggestion
+        .with_context(|| format!("gap {gap_id} has no pending suggestion"))?;
+    record(
+        project,
+        table,
+        gap_id,
+        &s.verdict,
+        "",
+        "person",
+        "dismissal",
+    )
+}
+
+fn find(project: &Project, table: &VectorTableRecord, gap_id: i32) -> Result<GapView> {
+    list(project, table)?
         .gaps
         .into_iter()
         .find(|g| g.gap.gap_id == gap_id)
-        .with_context(|| format!("no gap {gap_id} in the latest scan"))?;
+        .with_context(|| format!("no gap {gap_id} in the latest scan"))
+}
+
+fn record(
+    project: &Project,
+    table: &VectorTableRecord,
+    gap_id: i32,
+    verdict: &str,
+    note: &str,
+    author: &str,
+    entry: &str,
+) -> Result<GapView> {
+    let view = find(project, table, gap_id)?;
     if view.gap.core.is_empty() {
         bail!("gap {gap_id} has no core items to remember the verdict by");
     }
-    let rec = GapVerdictRecord {
+    project.store.save_gap_verdict(&GapVerdictRecord {
         collection_id: table.collection_id.clone(),
         space_id: table.space_id.clone(),
         kind: view.gap.kind.as_str().into(),
         core: view.gap.core.clone(),
         verdict: verdict.into(),
         note: note.into(),
+        author: author.into(),
+        entry: entry.into(),
         updated_at: None,
-    };
-    project.store.save_gap_verdict(&rec)?;
-    view.verdict = Some(rec);
-    Ok(view)
+    })?;
+    find(project, table, gap_id)
 }
 
 #[cfg(test)]

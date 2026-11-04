@@ -46,6 +46,8 @@ pub fn serve() -> Result<()> {
 pub struct Server {
     session: Shared,
     board: SharedBoard,
+    /// The client's name from `initialize` (`clientInfo.name`), for provenance.
+    client: Option<String>,
 }
 
 /// Job changes are logged to stderr; agents follow progress with `job_status`.
@@ -94,7 +96,13 @@ impl Server {
         // Notifications (no id) get no reply; replies from the client are ignored too.
         let id = id?;
         let result = match method.as_str() {
-            "initialize" => Ok(initialize(&params)),
+            "initialize" => {
+                self.client = params["clientInfo"]["name"]
+                    .as_str()
+                    .map(|n| n.trim().to_string())
+                    .filter(|n| !n.is_empty());
+                Ok(initialize(&params))
+            }
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({ "tools": tools() })),
             "tools/call" => Ok(self.call(&params)),
@@ -273,6 +281,28 @@ impl Server {
                 })?;
                 value(&r)
             }
+            "suggest_decision" => {
+                let a: SuggestArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let author = self.author(a.model.as_deref());
+                let view = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    invectus_gaps::suggest(
+                        &s.project,
+                        &table,
+                        a.gap_id,
+                        &a.verdict,
+                        &a.reasoning,
+                        &author,
+                    )
+                })?;
+                let mut v = value(&view)?;
+                v["next"] = json!(
+                    "Recorded as a suggestion. The person accepts, edits or dismisses it in the \
+                     app; the gap's decision is unchanged until then."
+                );
+                Ok(v)
+            }
             "export_gaps" => {
                 let a: ExportArgs = parse(args)?;
                 self.ensure_open(a.project.as_deref())?;
@@ -284,6 +314,22 @@ impl Server {
                 Ok(json!({ "path": path }))
             }
             other => Err(format!("unknown tool {other:?}")),
+        }
+    }
+
+    /// `agent:<client>/<model>`, from the handshake and the model the agent names.
+    fn author(&self, model: Option<&str>) -> String {
+        let clean = |s: &str| {
+            s.chars()
+                .filter(|c| !c.is_control())
+                .collect::<String>()
+                .trim()
+                .replace('/', "-")
+        };
+        let client = clean(self.client.as_deref().unwrap_or("unknown-client"));
+        match model.map(clean).filter(|m| !m.is_empty()) {
+            Some(m) => format!("agent:{client}/{m}"),
+            None => format!("agent:{client}"),
         }
     }
 
@@ -442,6 +488,18 @@ impl ImportArgs {
             limit: self.limit,
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SuggestArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    gap_id: i32,
+    verdict: String,
+    reasoning: String,
+    model: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -662,6 +720,24 @@ fn tools() -> Value {
             "annotations": { "readOnlyHint": false, "destructiveHint": false, "openWorldHint": true },
         },
         {
+            "name": "suggest_decision",
+            "description": "Suggest a decision on a gap, with your reasoning. It is kept apart \
+                from the person's decision and shown to them in the app as the agent's \
+                suggestion; it never becomes a decision without them.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "gap_id": { "type": "integer" },
+                "verdict": { "type": "string",
+                    "enum": ["open", "confirmed_gap", "already_exists", "not_viable", "selected"] },
+                "reasoning": { "type": "string", "description": "What you checked and why: the \
+                    person reads this next to the evidence." },
+                "model": { "type": "string", "description": "Your model's name, recorded with \
+                    the suggestion (e.g. claude-opus-5-5)." }
+            }, "required": ["collection", "gap_id", "verdict", "reasoning"],
+                "additionalProperties": false },
+            "annotations": writes,
+        },
+        {
             "name": "export_gaps",
             "description": "Write the latest gaps as Markdown or CSV (titles and links only) into \
                 the project's exports folder; returns the file path.",
@@ -728,6 +804,7 @@ mod tests {
                 "cancel_job",
                 "scan_gaps",
                 "verify_gap",
+                "suggest_decision",
                 "export_gaps"
             ]
         );
@@ -894,7 +971,11 @@ mod tests {
         assert_eq!(r["result"]["isError"], false, "{r}");
         let gaps = r["result"]["structuredContent"]["gaps"].as_array().unwrap();
         assert!(gaps.len() <= 3);
-        if let Some(id) = gaps.first().and_then(|g| g["gap"]["gap_id"].as_i64()) {
+        let id = gaps
+            .first()
+            .and_then(|g| g["gap_id"].as_i64())
+            .expect("gaps found");
+        {
             let r = call(
                 &mut s,
                 3,

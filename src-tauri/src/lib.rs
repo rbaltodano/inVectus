@@ -355,6 +355,23 @@ async fn set_gap_verdict(
     .await
 }
 
+/// Set a gap's pending agent suggestion aside without deciding (the decision is unchanged).
+#[tauri::command]
+async fn dismiss_gap_suggestion(
+    state: State<'_, AppState>,
+    form: TableForm,
+    gap_id: i32,
+) -> CmdResult<GapView> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session_wait(&session, |s| {
+            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+            invectus_gaps::dismiss_suggestion(&s.project, &table, gap_id)
+        })
+    })
+    .await
+}
+
 /// Describe what would fill a gap with the local language model (round-trip checked; stored).
 /// Loads the model for each call (~1 s once its checksum is cached).
 #[tauri::command]
@@ -531,6 +548,7 @@ pub fn run() {
             bookmark_gap,
             remove_gap_bookmark,
             set_gap_verdict,
+            dismiss_gap_suggestion,
             describe_gap,
             verify_gap
         ])

@@ -1726,6 +1726,14 @@ fn cmd_gaps(c: GapsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
                     v.note
                 );
             }
+            if let Some(v) = &d.view.suggestion {
+                println!(
+                    "       suggested by {}: {}: {}",
+                    v.author.strip_prefix("agent:").unwrap_or(&v.author),
+                    v.verdict,
+                    v.note
+                );
+            }
             if let Some(v) = &d.view.verification {
                 for h in &v.closest {
                     println!(

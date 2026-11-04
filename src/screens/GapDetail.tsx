@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { api, fmt, year, KIND_LABEL, VERDICTS, type SavedBookmark, type DescribeResult, type GapDetail, type Verification } from "../api";
+import { api, agentName, fmt, verdictLabel, when, year, KIND_LABEL, VERDICTS, type SavedBookmark, type DescribeResult, type GapDetail, type Verification } from "../api";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import Link from "../Link";
 import { stagger } from "../motion";
@@ -30,6 +30,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const save = useAction();
   const describe = useAction();
   const verify = useAction();
+  const respond = useAction();
 
   useEffect(() => {
     load.run(async () => {
@@ -61,7 +62,23 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
     const kept = await api.saved(tref);
     setBookmark(kept.bookmarks.find((b) => b.gap_id === id));
   });
-  const saveVerdict = () => save.run(async () => { const updated = await api.setVerdict(tref, id, verdict, note); setGap({ ...gap, verdict: updated.verdict }); await ctx.reloadGaps(); setSaved(true); setTimeout(() => setSaved(false), 2000); });
+  const saveVerdict = () => save.run(async () => { const updated = await api.setVerdict(tref, id, verdict, note); setGap({ ...gap, verdict: updated.verdict, suggestion: updated.suggestion }); await ctx.reloadGaps(); setSaved(true); setTimeout(() => setSaved(false), 2000); });
+  const suggestion = gap.suggestion;
+  // Accepting records the person's own decision; the agent's reasoning goes into the note
+  // only when the person has not written one.
+  const fromAgent = suggestion && `${agentName(suggestion.author)}: ${suggestion.note}`;
+  const acceptSuggestion = () => respond.run(async () => {
+    const updated = await api.setVerdict(tref, id, suggestion!.verdict, note.trim() ? note : fromAgent!);
+    setGap({ ...gap, verdict: updated.verdict, suggestion: updated.suggestion });
+    setVerdict(suggestion!.verdict); setNote(updated.verdict?.note ?? note);
+    await ctx.reloadGaps();
+  });
+  const editSuggestion = () => { setVerdict(suggestion!.verdict); if (!note.trim()) setNote(fromAgent!); };
+  const dismissSuggestion = () => respond.run(async () => {
+    const updated = await api.dismissSuggestion(tref, id);
+    setGap({ ...gap, suggestion: updated.suggestion });
+    await ctx.reloadGaps();
+  });
 
   return <div className="page wide">
     <div className="title-row">
@@ -142,8 +159,20 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           </div>
           <p className="dim small">{bookmark ? "Bookmarked in Saved." : "Save this gap to review later, with or without a decision."}</p>
           <ErrorLine error={pin.error} />
+          {suggestion && <div className="suggestion stack gap-s" role="note" aria-labelledby="sg">
+            <div className="row wrap"><span id="sg" className="label">Agent suggests</span><span className="dim small push">{agentName(suggestion.author)}{suggestion.updated_at ? ` · ${when(`${suggestion.updated_at}Z`)}` : ""}</span></div>
+            <b>{verdictLabel(suggestion.verdict)}</b>
+            <p className="saved-note">{suggestion.note}</p>
+            <div className="row wrap">
+              <button type="button" className="btn" disabled={respond.busy} onClick={acceptSuggestion}>Accept</button>
+              <button type="button" className="text-btn" disabled={respond.busy} onClick={editSuggestion}>Edit before saving</button>
+              <button type="button" className="text-btn push" disabled={respond.busy} onClick={dismissSuggestion}>Dismiss</button>
+            </div>
+            <div className="dim small">A suggestion, not a decision: nothing changes until you accept it or save your own.</div>
+            <ErrorLine error={respond.error} />
+          </div>}
           <h2 id="vd">Decision and note</h2>
-          <div className="muted small">Yours, kept apart from the engine’s score; it carries over when gaps are scanned again.</div>
+          <div className="muted small">Yours, kept apart from the engine’s score{gap.verdict?.author === "person" && gap.verdict.updated_at ? ` · saved ${when(`${gap.verdict.updated_at}Z`)}` : ""}; it carries over when gaps are scanned again.</div>
           <div role="radiogroup" aria-labelledby="vd" className="stack gap-s">
             {VERDICTS.map(([v, label]) => <button key={v} type="button" role="radio" aria-checked={verdict === v} className="option" onClick={() => setVerdict(v)}>{label}</button>)}
           </div>

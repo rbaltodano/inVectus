@@ -6,7 +6,9 @@ use invectus_core::{
     CancelToken, Embedding, EmbeddingIdentity, InputKind, Item, Normalization, Pooling, Project,
     Role, TextEmbedder,
 };
-use invectus_gaps::{GapKind, ScanOptions, detail, list, scan, set_verdict};
+use invectus_gaps::{
+    GapKind, ScanOptions, detail, dismiss_suggestion, list, scan, set_verdict, suggest,
+};
 use invectus_index::{EmbedJobOptions, VectorStore, run_embed, select_table};
 use invectus_regions::{RegionOptions, run_regions};
 use sha2::{Digest, Sha256};
@@ -344,6 +346,57 @@ fn planted_gaps_are_found_explained_and_keep_their_verdicts() {
     let saved = invectus_gaps::saved::overview(&p, &table).unwrap();
     assert_eq!(saved.decisions.len(), 1, "show the latest decision per gap");
     assert_eq!(saved.decisions[0].verdict.verdict, "selected");
+    assert_eq!(saved.decisions[0].verdict.author, "person");
+
+    // Agent suggestions (target product §7): kept apart from the person's decision, shown
+    // until the person decides or dismisses, and never in the decision log.
+    let g = carried[0].gap.gap_id;
+    let agent = "agent:claude-code/claude-opus-5-5";
+    assert!(
+        suggest(&p, &table, g, "already_exists", "", agent).is_err(),
+        "needs reasoning"
+    );
+    assert!(
+        suggest(&p, &table, g, "already_exists", "x", "person").is_err(),
+        "a person decides"
+    );
+    assert!(suggest(&p, &table, g, "already_exists", "x", "agent:").is_err());
+    let v = suggest(
+        &p,
+        &table,
+        g,
+        "already_exists",
+        "PubMed has a 2024 review",
+        agent,
+    )
+    .unwrap();
+    assert_eq!(
+        v.verdict.as_ref().unwrap().verdict,
+        "selected",
+        "decision unchanged"
+    );
+    let s = v.suggestion.unwrap();
+    assert_eq!(
+        (s.verdict.as_str(), s.author.as_str()),
+        ("already_exists", agent)
+    );
+    assert_eq!(s.entry, "suggestion");
+    let saved = invectus_gaps::saved::overview(&p, &table).unwrap();
+    assert_eq!(saved.decisions.len(), 1);
+    assert_eq!(saved.decisions[0].verdict.verdict, "selected");
+    // Dismissing settles it without changing the decision.
+    let v = dismiss_suggestion(&p, &table, g).unwrap();
+    assert!(v.suggestion.is_none());
+    assert_eq!(v.verdict.as_ref().unwrap().verdict, "selected");
+    assert!(
+        dismiss_suggestion(&p, &table, g).is_err(),
+        "nothing pending"
+    );
+    // A newer suggestion is pending again; the person's decision settles it.
+    suggest(&p, &table, g, "not_viable", "no data source", agent).unwrap();
+    let v = set_verdict(&p, &table, g, "not_viable", "agreed with the agent").unwrap();
+    assert!(v.suggestion.is_none());
+    assert_eq!(v.verdict.as_ref().unwrap().author, "person");
 
     // Reports carry titles, verdicts and explanations, never the source text.
     let csv = invectus_gaps::export::csv(&l);

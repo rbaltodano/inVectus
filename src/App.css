@@ -698,3 +698,9 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
   flex: none; align-self: center; margin-left: auto; min-width: 16px;
   color: var(--dim); font: 11px var(--mono); text-align: right;
 }
+
+/* Agent suggestions (target product §7): a dashed outline sets them apart from the person's
+   decision; mint stays reserved for "your search". */
+.suggestion { padding: 12px; border: 1px dashed var(--line-2); border-radius: var(--r); background: var(--bg); }
+.suggestion .saved-note { margin: 0; color: var(--text-2); }
+.saved-entry.agent { border-top-style: dashed; }

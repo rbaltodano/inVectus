@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS midpoints (
   collection_id TEXT, space_id TEXT, target JSON, result JSON, created_at TIMESTAMP);
 ALTER TABLE regions ADD COLUMN IF NOT EXISTS llm_label TEXT;
 ALTER TABLE regions ADD COLUMN IF NOT EXISTS llm_model TEXT;
+ALTER TABLE gap_verdicts ADD COLUMN IF NOT EXISTS author TEXT;
+ALTER TABLE gap_verdicts ADD COLUMN IF NOT EXISTS entry TEXT;
 "#;
 
 /// Settings applied to every DuckDB connection: never fetch extensions from the network.
@@ -232,10 +234,27 @@ pub struct GapVerdictRecord {
     pub core: Vec<i64>,
     /// open, confirmed_gap, already_exists, not_viable or selected.
     pub verdict: String,
+    /// The person's note, or an agent's reasoning for a suggestion.
     pub note: String,
+    /// `person`, or `agent:<client>/<model>` (target product §7).
+    #[serde(default = "person")]
+    pub author: String,
+    /// `decision`, `suggestion` (an agent's, waiting for the person) or `dismissal` (the
+    /// person set a suggestion aside without deciding). See [`GAP_ENTRIES`].
+    #[serde(default = "decision")]
+    pub entry: String,
     #[serde(default)]
     pub updated_at: Option<String>,
 }
+
+fn person() -> String {
+    "person".into()
+}
+fn decision() -> String {
+    "decision".into()
+}
+
+pub const GAP_ENTRIES: &[&str] = &["decision", "suggestion", "dismissal"];
 
 /// A deliberate bookmark, independent of the person's verdict. Snapshot retains its label
 /// and evidence identity when a later scan has no matching gap.
@@ -1075,15 +1094,35 @@ impl Store {
                 GAP_VERDICTS.join(", ")
             );
         }
+        if !GAP_ENTRIES.contains(&v.entry.as_str()) {
+            bail!(
+                "unknown entry {:?} (one of: {})",
+                v.entry,
+                GAP_ENTRIES.join(", ")
+            );
+        }
+        let agent = v.author.strip_prefix("agent:");
+        if !(v.author == "person" || agent.is_some_and(|a| !a.trim().is_empty()))
+            || v.author.chars().any(char::is_control)
+        {
+            bail!("author must be `person` or `agent:<client>/<model>`");
+        }
+        if v.entry == "suggestion" && agent.is_none() {
+            bail!("only an agent makes suggestions; a person records a decision");
+        }
         self.conn.execute(
-            "INSERT INTO gap_verdicts VALUES (?, ?, ?, CAST(? AS JSON), ?, ?, now())",
+            "INSERT INTO gap_verdicts
+               (collection_id, space_id, kind, core, verdict, note, updated_at, author, entry)
+             VALUES (?, ?, ?, CAST(? AS JSON), ?, ?, now(), ?, ?)",
             params![
                 v.collection_id,
                 v.space_id,
                 v.kind,
                 serde_json::to_string(&v.core)?,
                 v.verdict,
-                v.note
+                v.note,
+                v.author,
+                v.entry
             ],
         )?;
         Ok(())
@@ -1096,7 +1135,8 @@ impl Store {
         space_id: &str,
     ) -> Result<Vec<GapVerdictRecord>> {
         let mut st = self.conn.prepare(
-            "SELECT kind, core::VARCHAR, verdict, note, CAST(updated_at AS VARCHAR)
+            "SELECT kind, core::VARCHAR, verdict, note, CAST(updated_at AS VARCHAR),
+                    coalesce(author, 'person'), coalesce(entry, 'decision')
              FROM gap_verdicts WHERE collection_id = ? AND space_id = ?
              ORDER BY updated_at DESC",
         )?;
@@ -1107,10 +1147,12 @@ impl Store {
                 r.get::<_, String>(2)?,
                 r.get::<_, String>(3)?,
                 r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+                r.get::<_, String>(6)?,
             ))
         })?;
         rows.map(|row| {
-            let (kind, core, verdict, note, at) = row?;
+            let (kind, core, verdict, note, at, author, entry) = row?;
             Ok(GapVerdictRecord {
                 collection_id: collection_id.into(),
                 space_id: space_id.into(),
@@ -1118,6 +1160,8 @@ impl Store {
                 core: serde_json::from_str(&core)?,
                 verdict,
                 note,
+                author,
+                entry,
                 updated_at: Some(at),
             })
         })

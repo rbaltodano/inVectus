@@ -844,9 +844,10 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A4 in [docs/target-product.md](docs/target-product.md):
-   decision provenance and agent suggestions (A1–A3 done 2026-11-03/04). The owner designs
-   the app side of A4, A6 and A7 when work reaches them.
+1. Agent interface, roadmap A5 in [docs/target-product.md](docs/target-product.md):
+   agent-written descriptions, paraphrases and region names with the engine's checks
+   (A1–A4 done 2026-11-03/04). App UI for agent work is built in the existing style for the
+   owner to refine.
 2. Decision provenance (A4) before agents can suggest decisions.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
    indexing preview is intentional for tuning and must be removed before release.
@@ -2027,4 +2028,44 @@ packaging gates are still open. Details, reproducible commands and limitations:
   103 workspace tests, fmt and clippy passed (arm64 macOS, M4 Pro). No CI or push.
 - Unverified: a real agent client session; a cancel arriving mid-calibration on a large
   collection (the 60 s wait may not suffice there).
+
+## 2026-11-04 — Decision provenance and agent suggestions (roadmap A4)
+
+- Store: `gap_verdicts` gains `author` (`person` or `agent:<client>/<model>`) and `entry`
+  (`decision`, `suggestion`, `dismissal`), added with `ALTER … ADD COLUMN IF NOT EXISTS`;
+  older rows read as `person` / `decision`. Saving validates both; only an agent can make a
+  suggestion.
+- Gaps: `GapView` adds `suggestion`, the newest matching entry when it is a suggestion (a
+  later decision or dismissal settles it). `verdict` stays the person's newest decision and
+  is never replaced by a suggestion. The Saved decision log lists decisions only. Exports
+  are unchanged (decisions only). New `suggest` and `dismiss_suggestion`; `gaps show`
+  prints a pending suggestion.
+- MCP: `suggest_decision` (15 tools). Author = `agent:` + the client's `clientInfo.name`
+  from `initialize` + `/model` when the agent names its model. Reasoning is required.
+- App (built in the instrument style, to refine with the owner): gap detail shows an
+  "Agent suggests" block above "Decision and note" with a dashed outline (mint stays
+  reserved for the person's search), the agent's name, time, suggested decision and
+  reasoning, and Accept / Edit before saving / Dismiss. Accept saves the person's own
+  decision (the agent's reasoning goes into the note only when the note is empty). The gap
+  list shows "agent suggests …"; Saved has an "Agent suggestions" section. New command
+  `dismiss_gap_suggestion`.
+- Fixed test gaps from A2/A3: `gap_id` is at the top level of a gap view (flattened); the
+  MCP tests looked for `gap.gap_id` and silently skipped the gap-detail and verify checks.
+  They are now mandatory and pass.
+- Checks (arm64 macOS, M4 Pro): 103 workspace tests (including the suggestion flow in
+  `gaps_flow` and over MCP stdio), fmt, clippy, `npm run build`, 29 UI tests; macOS .app
+  bundle rebuilt. The new UI was not checked visually in the running app.
+- Demo data: one suggestion seeded through MCP on `.spike-data/p1/work/gapmap.invectus`
+  gap 1 ("pressure · effects · effect"), author `agent:claude-code/claude-opus-5-5`,
+  reasoning marked as a demo; dismiss it in the app after review. No CI or push.
+
+### Decisions and spec conflicts to review
+- Target product §7 names the field `kind` (`decision` | `suggestion`); `gap_verdicts.kind`
+  already holds the gap type, so it is `entry`, with a third value `dismissal` for "set
+  aside without deciding".
+- §7 also asks for `author` on descriptions, region names and calibration paraphrases.
+  Only the local model writes those today; their provenance comes with A5, when agents can
+  write them.
+- Open question 3 (automatic decisions) is answered conservatively for now: suggestions
+  never become decisions without the person.
 

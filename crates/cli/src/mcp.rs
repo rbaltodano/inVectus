@@ -1,13 +1,15 @@
 //! `invectus mcp`: a Model Context Protocol server over stdio (target product §5, roadmap A2).
 //! One JSON-RPC message per line on stdin, one reply per line on stdout; logs go to stderr. It
-//! opens no network port. These are the read tools; nothing here writes to a project or uses
-//! the network.
+//! opens no network port. Read tools (A2) and write tools (A3): imports and other jobs run in
+//! the background and are followed with `job_status`. The only network use is `verify_gap`,
+//! and only when the project's network switch is on.
 
 use anyhow::{Context, Result};
 use invectus_core::Role;
 use invectus_index::select_table;
 use invectus_orchestration::{
-    self as orch, CheckForm, OpResult, SearchForm, Shared, SharedBoard, with_session_wait,
+    self as orch, CheckForm, Emit, ImportForm, JobInfo, OpResult, SearchForm, Shared, SharedBoard,
+    TableForm, encoder_for, with_session_wait,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -36,6 +38,7 @@ pub fn serve() -> Result<()> {
             out.flush()?;
         }
     }
+    server.stop_jobs();
     Ok(())
 }
 
@@ -45,7 +48,32 @@ pub struct Server {
     board: SharedBoard,
 }
 
+/// Job changes are logged to stderr; agents follow progress with `job_status`.
+fn emitter() -> Emit {
+    std::sync::Arc::new(|j: &JobInfo| {
+        if !j.running() {
+            eprintln!("job {} {}: {}", j.id, j.label, j.state);
+        }
+    })
+}
+
 impl Server {
+    /// When the client goes away, cancel a running job and wait for it to stop cleanly (jobs
+    /// are resumable; this avoids leaving one half-written).
+    pub fn stop_jobs(&self) {
+        if self.board.lock().unwrap().running().is_none() {
+            return;
+        }
+        eprintln!("client closed: cancelling the running job");
+        self.board.lock().unwrap().cancel();
+        let start = std::time::Instant::now();
+        while self.board.lock().unwrap().running().is_some()
+            && start.elapsed() < std::time::Duration::from_secs(60)
+        {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
     /// The reply to one line, or `None` for notifications.
     pub fn handle_line(&mut self, line: &str) -> Option<Value> {
         match serde_json::from_str::<Value>(line) {
@@ -107,9 +135,13 @@ impl Server {
                 }))
             }
             "open_project" => {
-                let a: ProjectArgs = parse(args)?;
-                let path = a.project.ok_or("`project` is required")?;
-                let info = orch::open_project(&self.session, &self.board, &path, false)?;
+                let a: OpenArgs = parse(args)?;
+                let info = orch::open_project(
+                    &self.session,
+                    &self.board,
+                    &a.project,
+                    a.create.unwrap_or(false),
+                )?;
                 value(&info)
             }
             "project_status" => {
@@ -184,6 +216,72 @@ impl Server {
                 let mut v = value(&detail)?;
                 v["scope"] = json!(SCOPE);
                 Ok(v)
+            }
+            "inspect_source" => {
+                let a: SourceArgs = parse(args)?;
+                value(&orch::inspect_source(&a.source)?)
+            }
+            "import_collection" => {
+                let a: ImportArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let form = a.form();
+                let req = orch::request_for_session(&self.session, form)?;
+                let out = orch::import_then_index(&emitter(), &self.session, &self.board, req)?;
+                let mut v = value(&out)?;
+                v["next"] = json!(match (&out.job, &out.index_error) {
+                    (Some(_), _) =>
+                        "Indexing, mapping, gap scan and calibration run in the \
+                                     background: poll job_status until it is no longer running.",
+                    (None, Some(_)) => "Imported, but indexing could not start: see index_error.",
+                    (None, None) =>
+                        "Imported, but no embedding model is installed: see \
+                                     plan.missing (the person installs models in the app or with \
+                                     `invectus models download`).",
+                });
+                Ok(v)
+            }
+            "job_status" => value(&self.board.lock().unwrap().view()),
+            "cancel_job" => {
+                let board = self.board.lock().unwrap();
+                let running = board.running().cloned();
+                board.cancel();
+                Ok(json!({ "cancelling": running }))
+            }
+            "scan_gaps" => {
+                let a: TableArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let report = orch::scan_gaps(&self.session, &self.board, a.table(), None)?;
+                let mut v = value(&report)?;
+                v["scope"] = json!(SCOPE);
+                Ok(v)
+            }
+            "verify_gap" => {
+                let a: GapArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let r = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    encoder_for(s, &table)?;
+                    let encoder = &mut s.encoder.as_mut().unwrap().1;
+                    invectus_verify::verify_gap(
+                        &s.project,
+                        &table,
+                        encoder,
+                        a.gap_id,
+                        // Never overrides the project's network switch.
+                        &invectus_verify::VerifyOptions::default(),
+                    )
+                })?;
+                value(&r)
+            }
+            "export_gaps" => {
+                let a: ExportArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let form = TableForm {
+                    collection: a.collection,
+                    space: a.space,
+                };
+                let path = orch::export_gaps(&self.session, form, &a.format)?;
+                Ok(json!({ "path": path }))
             }
             other => Err(format!("unknown tool {other:?}")),
         }
@@ -283,6 +381,81 @@ struct ProjectArgs {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct OpenArgs {
+    project: String,
+    create: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceArgs {
+    source: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImportArgs {
+    project: Option<String>,
+    collection: String,
+    source: String,
+    #[serde(default)]
+    text: Vec<String>,
+    title: Option<String>,
+    id: Option<String>,
+    date: Option<String>,
+    url: Option<String>,
+    role: Option<Role>,
+    role_column: Option<String>,
+    role_rules: Option<String>,
+    limit: Option<usize>,
+}
+
+impl ImportArgs {
+    /// The app's defaults: token chunks for the default embedding model when it is installed,
+    /// else 2,000-character chunks. A collection that exists keeps its saved chunking.
+    fn form(self) -> ImportForm {
+        use invectus_embed::{ModelStore, registry};
+        use invectus_ingest::TokenChunking;
+        let tokenizer = ModelStore::default_root()
+            .ok()
+            .filter(|r| {
+                registry::spec(registry::DEFAULT_MODEL)
+                    .is_ok_and(|m| ModelStore::new(r.clone()).is_installed(m))
+            })
+            .map(|_| registry::DEFAULT_MODEL.to_string());
+        ImportForm {
+            collection: self.collection,
+            source_path: self.source,
+            text: self.text,
+            title: self.title,
+            id: self.id,
+            date: self.date,
+            url: self.url,
+            role: self.role,
+            role_column: self.role_column,
+            role_rules: self.role_rules,
+            chunk_tokenizer: tokenizer,
+            chunk_tokens: TokenChunking::DEFAULT_MAX_TOKENS,
+            chunk_token_overlap: TokenChunking::DEFAULT_OVERLAP_TOKENS,
+            chunk_chars: 2000,
+            chunk_overlap: 200,
+            limit: self.limit,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExportArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    /// `markdown` or `csv`.
+    format: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SearchArgs {
     project: Option<String>,
     collection: String,
@@ -314,6 +487,15 @@ struct TableArgs {
     limit: Option<usize>,
 }
 
+impl TableArgs {
+    fn table(self) -> TableForm {
+        TableForm {
+            collection: self.collection,
+            space: self.space,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GapArgs {
@@ -336,10 +518,11 @@ fn tools() -> Value {
     });
     let role = json!({
         "type": "string",
-        "enum": ["primary", "coverage", "neutral"],
-        "description": "Restrict to items with this role."
+        "enum": ["demand", "coverage", "neutral"],
+        "description": "Item role: `demand` (asks for or needs something, e.g. studies), `coverage` (answers it, e.g. systematic reviews) or `neutral`."
     });
     let read_only = json!({ "readOnlyHint": true, "openWorldHint": false });
+    let writes = json!({ "readOnlyHint": false, "destructiveHint": false, "openWorldHint": false });
     json!([
         {
             "name": "list_projects",
@@ -351,10 +534,12 @@ fn tools() -> Value {
         },
         {
             "name": "open_project",
-            "description": "Open a project for the following calls; returns its status.",
-            "inputSchema": { "type": "object", "properties": { "project": project },
+            "description": "Open a project for the following calls; returns its status. With \
+                `create`, make a new empty project there.",
+            "inputSchema": { "type": "object", "properties": { "project": project,
+                "create": { "type": "boolean", "default": false } },
                 "required": ["project"], "additionalProperties": false },
-            "annotations": read_only,
+            "annotations": writes,
         },
         {
             "name": "project_status",
@@ -412,6 +597,80 @@ fn tools() -> Value {
             }, "required": ["collection", "gap_id"], "additionalProperties": false },
             "annotations": read_only,
         },
+        {
+            "name": "inspect_source",
+            "description": "Columns and sample rows of a CSV/TSV, Parquet file or folder of text \
+                files, to choose the mapping for import_collection.",
+            "inputSchema": { "type": "object", "properties": {
+                "source": { "type": "string", "description": "File or folder path." }
+            }, "required": ["source"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "import_collection",
+            "description": "Import a source into a collection (new or existing), then start \
+                indexing, mapping, a gap scan and calibration as one background job (follow it \
+                with job_status). Re-importing updates changed items; unchanged ones are kept.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection,
+                "source": { "type": "string", "description": "File or folder path." },
+                "text": { "type": "array", "items": { "type": "string" },
+                    "description": "Text column(s), joined in order. Not used for folders." },
+                "title": { "type": "string", "description": "Title column." },
+                "id": { "type": "string", "description": "Stable id column (else row hashes)." },
+                "date": { "type": "string", "description": "Date or year column." },
+                "url": { "type": "string", "description": "Link column." },
+                "role": role,
+                "role_column": { "type": "string", "description": "Column that sets each \
+                    item's role, with role_rules like `review=coverage,study=demand`." },
+                "role_rules": { "type": "string" },
+                "limit": { "type": "integer", "minimum": 1, "description": "Import the first N rows." }
+            }, "required": ["collection", "source"], "additionalProperties": false },
+            "annotations": writes,
+        },
+        {
+            "name": "job_status",
+            "description": "The running background job (phase, progress) and this session's \
+                finished jobs with their reports or errors.",
+            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "cancel_job",
+            "description": "Cancel the running job. Work done so far is kept; running it again \
+                resumes.",
+            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+            "annotations": writes,
+        },
+        {
+            "name": "scan_gaps",
+            "description": "Score gaps again on the latest regions (seconds; decisions are kept).",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space
+            }, "required": ["collection"], "additionalProperties": false },
+            "annotations": writes,
+        },
+        {
+            "name": "verify_gap",
+            "description": "Check a gap against PubMed and OpenAlex. Uses the network, so it is \
+                refused unless the project's network switch is on (the person turns it on in \
+                the app); results are cached in the project.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "gap_id": { "type": "integer" }
+            }, "required": ["collection", "gap_id"], "additionalProperties": false },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "openWorldHint": true },
+        },
+        {
+            "name": "export_gaps",
+            "description": "Write the latest gaps as Markdown or CSV (titles and links only) into \
+                the project's exports folder; returns the file path.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "format": { "type": "string", "enum": ["markdown", "csv"] }
+            }, "required": ["collection", "format"], "additionalProperties": false },
+            "annotations": writes,
+        },
     ])
 }
 
@@ -462,7 +721,14 @@ mod tests {
                 "search",
                 "check_idea",
                 "list_gaps",
-                "gap_detail"
+                "gap_detail",
+                "inspect_source",
+                "import_collection",
+                "job_status",
+                "cancel_job",
+                "scan_gaps",
+                "verify_gap",
+                "export_gaps"
             ]
         );
         assert_eq!(call(&mut s, 4, "nope", json!({}))["error"]["code"], -32601);

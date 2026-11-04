@@ -359,7 +359,211 @@ fn mcp_server_over_stdio() {
         "one reply per request, none for the notification"
     );
     assert_eq!(replies[0]["result"]["serverInfo"]["name"], "invectus");
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 7);
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 14);
     assert_eq!(replies[2]["result"]["isError"], true);
     assert!(String::from_utf8_lossy(&o.stderr).contains("ready on stdio"));
+}
+
+/// A small MCP client over the server's stdio.
+struct Mcp {
+    child: std::process::Child,
+    stdin: Option<std::process::ChildStdin>,
+    stdout: std::io::BufReader<std::process::ChildStdout>,
+    next: i64,
+}
+
+impl Mcp {
+    fn start(models: &Path) -> Self {
+        use std::process::Stdio;
+        let mut child = Command::new(env!("CARGO_BIN_EXE_invectus"))
+            .args(["--offline", "mcp"])
+            .env("INVECTUS_MODELS_DIR", models)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let stdin = child.stdin.take();
+        let stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut m = Self {
+            child,
+            stdin,
+            stdout,
+            next: 0,
+        };
+        m.request(
+            "initialize",
+            serde_json::json!({ "protocolVersion": "2025-06-18" }),
+        );
+        m
+    }
+
+    fn request(&mut self, method: &str, params: serde_json::Value) -> serde_json::Value {
+        use std::io::{BufRead, Write};
+        self.next += 1;
+        let msg = serde_json::json!({ "jsonrpc": "2.0", "id": self.next, "method": method, "params": params });
+        writeln!(self.stdin.as_mut().unwrap(), "{msg}").unwrap();
+        let mut line = String::new();
+        self.stdout.read_line(&mut line).unwrap();
+        let reply: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(reply["id"], self.next);
+        reply["result"].clone()
+    }
+
+    /// A tool's structured result, asserting it did not fail.
+    fn tool(&mut self, name: &str, args: serde_json::Value) -> serde_json::Value {
+        let r = self.request(
+            "tools/call",
+            serde_json::json!({ "name": name, "arguments": args }),
+        );
+        assert_eq!(r["isError"], false, "{name}: {r}");
+        r["structuredContent"].clone()
+    }
+
+    fn tool_error(&mut self, name: &str, args: serde_json::Value) -> String {
+        let r = self.request(
+            "tools/call",
+            serde_json::json!({ "name": name, "arguments": args }),
+        );
+        assert_eq!(r["isError"], true, "{name}: {r}");
+        r["content"][0]["text"].as_str().unwrap().to_string()
+    }
+
+    fn close(mut self) {
+        drop(self.stdin.take());
+        assert!(self.child.wait().unwrap().success());
+    }
+}
+
+/// The A3 goal: an agent creates a project, imports a CSV, follows the background job and
+/// reports gaps, then exports them. A project held by another process is refused. Needs the
+/// default model in INVECTUS_MODELS_DIR (the dev store); skipped otherwise.
+#[test]
+fn agent_imports_a_csv_and_reports_gaps_over_mcp() {
+    let Some(models) = std::env::var_os("INVECTUS_MODELS_DIR")
+        .map(PathBuf::from)
+        .filter(|m| m.join("bge-small-en-v1.5").is_dir())
+    else {
+        eprintln!("SKIP: no bge-small-en-v1.5 in INVECTUS_MODELS_DIR");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let csv = dir.path().join("notes.csv");
+    let topics = [
+        "retinal detachment surgery outcomes",
+        "glaucoma intraocular pressure medication",
+        "myopia progression in children",
+        "corneal transplant rejection",
+    ];
+    let mut rows = String::from("id,title,body,kind\n");
+    for i in 0..240 {
+        let t = topics[i % 4];
+        let kind = if i % 10 == 0 { "review" } else { "study" };
+        rows.push_str(&format!(
+            "{i},Study {i} on {t},\"Patients in cohort {i} were followed for {t}. We report \
+             baseline characteristics, the intervention schedule, adverse events and outcomes \
+             at one and two years for case series {i}, with {} participants.\",{kind}\n",
+            40 + i
+        ));
+    }
+    std::fs::write(&csv, rows).unwrap();
+    let project = dir.path().join("agent").display().to_string();
+
+    let mut m = Mcp::start(&models);
+    let info = m.tool(
+        "open_project",
+        serde_json::json!({ "project": project, "create": true }),
+    );
+    assert_eq!(info["collections"], serde_json::json!([]));
+    let src = m.tool("inspect_source", serde_json::json!({ "source": csv }));
+    assert_eq!(
+        src["columns"],
+        serde_json::json!(["id", "title", "body", "kind"])
+    );
+    let out = m.tool(
+        "import_collection",
+        serde_json::json!({
+            "collection": "notes", "source": csv, "id": "id", "title": "title",
+            "text": ["body"], "role_column": "kind", "role_rules": "review=coverage,study=demand"
+        }),
+    );
+    assert_eq!(out["report"]["inserted"], 240, "{out}");
+    assert!(out["job"].is_object(), "{out}");
+    // A second job is refused while the first runs; reads keep answering.
+    let start = std::time::Instant::now();
+    let job = loop {
+        let v = m.tool("job_status", serde_json::json!({}));
+        if v["current"]["state"] != "running" {
+            break v["current"].clone();
+        }
+        assert!(start.elapsed().as_secs() < 300, "job did not finish");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert_eq!(job["state"], "completed", "{job}");
+    let status = m.tool("project_status", serde_json::json!({}));
+    let table = &status["tables"][0];
+    assert_eq!(table["index_status"], "indexed");
+    assert!(table["calibration"].is_object(), "{table}");
+    assert!(table["regions"]["scanned"] == true, "{table}");
+
+    let gaps = m.tool(
+        "list_gaps",
+        serde_json::json!({ "collection": "notes", "limit": 5 }),
+    );
+    assert!(
+        gaps["scope"]
+            .as_str()
+            .unwrap()
+            .contains("this collection only")
+    );
+    let rescan = m.tool("scan_gaps", serde_json::json!({ "collection": "notes" }));
+    assert!(rescan["gaps"].is_array(), "{rescan}");
+    let verdict = m.tool(
+        "check_idea",
+        serde_json::json!({ "collection": "notes", "idea": "eye pressure lowering drugs" }),
+    );
+    assert!(verdict["verdict"].is_string());
+    // Verification needs the network: refused here (offline, and the switch is off).
+    if let Some(id) = gaps["gaps"][0]["gap"]["gap_id"].as_i64() {
+        let e = m.tool_error(
+            "verify_gap",
+            serde_json::json!({ "collection": "notes", "gap_id": id }),
+        );
+        assert!(e.contains("network") || e.contains("offline"), "{e}");
+    }
+    let exported = m.tool(
+        "export_gaps",
+        serde_json::json!({ "collection": "notes", "format": "markdown" }),
+    );
+    let path = PathBuf::from(exported["path"].as_str().unwrap());
+    assert!(path.starts_with(dir.path().join("agent.invectus").join("exports")));
+    assert!(std::fs::read_to_string(&path).unwrap().contains('#'));
+    m.close();
+
+    // Single writer: while another process holds the project, the server refuses it.
+    let held = invectus_core::Project::open(&dir.path().join("agent.invectus")).unwrap();
+    let mut m = Mcp::start(&models);
+    let e = m.tool_error("project_status", serde_json::json!({ "project": project }));
+    assert!(e.contains("one inVectus process at a time"), "{e}");
+    m.close();
+    drop(held);
+
+    // A client that leaves mid-job: the server cancels it and waits, so no job record is left
+    // "running" (an interrupted index).
+    let mut m = Mcp::start(&models);
+    m.tool(
+        "import_collection",
+        serde_json::json!({
+            "project": project, "collection": "again", "source": csv, "id": "id",
+            "title": "title", "text": ["body"]
+        }),
+    );
+    m.close();
+    let p = invectus_core::Project::open(&dir.path().join("agent.invectus")).unwrap();
+    let jobs = p.store.jobs().unwrap();
+    assert!(
+        jobs.iter().all(|j| j.state != "running"),
+        "{:?}",
+        jobs.iter().map(|j| &j.state).collect::<Vec<_>>()
+    );
 }

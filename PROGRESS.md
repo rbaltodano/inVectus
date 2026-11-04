@@ -844,8 +844,9 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A3 in [docs/target-product.md](docs/target-product.md): write
-   tools with single-writer handling (A1 and A2 done 2026-11-03).
+1. Agent interface, roadmap A4 in [docs/target-product.md](docs/target-product.md):
+   decision provenance and agent suggestions (A1–A3 done 2026-11-03/04). The owner designs
+   the app side of A4, A6 and A7 when work reaches them.
 2. Decision provenance (A4) before agents can suggest decisions.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
    indexing preview is intentional for tuning and must be removed before release.
@@ -1998,4 +1999,32 @@ packaging gates are still open. Details, reproducible commands and limitations:
   "one inVectus process at a time" message. Target product §8 stage 1 says the server
   opens it read-only; a read-only open is also refused while another process holds the
   write lock, so stage 1 needs another approach (A3).
+
+## 2026-11-04 — MCP write tools and single-writer handling (roadmap A3)
+
+- `invectus mcp` adds `inspect_source`, `import_collection`, `job_status`, `cancel_job`,
+  `scan_gaps`, `verify_gap` and `export_gaps` (14 tools). `open_project` takes `create`.
+  Imports use the app's defaults (token chunks for the default model when installed, else
+  2,000 characters; a collection that exists keeps its saved chunking) and start the
+  index → map → gap scan → calibration job in the background; agents follow it with
+  `job_status`. One job at a time; a second is refused with the running job's name.
+- `verify_gap` never overrides the project's network switch (the app's per-call override
+  is not offered to agents), and `INVECTUS_OFFLINE` / `--offline` refuse it.
+- When the client disconnects, the server cancels a running job and waits up to 60 s, so no
+  job record is left `running`.
+- Gap scan and export moved into `invectus-orchestration`; the desktop commands call them.
+- Fixed from A2: the role schema listed `primary`; the roles are `demand`, `coverage` and
+  `neutral` (SPEC §3).
+- Single writer (target product §8 stage 1, adapted): a project held by another process
+  (the app or another `invectus`) is refused for all tools with the store's "one inVectus
+  process at a time; close the desktop app…" message. Reads are refused too; see the
+  decision under A2.
+- Test (A3 goal, over the built binary's stdio, dev BGE model, 240 synthetic rows): create
+  a project, inspect and import a CSV with role rules, poll the job to completion, read
+  readiness (indexed, calibrated, scanned), list and re-scan gaps, check an idea, refused
+  verification offline, Markdown export inside `exports/`; refusal while the test process
+  holds the project; and no `running` job left after a client disconnects mid-import.
+  103 workspace tests, fmt and clippy passed (arm64 macOS, M4 Pro). No CI or push.
+- Unverified: a real agent client session; a cancel arriving mid-calibration on a large
+  collection (the 60 s wait may not suffice there).
 

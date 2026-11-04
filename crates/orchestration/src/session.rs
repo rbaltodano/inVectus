@@ -415,3 +415,48 @@ pub fn check_idea(session: &Shared, form: CheckForm) -> OpResult<CheckResult> {
         )
     })
 }
+
+/// Score gaps over the latest regions (verdicts are kept). Refused while a job works in the
+/// project.
+pub fn scan_gaps(
+    session: &Shared,
+    board: &SharedBoard,
+    form: TableForm,
+    weights: Option<invectus_gaps::scan::Weights>,
+) -> OpResult<invectus_gaps::ScanReport> {
+    with_session(session, |s| {
+        ensure_idle(board, &s.project)?;
+        let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+        let mut opts = invectus_gaps::ScanOptions::default();
+        if let Some(w) = weights {
+            opts.weights = w;
+        }
+        invectus_gaps::scan(&mut s.project, &s.vectors, &table, &opts)
+    })
+}
+
+/// Write the latest gaps as `csv` or `markdown` into the project's `exports/` folder; returns
+/// the file's path. Titles and links only.
+pub fn export_gaps(session: &Shared, form: TableForm, format: &str) -> OpResult<String> {
+    with_session(session, |s| {
+        let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
+        let list = invectus_gaps::list(&s.project, &table)?;
+        let (text, ext) = match format {
+            "csv" => (invectus_gaps::export::csv(&list), "csv"),
+            "markdown" => (
+                invectus_gaps::export::markdown(&s.project, &table.collection_id, &list, 50)?,
+                "md",
+            ),
+            other => anyhow::bail!("unknown export format {other:?} (csv, markdown)"),
+        };
+        let dir = s.project.root.join("exports");
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join(format!(
+            "gaps-{}-{}.{ext}",
+            table.collection_id,
+            &list.run_id[..list.run_id.len().min(8)]
+        ));
+        std::fs::write(&path, text)?;
+        Ok(path.display().to_string())
+    })
+}

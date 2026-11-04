@@ -165,7 +165,7 @@ DuckDB allows one writer per database file. Two stages:
 | Desktop app: data circle, search/gaps/collections panels, import → index → map → scan → calibrate job | **Built**, macOS only verified |
 | Job board with project tagging and write guards | **Built** |
 | Shared orchestration crate (job board, pipeline, readiness) usable by app and MCP | **Built** (`invectus-orchestration`) |
-| `invectus mcp` server and tools (§5) | **Read tools built** (A2); write tools planned |
+| `invectus mcp` server and tools (§5) | **Built** for A2–A3 (read, import, jobs, scan, verify, export); §6 writing tools planned |
 | Agent-written descriptions, paraphrases, region names with checks (§6) | Planned |
 | Decision provenance (§7) | Planned |
 | Connect-an-agent button, `.mcpb` bundle | Planned |

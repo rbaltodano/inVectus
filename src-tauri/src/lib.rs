@@ -252,20 +252,8 @@ async fn scan_gaps(
     form: TableForm,
     weights: Option<invectus_gaps::scan::Weights>,
 ) -> CmdResult<ScanReport> {
-    let session = state.session.clone();
-    let board = state.board.clone();
-    off_thread(move || {
-        with_session(&session, |s| {
-            orch::ensure_idle(&board, &s.project)?;
-            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-            let mut opts = ScanOptions::default();
-            if let Some(w) = weights {
-                opts.weights = w;
-            }
-            invectus_gaps::scan(&mut s.project, &s.vectors, &table, &opts)
-        })
-    })
-    .await
+    let (session, board) = (state.session.clone(), state.board.clone());
+    off_thread(move || orch::scan_gaps(&session, &board, form, weights)).await
 }
 
 /// Ranked gaps of the latest scan with their verdicts.
@@ -462,30 +450,7 @@ async fn export_gaps(
     format: String,
 ) -> CmdResult<String> {
     let session = state.session.clone();
-    off_thread(move || {
-        with_session(&session, |s| {
-            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-            let list = invectus_gaps::list(&s.project, &table)?;
-            let (text, ext) = match format.as_str() {
-                "csv" => (invectus_gaps::export::csv(&list), "csv"),
-                "markdown" => (
-                    invectus_gaps::export::markdown(&s.project, &table.collection_id, &list, 50)?,
-                    "md",
-                ),
-                other => anyhow::bail!("unknown export format {other:?} (csv, markdown)"),
-            };
-            let dir = s.project.root.join("exports");
-            std::fs::create_dir_all(&dir)?;
-            let path = dir.join(format!(
-                "gaps-{}-{}.{ext}",
-                table.collection_id,
-                &list.run_id[..list.run_id.len().min(8)]
-            ));
-            std::fs::write(&path, text)?;
-            Ok(path.display().to_string())
-        })
-    })
-    .await
+    off_thread(move || orch::export_gaps(&session, form, &format)).await
 }
 
 /// Open an http(s) link in the system browser (the webview does not follow external links).

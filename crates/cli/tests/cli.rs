@@ -321,3 +321,45 @@ fn embed_and_search_with_the_pinned_bge_model() {
     // Only the parent (head-truncated whole text) exceeds the cap; no chunk does.
     assert_eq!(r["truncated"], 1, "{r}");
 }
+
+/// `invectus mcp` speaks newline-delimited JSON-RPC on stdout and logs only to stderr.
+#[test]
+fn mcp_server_over_stdio() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let dir = tempfile::tempdir().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_invectus"))
+        .args(["--offline", "mcp"])
+        .env("INVECTUS_MODELS_DIR", dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    for line in [
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#,
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"check_idea","arguments":{"collection":"c","idea":"x"}}}"#,
+    ] {
+        writeln!(stdin, "{line}").unwrap();
+    }
+    drop(stdin);
+    let o = child.wait_with_output().unwrap();
+    assert!(o.status.success());
+    let replies: Vec<serde_json::Value> = String::from_utf8(o.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(
+        replies.len(),
+        3,
+        "one reply per request, none for the notification"
+    );
+    assert_eq!(replies[0]["result"]["serverInfo"]["name"], "invectus");
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 7);
+    assert_eq!(replies[2]["result"]["isError"], true);
+    assert!(String::from_utf8_lossy(&o.stderr).contains("ready on stdio"));
+}

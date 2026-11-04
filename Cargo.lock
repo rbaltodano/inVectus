@@ -3679,6 +3679,7 @@ dependencies = [
  "invectus-ingest",
  "invectus-llm",
  "invectus-midpoint",
+ "invectus-orchestration",
  "invectus-regions",
  "invectus-unsearch",
  "invectus-verify",

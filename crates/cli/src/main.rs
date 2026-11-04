@@ -1,5 +1,7 @@
 //! `invectus`: the engine CLI over the same crates as the desktop app (SPEC §7.1).
 
+mod mcp;
+
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use invectus_core::store::RegionRecord;
@@ -118,6 +120,8 @@ enum Command {
         #[command(subcommand)]
         command: GapmapCommand,
     },
+    /// Model Context Protocol server over stdio, for AI agents (read tools; no network port).
+    Mcp,
 }
 
 #[derive(Args)]
@@ -600,7 +604,13 @@ fn run() -> Result<()> {
         // SAFETY: set before any other thread is started.
         unsafe { std::env::set_var("INVECTUS_OFFLINE", "1") };
     }
+    if let Some(d) = &cli.models_dir {
+        // The shared orchestration crate finds models through the environment.
+        // SAFETY: set before any other thread is started.
+        unsafe { std::env::set_var("INVECTUS_MODELS_DIR", d) };
+    }
     match cli.command {
+        Command::Mcp => mcp::serve()?,
         Command::Init { path } => {
             let p = Project::create(&path)?;
             println!("created {}", p.root.display());

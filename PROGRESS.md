@@ -844,8 +844,8 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A2–A3 in [docs/target-product.md](docs/target-product.md):
-   `invectus mcp` read tools, then write tools with single-writer handling (A1 done 2026-11-03).
+1. Agent interface, roadmap A3 in [docs/target-product.md](docs/target-product.md): write
+   tools with single-writer handling (A1 and A2 done 2026-11-03).
 2. Decision provenance (A4) before agents can suggest decisions.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
    indexing preview is intentional for tuning and must be removed before release.
@@ -1966,3 +1966,36 @@ packaging gates are still open. Details, reproducible commands and limitations:
   text #d1cbc2 with 50% for dim text. The data circle's ink, gap-dot fill and label
   backing follow the same values.
 - `npm run build` passed. Not checked in the running app. No CI or push.
+
+## 2026-11-03 — `invectus mcp` with read tools (roadmap A2)
+
+- `invectus mcp` (`crates/cli/src/mcp.rs`): a Model Context Protocol server over stdio,
+  newline-delimited JSON-RPC 2.0, written without an MCP library (no new dependency).
+  Handles `initialize` (protocol 2025-06-18, 2025-03-26 or 2024-11-05), `ping`,
+  `tools/list`, `tools/call` and batches; notifications get no reply; logs go to stderr
+  only. No network port, and no tool writes to a project or uses the network.
+- Tools: `list_projects`, `open_project`, `project_status`, `search`, `check_idea`,
+  `list_gaps`, `gap_detail`, all over `invectus-orchestration`. Results come back as JSON
+  text plus `structuredContent`; a failed tool is an `isError` result the agent can read.
+  `check_idea` is exhaustive unless `fast`; verdict and gap answers carry a "this
+  collection only" scope note, and `search` says its similarity is not a probability.
+- `--models-dir` is now passed to the shared crate through `INVECTUS_MODELS_DIR`.
+- Tests: protocol handshake, errors and argument validation; project listing/opening; an
+  end-to-end run (import → index → map → calibrate through the shared pipeline, then
+  `check_idea` returns a verdict, P(exists), calibration quality and nearest items;
+  `list_gaps`, `gap_detail`); and a stdio test of the built binary. 102 workspace tests,
+  fmt and clippy passed (arm64 macOS, M4 Pro).
+- Smoke test on `gapmap.invectus` (2,000 papers, imported Nomic vectors): `check_idea`
+  answered in about 0.3 s per process (verdict, held-out AUC 0.804 quality note, exhaustive
+  evidence); `list_gaps` returned ranked gaps.
+- Not done: registering with a real agent client (`claude mcp add …`) was not tried.
+  `list_projects` scans one folder (default `~/inVectus Projects`); the app's recent
+  projects live in the webview's storage and are not visible to the server.
+
+### Decisions and spec conflicts to review
+- Single writer: the server opens projects the same way the CLI does. DuckDB locks a
+  database file for one process, so a project open in the app is refused with the store's
+  "one inVectus process at a time" message. Target product §8 stage 1 says the server
+  opens it read-only; a read-only open is also refused while another process holds the
+  write lock, so stage 1 needs another approach (A3).
+

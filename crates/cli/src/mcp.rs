@@ -1,0 +1,641 @@
+//! `invectus mcp`: a Model Context Protocol server over stdio (target product §5, roadmap A2).
+//! One JSON-RPC message per line on stdin, one reply per line on stdout; logs go to stderr. It
+//! opens no network port. These are the read tools; nothing here writes to a project or uses
+//! the network.
+
+use anyhow::{Context, Result};
+use invectus_core::Role;
+use invectus_index::select_table;
+use invectus_orchestration::{
+    self as orch, CheckForm, OpResult, SearchForm, Shared, SharedBoard, with_session_wait,
+};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::io::{BufRead, Write};
+use std::path::{Path, PathBuf};
+
+/// Protocol revisions this server speaks; the newest is offered when the client's is unknown.
+const PROTOCOLS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
+
+/// Reminder attached to every verdict and gap answer (AGENTS.md: careful absence claims).
+const SCOPE: &str = "Results describe this collection only: not global novelty, prior-art or \
+                     legal clearance. Nearest neighbours are not proof of absence.";
+
+pub fn serve() -> Result<()> {
+    let mut server = Server::default();
+    let stdin = std::io::stdin();
+    let mut out = std::io::stdout().lock();
+    eprintln!("invectus mcp {}: ready on stdio", invectus_core::VERSION);
+    for line in stdin.lock().lines() {
+        let line = line.context("reading stdin")?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Some(reply) = server.handle_line(&line) {
+            writeln!(out, "{reply}")?;
+            out.flush()?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+pub struct Server {
+    session: Shared,
+    board: SharedBoard,
+}
+
+impl Server {
+    /// The reply to one line, or `None` for notifications.
+    pub fn handle_line(&mut self, line: &str) -> Option<Value> {
+        match serde_json::from_str::<Value>(line) {
+            Ok(Value::Array(batch)) => {
+                let replies: Vec<Value> =
+                    batch.into_iter().filter_map(|m| self.handle(m)).collect();
+                (!replies.is_empty()).then_some(Value::Array(replies))
+            }
+            Ok(message) => self.handle(message),
+            Err(e) => Some(error(Value::Null, -32700, &format!("parse error: {e}"))),
+        }
+    }
+
+    fn handle(&mut self, message: Value) -> Option<Value> {
+        let id = message.get("id").cloned();
+        let method = message["method"].as_str().unwrap_or_default().to_owned();
+        let params = message.get("params").cloned().unwrap_or(Value::Null);
+        // Notifications (no id) get no reply; replies from the client are ignored too.
+        let id = id?;
+        let result = match method.as_str() {
+            "initialize" => Ok(initialize(&params)),
+            "ping" => Ok(json!({})),
+            "tools/list" => Ok(json!({ "tools": tools() })),
+            "tools/call" => Ok(self.call(&params)),
+            "" => Err((-32600, "invalid request: no method".to_string())),
+            other => Err((-32601, format!("method not found: {other}"))),
+        };
+        Some(match result {
+            Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
+            Err((code, msg)) => error(id, code, &msg),
+        })
+    }
+
+    /// A tool call; tool failures are results with `isError`, so the agent can read and retry.
+    fn call(&mut self, params: &Value) -> Value {
+        let name = params["name"].as_str().unwrap_or_default();
+        let args = params.get("arguments").cloned().unwrap_or(json!({}));
+        match self.run_tool(name, args) {
+            Ok(v) => json!({
+                "content": [{ "type": "text", "text": serde_json::to_string_pretty(&v).unwrap_or_default() }],
+                "structuredContent": v,
+                "isError": false,
+            }),
+            Err(e) => json!({
+                "content": [{ "type": "text", "text": e }],
+                "isError": true,
+            }),
+        }
+    }
+
+    fn run_tool(&mut self, name: &str, args: Value) -> OpResult<Value> {
+        match name {
+            "list_projects" => {
+                let a: ListArgs = parse(args)?;
+                let folder = orch::user_path(&a.folder.unwrap_or_else(orch::default_projects_dir));
+                Ok(json!({
+                    "folder": folder.display().to_string(),
+                    "projects": list_projects(&folder, self.open_root().as_deref()),
+                }))
+            }
+            "open_project" => {
+                let a: ProjectArgs = parse(args)?;
+                let path = a.project.ok_or("`project` is required")?;
+                let info = orch::open_project(&self.session, &self.board, &path, false)?;
+                value(&info)
+            }
+            "project_status" => {
+                let a: ProjectArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let board = self.board.clone();
+                let info = with_session_wait(&self.session, |s| orch::project_info(s, &board))?;
+                value(&info)
+            }
+            "search" => {
+                let a: SearchArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let r = orch::search(
+                    &self.session,
+                    SearchForm {
+                        collection: a.collection,
+                        query: a.query,
+                        k: a.k.unwrap_or(10).clamp(1, 100),
+                        role: a.role,
+                        exhaustive: a.exhaustive.unwrap_or(false),
+                        space: a.space,
+                    },
+                )?;
+                let mut v = value(&r)?;
+                v["similarity_note"] = json!(
+                    "`similarity` is cosine similarity, not a probability; use check_idea for a \
+                     calibrated verdict"
+                );
+                Ok(v)
+            }
+            "check_idea" => {
+                let a: CheckArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let r = orch::check_idea(
+                    &self.session,
+                    CheckForm {
+                        collection: a.collection,
+                        query: a.idea,
+                        k: a.k.unwrap_or(10).clamp(1, 100),
+                        role: a.role,
+                        fast: a.fast.unwrap_or(false),
+                        space: a.space,
+                    },
+                )?;
+                let mut v = value(&r)?;
+                v["scope"] = json!(SCOPE);
+                Ok(v)
+            }
+            "list_gaps" => {
+                let a: TableArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let list = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    invectus_gaps::list(&s.project, &table)
+                })?;
+                let mut v = value(&list)?;
+                if let Some(limit) = a.limit
+                    && let Some(gaps) = v["gaps"].as_array_mut()
+                {
+                    gaps.truncate(limit.max(1));
+                }
+                v["scope"] = json!(SCOPE);
+                Ok(v)
+            }
+            "gap_detail" => {
+                let a: GapArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let detail = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    invectus_gaps::detail(&s.project, &table, a.gap_id)
+                })?;
+                let mut v = value(&detail)?;
+                v["scope"] = json!(SCOPE);
+                Ok(v)
+            }
+            other => Err(format!("unknown tool {other:?}")),
+        }
+    }
+
+    fn open_root(&self) -> Option<PathBuf> {
+        let guard = self.session.lock().ok()?;
+        guard.as_ref().map(|s| s.project.root.clone())
+    }
+
+    /// Open `path` unless it is already the open project; with no path, a project must be open.
+    fn ensure_open(&mut self, path: Option<&str>) -> OpResult<()> {
+        let open = self.open_root();
+        match path {
+            None if open.is_some() => Ok(()),
+            None => Err("no project is open: pass `project` or call open_project first".into()),
+            Some(p) => {
+                let wanted = orch::user_path(p);
+                let same = |root: &Path| {
+                    let canon = |x: &Path| std::fs::canonicalize(x).ok();
+                    canon(root).is_some()
+                        && (canon(root) == canon(&wanted)
+                            || canon(root) == canon(&wanted.with_extension("invectus")))
+                };
+                if open.as_deref().is_some_and(same) {
+                    return Ok(());
+                }
+                orch::open_project(&self.session, &self.board, p, false).map(|_| ())
+            }
+        }
+    }
+}
+
+fn value<T: serde::Serialize>(v: &T) -> OpResult<Value> {
+    serde_json::to_value(v).map_err(|e| e.to_string())
+}
+
+fn parse<T: for<'de> Deserialize<'de>>(args: Value) -> OpResult<T> {
+    serde_json::from_value(args).map_err(|e| format!("invalid arguments: {e}"))
+}
+
+fn error(id: Value, code: i64, message: &str) -> Value {
+    json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+}
+
+fn initialize(params: &Value) -> Value {
+    let asked = params["protocolVersion"].as_str().unwrap_or_default();
+    let version = PROTOCOLS
+        .iter()
+        .find(|v| **v == asked)
+        .unwrap_or(&PROTOCOLS[0]);
+    json!({
+        "protocolVersion": version,
+        "capabilities": { "tools": {} },
+        "serverInfo": { "name": "invectus", "version": invectus_core::VERSION },
+        "instructions": "inVectus answers whether an idea already exists in a local collection \
+            and where its gaps are. Open a project (list_projects, open_project), read \
+            project_status for collections and readiness, then use check_idea for a calibrated \
+            verdict (exists / near / open) or search for nearest items. Verdicts hold for this \
+            collection only. Everything runs offline on this computer.",
+    })
+}
+
+/// Project folders (`*.invectus` with a `project.json`) directly inside `folder`.
+fn list_projects(folder: &Path, open: Option<&Path>) -> Vec<Value> {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    let open = open.and_then(|p| std::fs::canonicalize(p).ok());
+    let mut out: Vec<Value> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter_map(|root| {
+            let raw = std::fs::read(root.join("project.json")).ok()?;
+            let config: Value = serde_json::from_slice(&raw).ok()?;
+            Some(json!({
+                "root": root.display().to_string(),
+                "name": config["name"].as_str().unwrap_or_default(),
+                "open": open.is_some() && std::fs::canonicalize(&root).ok() == open,
+            }))
+        })
+        .collect();
+    out.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    out
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ListArgs {
+    folder: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProjectArgs {
+    project: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SearchArgs {
+    project: Option<String>,
+    collection: String,
+    query: String,
+    k: Option<usize>,
+    role: Option<Role>,
+    exhaustive: Option<bool>,
+    space: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CheckArgs {
+    project: Option<String>,
+    collection: String,
+    idea: String,
+    k: Option<usize>,
+    role: Option<Role>,
+    fast: Option<bool>,
+    space: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TableArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GapArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    gap_id: i32,
+}
+
+fn tools() -> Value {
+    let project = json!({
+        "type": "string",
+        "description": "Project folder (`<name>.invectus`). Optional once a project is open."
+    });
+    let collection =
+        json!({ "type": "string", "description": "Collection id (see project_status)." });
+    let space = json!({
+        "type": "string",
+        "description": "Vector space id; needed only when the collection has several."
+    });
+    let role = json!({
+        "type": "string",
+        "enum": ["primary", "coverage", "neutral"],
+        "description": "Restrict to items with this role."
+    });
+    let read_only = json!({ "readOnlyHint": true, "openWorldHint": false });
+    json!([
+        {
+            "name": "list_projects",
+            "description": "inVectus projects in a folder (default: ~/inVectus Projects).",
+            "inputSchema": { "type": "object", "properties": {
+                "folder": { "type": "string", "description": "Folder to look in." }
+            }, "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "open_project",
+            "description": "Open a project for the following calls; returns its status.",
+            "inputSchema": { "type": "object", "properties": { "project": project },
+                "required": ["project"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "project_status",
+            "description": "Collections, vector spaces and readiness: index status, calibration \
+                (needed by check_idea) and regions/gap scans (needed by list_gaps).",
+            "inputSchema": { "type": "object", "properties": { "project": project },
+                "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "search",
+            "description": "Nearest items to a query with cosine similarity (not a probability). \
+                Approximate unless `exhaustive`; the result says which.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection,
+                "query": { "type": "string" },
+                "k": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+                "role": role, "space": space,
+                "exhaustive": { "type": "boolean", "default": false,
+                    "description": "Compare every stored vector (exact)." }
+            }, "required": ["collection", "query"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "check_idea",
+            "description": "Does an idea already exist in this collection? Calibrated verdict \
+                (exists / near / open) with P(exists), the calibration quality and the nearest \
+                items as evidence. Exhaustive by default. Holds for this collection only.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection,
+                "idea": { "type": "string", "description": "The idea, as a title or a few sentences." },
+                "k": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+                "role": role, "space": space,
+                "fast": { "type": "boolean", "default": false,
+                    "description": "Use the approximate index when there is one." }
+            }, "required": ["collection", "idea"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "list_gaps",
+            "description": "Ranked gaps of the latest scan with score terms and decisions.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "limit": { "type": "integer", "minimum": 1, "description": "Return the top N." }
+            }, "required": ["collection"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "gap_detail",
+            "description": "One gap: score terms, timeline, central items on each side, \
+                description and decision.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "gap_id": { "type": "integer" }
+            }, "required": ["collection", "gap_id"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+    ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn call(s: &mut Server, id: i64, method: &str, params: Value) -> Value {
+        let line = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+        s.handle_line(&line.to_string()).unwrap()
+    }
+
+    #[test]
+    fn handshake_tools_and_errors() {
+        let mut s = Server::default();
+        let r = call(
+            &mut s,
+            1,
+            "initialize",
+            json!({ "protocolVersion": "2025-03-26" }),
+        );
+        assert_eq!(r["result"]["protocolVersion"], "2025-03-26");
+        assert!(r["result"]["capabilities"]["tools"].is_object());
+        let r = call(
+            &mut s,
+            2,
+            "initialize",
+            json!({ "protocolVersion": "1999-01-01" }),
+        );
+        assert_eq!(r["result"]["protocolVersion"], PROTOCOLS[0]);
+        assert!(
+            s.handle_line(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
+                .is_none()
+        );
+        let r = call(&mut s, 3, "tools/list", json!({}));
+        let names: Vec<&str> = r["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "list_projects",
+                "open_project",
+                "project_status",
+                "search",
+                "check_idea",
+                "list_gaps",
+                "gap_detail"
+            ]
+        );
+        assert_eq!(call(&mut s, 4, "nope", json!({}))["error"]["code"], -32601);
+        assert_eq!(s.handle_line("{not json").unwrap()["error"]["code"], -32700);
+        // Tool failures are results the agent can read.
+        let r = call(
+            &mut s,
+            5,
+            "tools/call",
+            json!({ "name": "project_status", "arguments": {} }),
+        );
+        assert_eq!(r["result"]["isError"], true);
+        assert!(
+            r["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("no project is open")
+        );
+        let r = call(
+            &mut s,
+            6,
+            "tools/call",
+            json!({ "name": "search", "arguments": { "collection": "c" , "bogus": 1 } }),
+        );
+        assert!(
+            r["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("invalid arguments")
+        );
+    }
+
+    #[test]
+    fn lists_and_opens_projects() {
+        let dir = tempfile::tempdir().unwrap();
+        invectus_core::Project::create(&dir.path().join("b")).unwrap();
+        invectus_core::Project::create(&dir.path().join("a")).unwrap();
+        std::fs::create_dir(dir.path().join("not-a-project")).unwrap();
+        let mut s = Server::default();
+        let folder = dir.path().display().to_string();
+        let r = call(
+            &mut s,
+            1,
+            "tools/call",
+            json!({ "name": "list_projects", "arguments": { "folder": folder } }),
+        );
+        let projects = &r["result"]["structuredContent"]["projects"];
+        assert_eq!(projects.as_array().unwrap().len(), 2);
+        assert_eq!(projects[0]["name"], "a");
+        assert_eq!(projects[0]["open"], false);
+        let a = projects[0]["root"].as_str().unwrap().to_string();
+        let r = call(
+            &mut s,
+            2,
+            "tools/call",
+            json!({ "name": "project_status", "arguments": { "project": a } }),
+        );
+        assert_eq!(r["result"]["isError"], false, "{r}");
+        assert_eq!(r["result"]["structuredContent"]["name"], "a");
+        let r = call(
+            &mut s,
+            3,
+            "tools/call",
+            json!({ "name": "list_projects", "arguments": { "folder": folder } }),
+        );
+        assert_eq!(
+            r["result"]["structuredContent"]["projects"][0]["open"],
+            true
+        );
+        // Without a path, the open project answers.
+        let r = call(
+            &mut s,
+            4,
+            "tools/call",
+            json!({ "name": "project_status", "arguments": {} }),
+        );
+        assert_eq!(r["result"]["structuredContent"]["collections"], json!([]));
+    }
+
+    /// The A2 goal: an agent asks whether an idea exists and gets a verdict with its quality
+    /// and evidence. Import → index → map → calibrate through the shared pipeline, then
+    /// `check_idea` over the server. Needs the dev BGE model (INVECTUS_MODELS_DIR).
+    #[test]
+    fn check_idea_answers_with_verdict_quality_and_evidence() {
+        use invectus_embed::{ModelStore, registry};
+        let installed = ModelStore::default_root().ok().is_some_and(|r| {
+            ModelStore::new(r).is_installed(registry::spec(registry::DEFAULT_MODEL).unwrap())
+        });
+        if !installed {
+            eprintln!("skipped: {} is not installed", registry::DEFAULT_MODEL);
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let csv = dir.path().join("notes.csv");
+        let topics = [
+            "retinal detachment surgery outcomes",
+            "glaucoma intraocular pressure medication",
+            "myopia progression in children",
+            "corneal transplant rejection",
+        ];
+        let mut rows = String::from("id,title,text\n");
+        for i in 0..240 {
+            let t = topics[i % 4];
+            rows.push_str(&format!(
+                "{i},Study {i} on {t},\"Patients in cohort {i} were followed for {t}. We \
+                 report baseline characteristics, the intervention schedule, adverse events and \
+                 outcomes at one and two years for case series {i}, with {} participants.\"\n",
+                40 + i
+            ));
+        }
+        std::fs::write(&csv, rows).unwrap();
+        let mut s = Server::default();
+        let root = dir.path().join("p");
+        orch::open_project(&s.session, &s.board, root.to_str().unwrap(), true).unwrap();
+        let form: orch::ImportForm = serde_json::from_value(json!({
+            "collection": "notes", "source_path": csv, "text": ["text"], "title": "title",
+            "id": "id", "date": null, "url": null, "role": "neutral", "role_column": null,
+            "role_rules": null, "chunk_chars": 2000, "chunk_overlap": 200, "limit": null
+        }))
+        .unwrap();
+        let req = orch::request_for_session(&s.session, form).unwrap();
+        let emit: orch::Emit = std::sync::Arc::new(|_: &orch::JobInfo| {});
+        let out = orch::import_then_index(&emit, &s.session, &s.board, req).unwrap();
+        assert!(out.job.is_some(), "{:?}", out.index_error);
+        let start = std::time::Instant::now();
+        while s.board.lock().unwrap().running().is_some() {
+            assert!(start.elapsed().as_secs() < 300, "job did not finish");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        let r = call(
+            &mut s,
+            1,
+            "tools/call",
+            json!({ "name": "check_idea", "arguments": {
+                "collection": "notes", "idea": "glaucoma eye pressure drugs", "k": 5
+            } }),
+        );
+        assert_eq!(r["result"]["isError"], false, "{r}");
+        let v = &r["result"]["structuredContent"];
+        assert!(
+            ["exists", "near", "open"].contains(&v["verdict"].as_str().unwrap()),
+            "{v}"
+        );
+        assert!(v["p_exists"].is_number());
+        assert!(!v["calibration"]["quality"].as_str().unwrap().is_empty());
+        assert_eq!(v["search"]["exhaustive"], true);
+        let top = v["search"]["hits"][0]["item"]["title"].as_str().unwrap();
+        assert!(top.contains("glaucoma"), "{top}");
+        assert!(
+            v["scope"]
+                .as_str()
+                .unwrap()
+                .contains("this collection only")
+        );
+
+        let r = call(
+            &mut s,
+            2,
+            "tools/call",
+            json!({ "name": "list_gaps", "arguments": { "collection": "notes", "limit": 3 } }),
+        );
+        assert_eq!(r["result"]["isError"], false, "{r}");
+        let gaps = r["result"]["structuredContent"]["gaps"].as_array().unwrap();
+        assert!(gaps.len() <= 3);
+        if let Some(id) = gaps.first().and_then(|g| g["gap"]["gap_id"].as_i64()) {
+            let r = call(
+                &mut s,
+                3,
+                "tools/call",
+                json!({ "name": "gap_detail", "arguments": { "collection": "notes", "gap_id": id } }),
+            );
+            assert_eq!(r["result"]["isError"], false, "{r}");
+        }
+    }
+}

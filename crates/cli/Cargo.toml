@@ -21,6 +21,7 @@ invectus-eval.workspace = true
 invectus-llm.workspace = true
 invectus-midpoint.workspace = true
 invectus-verify.workspace = true
+invectus-orchestration.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -844,11 +844,11 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A5 in [docs/target-product.md](docs/target-product.md):
-   agent-written descriptions, paraphrases and region names with the engine's checks
-   (A1–A4 done 2026-11-03/04). App UI for agent work is built in the existing style for the
-   owner to refine.
-2. Decision provenance (A4) before agents can suggest decisions.
+1. Agent interface, roadmap A6–A7 in [docs/target-product.md](docs/target-product.md):
+   connect-an-agent setup and `.mcpb` bundle, then the app hand-off socket (A1–A5 done
+   2026-11-03/04). A6 and A7 have app UI the owner will design.
+2. Decide the agent paraphrase guidance (see the 2026-11-04 A5 entry): agents that follow
+   "in your own words" literally drop technical terms and calibrate worse than titles.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
    indexing preview is intentional for tuning and must be removed before release.
 4. The gap ranking still loses to the baselines on the full backtest; adjudicate a sample of
@@ -2068,4 +2068,75 @@ packaging gates are still open. Details, reproducible commands and limitations:
   write them.
 - Open question 3 (automatic decisions) is answered conservatively for now: suggestions
   never become decisions without the person.
+
+## 2026-11-04 — Agent-written descriptions, paraphrases and region names (roadmap A5)
+
+- **Descriptions.** `invectus-midpoint` splits into `prepare` (target point, prompt, evidence)
+  and `assess` (on-target and novelty checks), shared by the local model's `describe` and a
+  new `submit` for outside writers; `context` returns the same prompt and evidence (titles
+  and roles only) plus the checks in words. `submit` validates the text, runs the checks once
+  and stores the result **only if it passes**; rejections come back with reasons ("off target
+  … lands nearest region 21", "already in this collection (P(exists) 0.81): …"). Results carry
+  `author` (`local-model` or `agent:<client>/<model>`); verification already reuses accepted
+  descriptions from the store, so agent descriptions feed its queries.
+- **Paraphrases.** Calibration takes `Queries::{Titles, Model, Given}`; `run_calibration` is
+  unchanged for the first two. `paraphrase_sample` returns exactly the items calibration uses
+  (same order and filter); `screen_paraphrases` rejects paraphrases of items outside the
+  sample, empty ones, ones that repeat the title (letters and digits compared) and ones over 80
+  words. Given paraphrases are fitted as the local model's are; sampled items without an
+  accepted paraphrase are left out (never padded with titles); fewer than 30 is refused. The
+  method records the writer, e.g. `llm paraphrase (agent:claude-code/claude-opus-5-5)`.
+- **Region names.** `region_context` (terms, central titles, the local model's prompt, current
+  name and who wrote it) and `set_names` (cleaned like the model's replies, stored in
+  `llm_label` with the writer in `llm_model`). `RegionRecord` now exposes `llm_model`. No
+  check exists for names (none in the spec).
+- **MCP (21 tools):** `gap_context`, `submit_description`, `paraphrase_sample` (paged; item ids
+  as strings because they exceed JavaScript's exact integers), `submit_paraphrases`
+  (background job), `region_context`, `submit_region_names`. `submit_paraphrases` is a
+  write that replaces the collection's current calibration.
+- **Tests:** given-paraphrase screening and fitting (`verdict_flow`), agent descriptions
+  rejected off target and stored on target with the agent as author (`describe_flow`), and
+  the stdio end-to-end test now covers all six tools (240 synthetic rows, dev BGE).
+  104 workspace tests, fmt, clippy and `npm run build` passed (arm64 macOS, M4 Pro).
+
+### Measured: agent (Claude Opus 5.5 via MCP) vs the local model (Gemma 4 12B)
+Copy of `demo.invectus` (5,000 papers, BGE space `0b35fad4e4ec`) at
+`.spike-data/p1/work/a5-eval/`; inputs, outputs and the call helper are kept there. Same
+calibration for both writers' novelty checks; genres "research study" / "systematic review".
+
+| Descriptions, top 10 gaps (all coverage/stale; the scan had no bridges) | first attempt | within 3 |
+|---|---|---|
+| Gemma 4 12B (`gaps describe`, ~5–7 s per gap) | **10 / 10** | 10 / 10 |
+| Agent, from `gap_context` only, revised from the rejection reasons | 8 / 10 | **10 / 10** (2nd attempt) |
+
+- Agent rejections: gap 1 off target (leaned on saccades; landed in "Oculomotor Control"),
+  gap 8 judged `exists` (P 0.81) against "Artificial intelligence in retinal screening using
+  OCT images", a different topic sharing imaging vocabulary: likely a **false `exists`** from
+  the coverage-only check. Caveat: the agent saw Gemma's titles before writing.
+- Region targets are easy to pass (Gemma never needed a retry); bridges, where the
+  combination rule bites, were not measured because this scan has none.
+
+| Calibration, same 300 items and held-out 60 | held-out AUC | balanced Brier | balanced accuracy |
+|---|---|---|---|
+| Gemma paraphrases (2026-10-27) | **0.952** | 0.092 | 0.858 |
+| Titles, no LLM (2026-10-27) | 0.890 | 0.141 | 0.808 |
+| Agent paraphrases (all 300 passed screening; fit 4.0 s) | 0.866 | 0.143 | 0.800 |
+
+- Why: the agent applied "in your own words" literally and replaced technical terms with lay
+  ones ("Müller glial cells" → "retinal support glia", "S-cone" → "blue-sensitive cones",
+  "radial artery" → "wrist artery"); Gemma keeps the field's vocabulary and rephrases the
+  sentence. Lay queries sit farther from the stored text, so exists/absent separate less. A
+  higher AUC is not automatically a better-calibrated curve for real users (closer
+  paraphrases make easier positives); SPEC §9.2's hand-labelled queries remain unmeasured.
+- One writer, one pass, one collection; not a general result about agents.
+
+### Decisions and spec conflicts to review
+- **Proposal (not applied):** tell agents in `paraphrase_sample` to keep the field's technical
+  terms and rephrase the sentence. Changing the shared `PARAPHRASE_RULE` would also change the
+  local model's prompt and its 0.952 baseline, so it needs the owner's call. Until then an
+  agent calibration can replace a better local-model curve: `submit_paraphrases` should
+  perhaps refuse (or warn) when the new held-out AUC is below the current curve's.
+- Description novelty uses coverage items only for region targets (unchanged from P5); the
+  gap 8 case suggests it over-calls `exists` when a coverage item shares method vocabulary.
+- Region names from agents replace an existing name; no check, as in the spec.
 

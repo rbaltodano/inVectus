@@ -5,11 +5,11 @@
   --surface-2: #292929;
   --line: #333333;
   --line-2: #48453f;
-  --ink: #f7f3eb;
-  --text: #f7f3eb;
-  --text-2: #f7f3eb;
-  --dim: #aaa59b;
-  --dim-2: #aaa59b;
+  --ink: #d1cbc2;
+  --text: #d1cbc2;
+  --text-2: #d1cbc2;
+  --dim: rgba(209, 203, 194, 0.5);
+  --dim-2: rgba(209, 203, 194, 0.5);
   --accent: #6edcaa;
   --danger: #ff8a7a;
   --mono: "Martian Mono Variable", "Martian Mono", ui-monospace, Menlo, monospace;
@@ -418,18 +418,19 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 /* ── Instrument theme ─────────────────────────────────────────────────────────────────────
    Retro mission-control direction (owner references, 2026-10-29): near-black, white line work
    at four strengths, a sans for reading and monospace only for codes, numbers and small tracked
-   labels; open panels separated by hairlines instead of boxes; mint only for "your search". */
+   labels; open panels separated by hairlines instead of boxes; mint only for "your search".
+   Colours from Figma "ESB Stuff 3", node 1227:166, shared with ryanbaltodano.com. */
 :root {
-  --bg: #0e0f10;
-  --surface: #151618;
-  --surface-2: #1c1d20;
-  --line: rgba(255, 255, 255, 0.1);
-  --line-2: rgba(255, 255, 255, 0.2);
-  --ink: #f7f3eb;
-  --text: #f7f3eb;
-  --text-2: #f7f3eb;
-  --dim: #8f8f8a;
-  --dim-2: #8f8f8a;
+  --bg: #141414;
+  --surface: #202020;
+  --surface-2: #292929;
+  --line: #333333;
+  --line-2: #48453f;
+  --ink: #d1cbc2;
+  --text: #d1cbc2;
+  --text-2: #d1cbc2;
+  --dim: rgba(209, 203, 194, 0.5);
+  --dim-2: rgba(209, 203, 194, 0.5);
   --r: 2px;
   --sans: "Inter Variable", Inter, -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
   font-family: var(--sans);
@@ -524,7 +525,7 @@ code, .path, .mono { font-family: var(--mono); }
 .empty-circle .line-art { color: var(--text-2); margin-bottom: 6px; }
 .empty-circle:hover, .empty-circle:focus-visible { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line-2); border-color: var(--ink); }
 .circle-title { font-family: var(--sans); font-weight: 300; font-size: 15px; color: var(--text); }
-.circle-center .circle-title, .circle-center .circle-sub { background: rgba(14, 15, 16, 0.85); }
+.circle-center .circle-title, .circle-center .circle-sub { background: rgba(20, 20, 20, 0.85); }
 .circle-tip { background: var(--bg); border-color: var(--line-2); border-radius: var(--r); font-size: 12px; }
 
 /* Controls */

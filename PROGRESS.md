@@ -1958,3 +1958,11 @@ packaging gates are still open. Details, reproducible commands and limitations:
   workspace tests (release) and `npm run build` passed. The desktop bundle was not rebuilt or
   relaunched; behavior is expected unchanged but not checked in the running app. No CI or push.
 
+
+## 2026-11-03 — Instrument palette from the shared Figma colours
+
+- Retuned the instrument theme to the Figma "ESB Stuff 3" colours (node 1227:166, shared with
+  ryanbaltodano.com): background #141414, surfaces #202020/#292929, lines #333333/#48453f,
+  text #d1cbc2 with 50% for dim text. The data circle's ink, gap-dot fill and label
+  backing follow the same values.
+- `npm run build` passed. Not checked in the running app. No CI or push.

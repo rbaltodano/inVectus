@@ -158,8 +158,15 @@ pub struct DescribeResult {
     pub attempts: Vec<Attempt>,
     pub context_titles: Vec<String>,
     pub llm: LlmIdentity,
+    /// Who wrote the descriptions: `local-model` (see `llm`) or `agent:<client>/<model>`.
+    #[serde(default = "local_model")]
+    pub author: String,
     pub embedding_model: String,
     pub notes: Vec<String>,
+}
+
+fn local_model() -> String {
+    "local-model".into()
 }
 
 fn dot(a: &[f32], b: &[f32]) -> f32 {
@@ -261,19 +268,34 @@ fn name(r: &RegionRecord) -> String {
     r.llm_label.clone().unwrap_or_else(|| r.label.clone())
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn describe(
+/// The writer's instructions, for the local model and agents alike.
+pub const SYSTEM: &str = "You write concise, concrete, plausible descriptions. No preamble.";
+
+/// Longest title and description accepted from any writer.
+const MAX_TITLE_CHARS: usize = 300;
+const MAX_DESCRIPTION_CHARS: usize = 3000;
+
+/// A target, the evidence a writer sees, and what a description is judged against.
+struct Prepared {
+    point: Vec<f32>,
+    label: String,
+    prompt: String,
+    context_titles: Vec<String>,
+    /// The two centroids of a between target.
+    ends: Option<(Vec<f32>, Vec<f32>)>,
+    regions: Vec<RegionRecord>,
+    members: Vec<invectus_core::store::MemberRecord>,
+    curve: Option<invectus_unsearch::Curve>,
+    notes: Vec<String>,
+}
+
+fn prepare(
     project: &Project,
     vectors: &VectorStore,
     table: &VectorTableRecord,
-    encoder: &mut dyn TextEmbedder,
-    generator: &mut dyn TextGenerator,
     target: &Target,
     opts: &DescribeOptions,
-) -> Result<DescribeResult> {
-    if encoder.identity().space_id() != table.space_id {
-        invectus_index::search::check_compatible(project, table, encoder)?;
-    }
+) -> Result<Prepared> {
     let run = project
         .store
         .latest_region_run(&table.collection_id, &table.space_id)?
@@ -383,14 +405,166 @@ pub fn describe(
         }
     };
     let (prompt, context_titles) = prompt;
+    Ok(Prepared {
+        point,
+        label,
+        prompt,
+        context_titles,
+        ends,
+        regions,
+        members,
+        curve,
+        notes,
+    })
+}
 
+/// Judge one description: on target (its vector lands at the point) and novel (a calibrated,
+/// exhaustive check of it is not `exists`; for a combination, only an item reaching both
+/// sides counts).
+#[allow(clippy::too_many_arguments)]
+fn assess(
+    project: &Project,
+    vectors: &VectorStore,
+    table: &VectorTableRecord,
+    encoder: &mut dyn TextEmbedder,
+    prep: &Prepared,
+    target: &Target,
+    title: String,
+    description: String,
+) -> Result<Attempt> {
+    let started = Instant::now();
+    let doc = encoder
+        .identity()
+        .format_document(Some(&title), &description);
+    let v = encoder.embed(&[doc], InputKind::Document)?.remove(0).vector;
+    let (nearest_region, nearest_sim) = prep
+        .regions
+        .iter()
+        .map(|r| (r.region_id, dot(&v, &r.centroid)))
+        .max_by(|x, y| x.1.total_cmp(&y.1))
+        .unzip();
+    let to_target = dot(&v, &prep.point);
+    let on_target = match (&prep.ends, target) {
+        (Some((a, b)), _) => {
+            let (sa, sb) = (dot(&v, a), dot(&v, b));
+            OnTarget {
+                passed: to_target > sa && to_target > sb,
+                to_target,
+                to_a: Some(sa),
+                to_b: Some(sb),
+                nearest_region,
+                nearest_region_similarity: nearest_sim,
+            }
+        }
+        (None, Target::Region { region }) => OnTarget {
+            passed: nearest_region == Some(*region),
+            to_target,
+            to_a: None,
+            to_b: None,
+            nearest_region,
+            nearest_region_similarity: nearest_sim,
+        },
+        (None, _) => unreachable!("between targets always have ends"),
+    };
+    let novelty = if prep.curve.is_some() {
+        let c = check(
+            project,
+            vectors,
+            table,
+            encoder,
+            &format!("{title}. {description}"),
+            &CheckOptions {
+                k: 20,
+                role: match target {
+                    Target::Region { .. } => Some(Role::Coverage),
+                    Target::Between { .. } => None,
+                },
+                ..Default::default()
+            },
+        )?;
+        match (&prep.ends, target) {
+            (Some((ca, cb)), Target::Between { a, b, .. }) => {
+                let ids: Vec<i64> = c.search.hits.iter().map(|h| h.item.item_id).collect();
+                let stored = vectors.vectors_for(table, &ids)?;
+                let candidates: Vec<Candidate> = c
+                    .search
+                    .hits
+                    .iter()
+                    .filter_map(|h| {
+                        let v = stored.get(&h.item.item_id)?;
+                        Some(Candidate {
+                            title: h.item.title.clone().unwrap_or_default(),
+                            similarity: h.similarity,
+                            to_a: dot(v, ca),
+                            to_b: dot(v, cb),
+                        })
+                    })
+                    .collect();
+                let curve = &prep.curve;
+                Some(combination_novelty(
+                    &candidates,
+                    reach(&prep.members, *a),
+                    reach(&prep.members, *b),
+                    &|s| curve.as_ref().map_or(0.0, |k| k.predict(s)),
+                ))
+            }
+            _ => Some(Novelty {
+                passed: c.verdict != Verdict::Exists,
+                verdict: c.verdict.as_str().into(),
+                p_exists: c.p_exists,
+                nearest_title: c.search.hits.first().and_then(|h| h.item.title.clone()),
+                nearest_similarity: c.nearest_similarity,
+                rule: "single".into(),
+                one_sided_nearest: None,
+            }),
+        }
+    } else {
+        None
+    };
+    Ok(Attempt {
+        title,
+        description,
+        on_target,
+        novelty,
+        seconds: started.elapsed().as_secs_f64(),
+    })
+}
+
+fn passes(a: &Attempt) -> bool {
+    a.on_target.passed && a.novelty.as_ref().is_none_or(|n| n.passed)
+}
+
+fn compatible(
+    project: &Project,
+    table: &VectorTableRecord,
+    encoder: &mut dyn TextEmbedder,
+) -> Result<()> {
+    if encoder.identity().space_id() != table.space_id {
+        invectus_index::search::check_compatible(project, table, encoder)?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn describe(
+    project: &Project,
+    vectors: &VectorStore,
+    table: &VectorTableRecord,
+    encoder: &mut dyn TextEmbedder,
+    generator: &mut dyn TextGenerator,
+    target: &Target,
+    opts: &DescribeOptions,
+) -> Result<DescribeResult> {
+    compatible(project, table, encoder)?;
+    let prep = prepare(project, vectors, table, target, opts)?;
+    let mut notes = prep.notes.clone();
     let mut attempts = Vec::new();
     let mut accepted = None;
     for i in 0..opts.tries.max(1) {
         let started = Instant::now();
         let reply = generator.generate(
-            Some("You write concise, concrete, plausible descriptions. No preamble."),
-            &prompt,
+            Some(SYSTEM),
+            &prep.prompt,
             &GenOptions {
                 max_tokens: 320,
                 temperature: if i == 0 { 0.0 } else { 0.8 },
@@ -401,101 +575,19 @@ pub fn describe(
         if title.is_empty() && description.is_empty() {
             continue;
         }
-        let doc = encoder
-            .identity()
-            .format_document(Some(&title), &description);
-        let v = encoder.embed(&[doc], InputKind::Document)?.remove(0).vector;
-        let (nearest_region, nearest_sim) = regions
-            .iter()
-            .map(|r| (r.region_id, dot(&v, &r.centroid)))
-            .max_by(|x, y| x.1.total_cmp(&y.1))
-            .unzip();
-        let to_target = dot(&v, &point);
-        let on_target = match (&ends, target) {
-            (Some((a, b)), _) => {
-                let (sa, sb) = (dot(&v, a), dot(&v, b));
-                OnTarget {
-                    passed: to_target > sa && to_target > sb,
-                    to_target,
-                    to_a: Some(sa),
-                    to_b: Some(sb),
-                    nearest_region,
-                    nearest_region_similarity: nearest_sim,
-                }
-            }
-            (None, Target::Region { region }) => OnTarget {
-                passed: nearest_region == Some(*region),
-                to_target,
-                to_a: None,
-                to_b: None,
-                nearest_region,
-                nearest_region_similarity: nearest_sim,
-            },
-            (None, _) => unreachable!("between targets always have ends"),
-        };
-        let novelty = if has_calibration {
-            let c = check(
-                project,
-                vectors,
-                table,
-                encoder,
-                &format!("{title}. {description}"),
-                &CheckOptions {
-                    k: 20,
-                    role: match target {
-                        Target::Region { .. } => Some(Role::Coverage),
-                        Target::Between { .. } => None,
-                    },
-                    ..Default::default()
-                },
-            )?;
-            match (&ends, target) {
-                (Some((ca, cb)), Target::Between { a, b, .. }) => {
-                    let ids: Vec<i64> = c.search.hits.iter().map(|h| h.item.item_id).collect();
-                    let stored = vectors.vectors_for(table, &ids)?;
-                    let candidates: Vec<Candidate> = c
-                        .search
-                        .hits
-                        .iter()
-                        .filter_map(|h| {
-                            let v = stored.get(&h.item.item_id)?;
-                            Some(Candidate {
-                                title: h.item.title.clone().unwrap_or_default(),
-                                similarity: h.similarity,
-                                to_a: dot(v, ca),
-                                to_b: dot(v, cb),
-                            })
-                        })
-                        .collect();
-                    let curve = &curve;
-                    Some(combination_novelty(
-                        &candidates,
-                        reach(&members, *a),
-                        reach(&members, *b),
-                        &|s| curve.as_ref().map_or(0.0, |k| k.predict(s)),
-                    ))
-                }
-                _ => Some(Novelty {
-                    passed: c.verdict != Verdict::Exists,
-                    verdict: c.verdict.as_str().into(),
-                    p_exists: c.p_exists,
-                    nearest_title: c.search.hits.first().and_then(|h| h.item.title.clone()),
-                    nearest_similarity: c.nearest_similarity,
-                    rule: "single".into(),
-                    one_sided_nearest: None,
-                }),
-            }
-        } else {
-            None
-        };
-        let ok = on_target.passed && novelty.as_ref().is_none_or(|n| n.passed);
-        attempts.push(Attempt {
+        let mut attempt = assess(
+            project,
+            vectors,
+            table,
+            encoder,
+            &prep,
+            target,
             title,
             description,
-            on_target,
-            novelty,
-            seconds: started.elapsed().as_secs_f64(),
-        });
+        )?;
+        attempt.seconds = started.elapsed().as_secs_f64();
+        let ok = passes(&attempt);
+        attempts.push(attempt);
         if ok {
             accepted = Some(attempts.len() - 1);
             break;
@@ -509,11 +601,12 @@ pub fn describe(
     }
     let result = DescribeResult {
         target: target.clone(),
-        label,
+        label: prep.label,
         accepted,
         attempts,
-        context_titles,
+        context_titles: prep.context_titles,
         llm: generator.identity().clone(),
+        author: local_model(),
         embedding_model: encoder.identity().model_key.clone(),
         notes,
     };
@@ -523,6 +616,153 @@ pub fn describe(
         &serde_json::to_value(target)?,
         &serde_json::to_value(&result)?,
     )?;
+    Ok(result)
+}
+
+/// What an outside writer (an agent) needs to describe a target: the same instructions and
+/// evidence the local model gets (titles and roles only), and the checks it will face.
+#[derive(Clone, Debug, Serialize)]
+pub struct DescriptionContext {
+    pub target: Target,
+    pub label: String,
+    pub system: String,
+    pub prompt: String,
+    pub context_titles: Vec<String>,
+    pub checks: Vec<String>,
+    pub notes: Vec<String>,
+}
+
+pub fn context(
+    project: &Project,
+    vectors: &VectorStore,
+    table: &VectorTableRecord,
+    target: &Target,
+    opts: &DescribeOptions,
+) -> Result<DescriptionContext> {
+    let prep = prepare(project, vectors, table, target, opts)?;
+    let mut checks = vec![match target {
+        Target::Between { .. } => "on target: the description's vector must be closer to the \
+            point between the two sides than to either side's centre"
+            .to_string(),
+        Target::Region { .. } => "on target: the description's nearest region must be this \
+            region"
+            .to_string(),
+    }];
+    checks.push(if prep.curve.is_some() {
+        match target {
+            Target::Between { .. } => "novel: no item of this collection that reaches both sides \
+                may already be the same thing (calibrated check)"
+                .to_string(),
+            Target::Region { .. } => "novel: no coverage item of this collection may already be \
+                the same thing (calibrated check)"
+                .to_string(),
+        }
+    } else {
+        "novelty is not checked: the collection has no calibration".to_string()
+    });
+    Ok(DescriptionContext {
+        target: target.clone(),
+        label: prep.label,
+        system: SYSTEM.into(),
+        prompt: prep.prompt,
+        context_titles: prep.context_titles,
+        checks,
+        notes: prep.notes,
+    })
+}
+
+/// Judge a description written outside the engine (by an agent) with the same checks as the
+/// local model's; it is stored only when it passes. `author` is `agent:<client>/<model>`.
+#[allow(clippy::too_many_arguments)]
+pub fn submit(
+    project: &Project,
+    vectors: &VectorStore,
+    table: &VectorTableRecord,
+    encoder: &mut dyn TextEmbedder,
+    target: &Target,
+    title: &str,
+    description: &str,
+    author: &str,
+    opts: &DescribeOptions,
+) -> Result<DescribeResult> {
+    let (title, description) = (title.trim(), description.trim());
+    if title.is_empty() || description.is_empty() {
+        bail!("a description needs a title and a description");
+    }
+    if title.chars().count() > MAX_TITLE_CHARS || title.contains('\n') {
+        bail!("the title must be one line of at most {MAX_TITLE_CHARS} characters");
+    }
+    if description.chars().count() > MAX_DESCRIPTION_CHARS {
+        bail!("the description must be at most {MAX_DESCRIPTION_CHARS} characters");
+    }
+    compatible(project, table, encoder)?;
+    let prep = prepare(project, vectors, table, target, opts)?;
+    let attempt = assess(
+        project,
+        vectors,
+        table,
+        encoder,
+        &prep,
+        target,
+        title.into(),
+        description.into(),
+    )?;
+    let ok = passes(&attempt);
+    let mut notes = prep.notes.clone();
+    if !ok {
+        if !attempt.on_target.passed {
+            notes.push(match target {
+                Target::Between { .. } => format!(
+                    "rejected: off target (similarity {:.3} to the point, {:.3} / {:.3} to the \
+                     sides); describe something that combines both sides",
+                    attempt.on_target.to_target,
+                    attempt.on_target.to_a.unwrap_or(f32::NAN),
+                    attempt.on_target.to_b.unwrap_or(f32::NAN)
+                ),
+                Target::Region { .. } => format!(
+                    "rejected: off target (it lands nearest region {}); stay within this \
+                     region's topic",
+                    attempt
+                        .on_target
+                        .nearest_region
+                        .map_or("?".to_string(), |r| r.to_string())
+                ),
+            });
+        }
+        if let Some(n) = attempt.novelty.as_ref().filter(|n| !n.passed) {
+            notes.push(format!(
+                "rejected: already in this collection (P(exists) {:.2}): {}",
+                n.p_exists,
+                n.nearest_title.as_deref().unwrap_or("a close item")
+            ));
+        }
+        notes.push("not stored; revise and submit again".into());
+    }
+    let result = DescribeResult {
+        target: target.clone(),
+        label: prep.label,
+        accepted: ok.then_some(0),
+        attempts: vec![attempt],
+        context_titles: prep.context_titles,
+        llm: LlmIdentity {
+            model_key: author.into(),
+            repo: String::new(),
+            revision: String::new(),
+            sha256: String::new(),
+            runtime: "agent (MCP)".into(),
+        },
+        author: author.into(),
+        embedding_model: encoder.identity().model_key.clone(),
+        notes,
+    };
+    if ok {
+        project.store.save_midpoint(
+            &table.collection_id,
+            &table.space_id,
+            &serde_json::to_value(target)?,
+            &serde_json::to_value(&result)?,
+        )?;
+    }
     Ok(result)
 }
 

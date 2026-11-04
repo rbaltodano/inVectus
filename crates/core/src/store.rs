@@ -197,9 +197,13 @@ pub struct RegionRecord {
     pub x: f64,
     pub y: f64,
     pub radius: f64,
-    /// A readable name written by a local language model (`invectus regions label`).
+    /// A readable name written by a local language model (`invectus regions label`) or an
+    /// agent.
     #[serde(default)]
     pub llm_label: Option<String>,
+    /// Who wrote `llm_label`: the local model's key, or `agent:<client>/<model>`.
+    #[serde(default)]
+    pub llm_model: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -886,7 +890,7 @@ impl Store {
     pub fn regions(&self, run_id: &str) -> Result<Vec<RegionRecord>> {
         let mut st = self.conn.prepare(
             "SELECT region_id, level, parent_id, label, terms::VARCHAR, size, stability, centroid,
-                    x, y, radius, llm_label
+                    x, y, radius, llm_label, llm_model
              FROM regions WHERE run_id = ? ORDER BY level DESC, region_id",
         )?;
         let rows = st.query_map([run_id], |r| {
@@ -904,6 +908,7 @@ impl Store {
                     y: r.get(9)?,
                     radius: r.get(10)?,
                     llm_label: r.get(11)?,
+                    llm_model: r.get(12)?,
                 },
                 r.get::<_, String>(4)?,
             ))

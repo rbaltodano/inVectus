@@ -8,7 +8,7 @@ use invectus_core::{
 };
 use invectus_index::{EmbedJobOptions, VectorStore, run_embed, select_table};
 use invectus_llm::{GenOptions, Generation, LlmIdentity, TextGenerator};
-use invectus_midpoint::{DescribeOptions, Target, describe};
+use invectus_midpoint::{DescribeOptions, Target, context, describe, submit};
 use invectus_regions::{RegionOptions, run_regions};
 use sha2::{Digest, Sha256};
 
@@ -288,4 +288,70 @@ fn descriptions_are_checked_and_retried_and_stored() {
         )
         .is_err()
     );
+    assert_eq!(stored[0].1["author"], "local-model");
+
+    // Agent-written descriptions (target product §6): the same evidence and checks; stored
+    // only when they pass, with the agent as author; rejections say why.
+    let between = Target::Between { a, b, t: 0.5 };
+    let ctx = context(&p, &v, &table, &between, &DescribeOptions::default()).unwrap();
+    assert!(ctx.prompt.contains("Side A") && !ctx.prompt.contains("uniq0x"));
+    assert_eq!(ctx.system, invectus_midpoint::SYSTEM);
+    assert!(ctx.checks[0].contains("on target"));
+    let agent = "agent:claude-code/test";
+    let off = submit(
+        &p,
+        &v,
+        &table,
+        &mut e,
+        &between,
+        "Keratoconus crosslinking",
+        "keratoconus crosslinking cornea ectasia riboflavin topography",
+        agent,
+        &DescribeOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(off.accepted, None);
+    assert!(
+        off.notes.iter().any(|n| n.contains("off target")),
+        "{:?}",
+        off.notes
+    );
+    assert_eq!(
+        p.store.midpoints("c", &table.space_id).unwrap().len(),
+        2,
+        "not stored"
+    );
+    let on = submit(
+        &p,
+        &v,
+        &table,
+        &mut e,
+        &between,
+        "Crosslinking and glaucoma drainage",
+        "keratoconus crosslinking cornea ectasia glaucoma trabeculectomy pressure drainage",
+        agent,
+        &DescribeOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(on.accepted, Some(0));
+    let stored = p.store.midpoints("c", &table.space_id).unwrap();
+    assert_eq!(stored.len(), 3);
+    assert_eq!(stored[0].1["author"], agent);
+    assert_eq!(stored[0].1["llm"]["runtime"], "agent (MCP)");
+    for (title, description) in [("", "x"), ("two\nlines", "x"), ("t", "")] {
+        assert!(
+            submit(
+                &p,
+                &v,
+                &table,
+                &mut e,
+                &between,
+                title,
+                description,
+                agent,
+                &DescribeOptions::default()
+            )
+            .is_err()
+        );
+    }
 }

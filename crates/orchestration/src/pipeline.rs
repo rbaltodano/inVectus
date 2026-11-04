@@ -17,7 +17,10 @@ use invectus_ingest::{
     TokenChunking,
 };
 use invectus_regions::{RegionOptions, run_regions};
-use invectus_unsearch::{CalibrateOptions, run_calibration};
+use invectus_unsearch::{
+    CalibrateOptions, Queries, paraphrase_sample, run_calibration, run_calibration_from,
+    screen_paraphrases,
+};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -646,6 +649,94 @@ pub fn start_calibration(
             Ok((serde_json::to_value(&report)?, cancelled))
         }),
     )
+}
+
+#[derive(Serialize)]
+pub struct ParaphraseCalibration {
+    /// Paraphrases that passed screening and are used.
+    pub accepted: usize,
+    /// `(item_id, reason)`.
+    pub rejected: Vec<(i64, String)>,
+    pub job: JobInfo,
+}
+
+/// Calibrate with paraphrases written outside the engine (by an agent; target product §6),
+/// fitted exactly as the local model's are, with `writer` recorded in the method. Paraphrases
+/// are screened first; the job starts only when at least 30 pass.
+pub fn start_calibration_from_paraphrases(
+    emit: &Emit,
+    session: &Shared,
+    board: &SharedBoard,
+    collection: String,
+    space: Option<String>,
+    writer: String,
+    given: std::collections::HashMap<i64, String>,
+) -> OpResult<ParaphraseCalibration> {
+    let project = job_project(session)?;
+    let table = select_table(&project, &collection, space.as_deref()).map_err(err)?;
+    let opts = CalibrateOptions::default();
+    let vectors = VectorStore::open(&project).map_err(err)?;
+    let sample = paraphrase_sample(&project, &vectors, &table, &opts).map_err(err)?;
+    let (kept, rejected) = screen_paraphrases(&sample, &given);
+    if kept.len() < 30 {
+        return Err(format!(
+            "only {} of {} paraphrases passed screening; calibration needs 30 or more \
+             (rejected: {})",
+            kept.len(),
+            given.len(),
+            rejected
+                .iter()
+                .take(5)
+                .map(|(id, r)| format!("{id}: {r}"))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+    let accepted = kept.len();
+    let mut info = JobInfo::new(
+        "calibrate",
+        Some(project.root.display().to_string()),
+        format!("Calibrating {collection} with agent paraphrases"),
+    );
+    info.collection = Some(collection);
+    info.space = Some(table.space_id.clone());
+    info.models = vec![table.identity.model_key.clone()];
+    let job = spawn_job(
+        emit,
+        board,
+        info,
+        Box::new(move |cancel, tick| {
+            let store = ModelStore::new(ModelStore::default_root()?);
+            let mut encoder = query_encoder(
+                &store,
+                &table.identity,
+                &EmbedOptions {
+                    threads: 4,
+                    batch_size: 1,
+                },
+            )?;
+            let report = run_calibration_from(
+                &project,
+                &vectors,
+                &table,
+                &mut encoder,
+                Queries::Given {
+                    writer: &writer,
+                    paraphrases: &kept,
+                },
+                &opts,
+                cancel,
+                &mut |p| tick("Calibrating", p.done, p.total),
+            )?;
+            let cancelled = report.cancelled;
+            Ok((serde_json::to_value(&report)?, cancelled))
+        }),
+    )?;
+    Ok(ParaphraseCalibration {
+        accepted,
+        rejected,
+        job,
+    })
 }
 
 /// Find regions and lay out the map as a job; cancelling keeps the previous regions.

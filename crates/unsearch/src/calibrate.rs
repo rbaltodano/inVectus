@@ -34,16 +34,124 @@ use std::time::Instant;
 pub const METHOD_TITLE_TEXT: &str = "title-vs-text split (no LLM)";
 pub const METHOD_LLM_PREFIX: &str = "llm paraphrase";
 
-const PARAPHRASE_SYSTEM: &str = "You rewrite documents as the idea a person would type into a \
-search box to check whether such work already exists. Reply with the idea only.";
+pub const PARAPHRASE_SYSTEM: &str = "You rewrite documents as the idea a person would type \
+into a search box to check whether such work already exists. Reply with the idea only.";
+
+/// What a paraphrase must be, for any writer (the local model's prompt ends with it).
+pub const PARAPHRASE_RULE: &str = "Write that idea in one or two plain sentences, at most 40 \
+words, in your own words: do not reuse the title's phrasing.";
+
+/// How much of an item's text a paraphrase writer sees.
+pub const PARAPHRASE_TEXT_CHARS: usize = 600;
 
 /// The prompt asking for a paraphrase of one item.
 fn paraphrase_prompt(title: &str, text: &str) -> String {
-    let start: String = text.chars().take(600).collect();
-    format!(
-        "Title: {title}\nText (start): {start}\n\nWrite that idea in one or two plain \
-         sentences, at most 40 words, in your own words: do not reuse the title's phrasing."
-    )
+    let start: String = text.chars().take(PARAPHRASE_TEXT_CHARS).collect();
+    format!("Title: {title}\nText (start): {start}\n\n{PARAPHRASE_RULE}")
+}
+
+/// Where calibration queries come from.
+pub enum Queries<'a> {
+    /// Each item's title (no language model).
+    Titles,
+    /// Paraphrases written by a local language model.
+    Model(&'a mut dyn TextGenerator),
+    /// Paraphrases written elsewhere (an agent), by item id, with the writer's name. Sampled
+    /// items without one are left out; screen them first with [`screen_paraphrases`].
+    Given {
+        writer: &'a str,
+        paraphrases: &'a HashMap<i64, String>,
+    },
+}
+
+/// One item a paraphrase writer is asked to rewrite.
+#[derive(Clone, Debug, Serialize)]
+pub struct SampleItem {
+    pub item_id: i64,
+    pub title: String,
+    /// The start of its text, as much as the local model sees.
+    pub text_start: String,
+}
+
+/// The items calibration samples for this table, in order: titled, with enough text, embedded.
+pub fn sample_items(
+    project: &Project,
+    vectors: &VectorStore,
+    table: &VectorTableRecord,
+    opts: &CalibrateOptions,
+) -> Result<Vec<invectus_core::store::EmbedRow>> {
+    let candidates =
+        project
+            .store
+            .titled_items(&table.collection_id, opts.min_text_chars, opts.sample)?;
+    let stored = vectors.vectors_for(
+        table,
+        &candidates.iter().map(|r| r.item_id).collect::<Vec<_>>(),
+    )?;
+    Ok(candidates
+        .into_iter()
+        .filter(|r| stored.contains_key(&r.item_id))
+        .collect())
+}
+
+/// The sample as a paraphrase writer sees it.
+pub fn paraphrase_sample(
+    project: &Project,
+    vectors: &VectorStore,
+    table: &VectorTableRecord,
+    opts: &CalibrateOptions,
+) -> Result<Vec<SampleItem>> {
+    Ok(sample_items(project, vectors, table, opts)?
+        .into_iter()
+        .map(|r| SampleItem {
+            item_id: r.item_id,
+            title: r.title.unwrap_or_default().trim().to_string(),
+            text_start: r.text.chars().take(PARAPHRASE_TEXT_CHARS).collect(),
+        })
+        .collect())
+}
+
+/// Longest paraphrase accepted (the rule asks for at most 40 words).
+const PARAPHRASE_MAX_WORDS: usize = 80;
+
+/// Keep paraphrases of sampled items that follow the rule; the rest come back with a reason.
+pub fn screen_paraphrases(
+    sample: &[SampleItem],
+    given: &HashMap<i64, String>,
+) -> (HashMap<i64, String>, Vec<(i64, String)>) {
+    let squash = |s: &str| {
+        s.to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+    };
+    let mut kept = HashMap::new();
+    let mut rejected = Vec::new();
+    for (&id, text) in given {
+        let Some(item) = sample.iter().find(|s| s.item_id == id) else {
+            rejected.push((id, "not in the calibration sample".into()));
+            continue;
+        };
+        let p = clean_paraphrase(text);
+        let words = p.split_whitespace().count();
+        let reason = if p.is_empty() {
+            Some("empty".to_string())
+        } else if squash(&p) == squash(&item.title) {
+            Some("repeats the title".to_string())
+        } else if words > PARAPHRASE_MAX_WORDS {
+            Some(format!("{words} words; at most {PARAPHRASE_MAX_WORDS}"))
+        } else {
+            None
+        };
+        match reason {
+            Some(r) => rejected.push((id, r)),
+            None => {
+                kept.insert(id, p);
+            }
+        }
+    }
+    rejected.sort();
+    (kept, rejected)
 }
 
 /// First paragraph of a reply, without quotes or labels.
@@ -198,10 +306,32 @@ pub fn run_calibration(
     cancel: &CancelToken,
     progress: ProgressFn<'_>,
 ) -> Result<CalibrationReport> {
+    let queries = match paraphraser {
+        Some(g) => Queries::Model(g),
+        None => Queries::Titles,
+    };
+    run_calibration_from(
+        project, vectors, table, encoder, queries, opts, cancel, progress,
+    )
+}
+
+/// [`run_calibration`] with queries from any [`Queries`] source.
+#[allow(clippy::too_many_arguments)]
+pub fn run_calibration_from(
+    project: &Project,
+    vectors: &VectorStore,
+    table: &VectorTableRecord,
+    encoder: &mut dyn TextEmbedder,
+    paraphraser: Queries<'_>,
+    opts: &CalibrateOptions,
+    cancel: &CancelToken,
+    progress: ProgressFn<'_>,
+) -> Result<CalibrationReport> {
     let started = Instant::now();
     let method = match &paraphraser {
-        Some(g) => format!("{METHOD_LLM_PREFIX} ({})", g.identity().model_key),
-        None => METHOD_TITLE_TEXT.to_string(),
+        Queries::Model(g) => format!("{METHOD_LLM_PREFIX} ({})", g.identity().model_key),
+        Queries::Given { writer, .. } => format!("{METHOD_LLM_PREFIX} ({writer})"),
+        Queries::Titles => METHOD_TITLE_TEXT.to_string(),
     };
     let compatibility = check_compatible(project, table, encoder)?;
     vectors.check(table)?;
@@ -305,7 +435,11 @@ pub fn run_calibration(
         recall_at_10: pairs.iter().filter(|p| p.rank <= 10).count() as f64 / n,
         mrr: pairs.iter().map(|p| 1.0 / p.rank as f64).sum::<f64>() / n,
     };
-    let mut notes = vec![if method.starts_with(METHOD_LLM_PREFIX) {
+    let mut notes = vec![if method.contains("(agent:") {
+        "queries are paraphrases of sampled items written by an AI agent, compared with the \
+         items as stored; the paraphrases are not human-checked (examples are kept)"
+            .to_string()
+    } else if method.starts_with(METHOD_LLM_PREFIX) {
         "queries are language-model paraphrases of sampled items, compared with the items as \
          stored; the paraphrases are not human-checked (examples are kept)"
             .to_string()
@@ -426,25 +560,16 @@ fn calibrate_inner(
     vectors: &VectorStore,
     table: &VectorTableRecord,
     encoder: &mut dyn TextEmbedder,
-    mut paraphraser: Option<&mut dyn TextGenerator>,
+    mut paraphraser: Queries<'_>,
     opts: &CalibrateOptions,
     cancel: &CancelToken,
     progress: ProgressFn<'_>,
     job_id: &str,
     total_vectors: usize,
 ) -> Result<Option<Sampled>> {
-    let candidates =
-        project
-            .store
-            .titled_items(&table.collection_id, opts.min_text_chars, opts.sample)?;
-    let stored = vectors.vectors_for(
-        table,
-        &candidates.iter().map(|r| r.item_id).collect::<Vec<_>>(),
-    )?;
-    let items: Vec<_> = candidates
-        .into_iter()
-        .filter(|r| stored.contains_key(&r.item_id))
-        .collect();
+    let mut items = sample_items(project, vectors, table, opts)?;
+    let stored =
+        vectors.vectors_for(table, &items.iter().map(|r| r.item_id).collect::<Vec<_>>())?;
     if items.len() < 30 {
         bail!(
             "only {} embedded items have a title and at least {} characters of text; calibration \
@@ -452,6 +577,15 @@ fn calibrate_inner(
             items.len(),
             opts.min_text_chars
         );
+    }
+    if let Queries::Given { paraphrases, .. } = &paraphraser {
+        items.retain(|r| paraphrases.contains_key(&r.item_id));
+        if items.len() < 30 {
+            bail!(
+                "only {} sampled items have an accepted paraphrase; calibration needs 30 or more",
+                items.len()
+            );
+        }
     }
     let identity = encoder.identity().clone();
     let titles: Vec<String> = items
@@ -463,7 +597,13 @@ fn calibrate_inner(
         .map(|r| identity.format_document(None, &r.text))
         .collect();
 
-    let steps = items.len() * if paraphraser.is_some() { 4 } else { 3 };
+    let paraphrase_mode = !matches!(paraphraser, Queries::Titles);
+    let steps = items.len()
+        * if matches!(paraphraser, Queries::Model(_)) {
+            4
+        } else {
+            3
+        };
     let mut done = 0usize;
     let mut tick = |n: usize| {
         done += n;
@@ -476,9 +616,22 @@ fn calibrate_inner(
     };
     // With a language model, queries are paraphrases of each item; without, its title.
     let mut examples = Vec::new();
-    let query_texts: Vec<String> = match paraphraser.as_deref_mut() {
-        None => titles.clone(),
-        Some(g) => {
+    let query_texts: Vec<String> = match &mut paraphraser {
+        Queries::Titles => titles.clone(),
+        Queries::Given { paraphrases, .. } => {
+            let out: Vec<String> = items
+                .iter()
+                .map(|r| paraphrases[&r.item_id].clone())
+                .collect();
+            examples = titles
+                .iter()
+                .cloned()
+                .zip(out.iter().cloned())
+                .take(20)
+                .collect();
+            out
+        }
+        Queries::Model(g) => {
             let mut out = Vec::with_capacity(items.len());
             for (r, title) in items.iter().zip(&titles) {
                 if cancel.is_cancelled() {
@@ -508,7 +661,6 @@ fn calibrate_inner(
     else {
         return Ok(None);
     };
-    let paraphrase_mode = paraphraser.is_some();
     let docs = if paraphrase_mode {
         Vec::new()
     } else {

@@ -4,6 +4,9 @@ pub mod calibrate;
 pub mod curve;
 pub mod verdict;
 
-pub use calibrate::{CalibrateOptions, CalibrationReport, run_calibration};
+pub use calibrate::{
+    CalibrateOptions, CalibrationReport, Queries, SampleItem, paraphrase_sample, run_calibration,
+    run_calibration_from, screen_paraphrases,
+};
 pub use curve::Curve;
 pub use verdict::{CheckOptions, CheckResult, Verdict, check};

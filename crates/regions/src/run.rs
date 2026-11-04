@@ -334,6 +334,7 @@ fn run_inner(
             y: map.centers[f].1,
             radius: map.radii[f],
             llm_label: None,
+            llm_model: None,
         })
         .collect();
     for b in 0..n_broad {
@@ -370,6 +371,7 @@ fn run_inner(
             y: cy,
             radius,
             llm_label: None,
+            llm_model: None,
         });
     }
     let members: Vec<MemberRecord> = (0..n)

@@ -371,3 +371,73 @@ fn paraphrase_calibration_records_its_model_and_examples() {
     assert_eq!(c.verdict, Verdict::Exists);
     assert!(!c.calibration.quality.contains("without a language model"));
 }
+
+/// Agent-written paraphrases (target product §6): screened against the sample, then fitted
+/// exactly as the local model's are, with the agent recorded as the writer.
+#[test]
+fn given_paraphrases_are_screened_and_fitted_like_the_models() {
+    use invectus_unsearch::{Queries, paraphrase_sample, run_calibration_from, screen_paraphrases};
+    use std::collections::HashMap;
+    let (_d, p, v) = setup(60);
+    let table = select_table(&p, "c", None).unwrap();
+    let sample = paraphrase_sample(&p, &v, &table, &opts()).unwrap();
+    assert_eq!(sample.len(), 60);
+    assert!(!sample[0].title.is_empty() && !sample[0].text_start.is_empty());
+    let mut given: HashMap<i64, String> = sample
+        .iter()
+        .map(|s| {
+            let words: Vec<&str> = s.title.split(' ').rev().collect();
+            (s.item_id, words.join(" "))
+        })
+        .collect();
+    given.insert(
+        sample[1].item_id,
+        format!("  {}  ", sample[1].title.to_uppercase()),
+    );
+    given.insert(sample[2].item_id, String::new());
+    given.insert(sample[3].item_id, "word ".repeat(81));
+    given.insert(-1, "not sampled".into());
+    let (kept, rejected) = screen_paraphrases(&sample, &given);
+    assert_eq!(kept.len(), 57);
+    let reasons: Vec<&str> = rejected.iter().map(|(_, r)| r.as_str()).collect();
+    assert_eq!(rejected.len(), 4, "{reasons:?}");
+    assert!(reasons.contains(&"repeats the title") && reasons.contains(&"empty"));
+    assert!(reasons.contains(&"not in the calibration sample"));
+    let mut e = BagOfWords::new();
+    let r = run_calibration_from(
+        &p,
+        &v,
+        &table,
+        &mut e,
+        Queries::Given {
+            writer: "agent:claude-code/test",
+            paraphrases: &kept,
+        },
+        &opts(),
+        &CancelToken::default(),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(r.method, "llm paraphrase (agent:claude-code/test)");
+    assert_eq!(r.items, 57, "only accepted paraphrases are used");
+    assert!(r.holdout.auc > 0.95, "{:?}", r.holdout);
+    assert!(r.notes[0].contains("AI agent"));
+    // Too few accepted paraphrases is refused, not padded with titles.
+    let few: HashMap<i64, String> = kept.into_iter().take(10).collect();
+    let err = run_calibration_from(
+        &p,
+        &v,
+        &table,
+        &mut e,
+        Queries::Given {
+            writer: "agent:x",
+            paraphrases: &few,
+        },
+        &opts(),
+        &CancelToken::default(),
+        &mut |_| {},
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("accepted paraphrase"), "{err}");
+}

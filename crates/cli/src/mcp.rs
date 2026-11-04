@@ -2,7 +2,8 @@
 //! One JSON-RPC message per line on stdin, one reply per line on stdout; logs go to stderr. It
 //! opens no network port. Read tools (A2) and write tools (A3): imports and other jobs run in
 //! the background and are followed with `job_status`. The only network use is `verify_gap`,
-//! and only when the project's network switch is on.
+//! and only when the project's network switch is on. Writing tools (A5) hand descriptions,
+//! calibration paraphrases and region names to the agent and keep the engine's checks.
 
 use anyhow::{Context, Result};
 use invectus_core::Role;
@@ -303,6 +304,157 @@ impl Server {
                 );
                 Ok(v)
             }
+            "gap_context" => {
+                let a: DescribeArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let ctx = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    let target = gap_target(s, &table, a.gap_id, a.t)?;
+                    invectus_midpoint::context(
+                        &s.project,
+                        &s.vectors,
+                        &table,
+                        &target,
+                        &a.options(),
+                    )
+                })?;
+                let mut v = value(&ctx)?;
+                v["next"] = json!(
+                    "Write one title and a 3-5 sentence description following `prompt`, then call \
+                     submit_description with the same gap_id (and t). It is stored only if it \
+                     passes the checks."
+                );
+                Ok(v)
+            }
+            "submit_description" => {
+                let a: DescribeArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let author = self.author(a.model.as_deref());
+                let (title, description) = (
+                    a.title.clone().ok_or("`title` is required")?,
+                    a.description.clone().ok_or("`description` is required")?,
+                );
+                let r = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    let target = gap_target(s, &table, a.gap_id, a.t)?;
+                    encoder_for(s, &table)?;
+                    let encoder = &mut s.encoder.as_mut().unwrap().1;
+                    invectus_midpoint::submit(
+                        &s.project,
+                        &s.vectors,
+                        &table,
+                        encoder,
+                        &target,
+                        &title,
+                        &description,
+                        &author,
+                        &a.options(),
+                    )
+                })?;
+                let mut v = value(&r)?;
+                v["stored"] = json!(r.accepted.is_some());
+                v["scope"] = json!(SCOPE);
+                Ok(v)
+            }
+            "paraphrase_sample" => {
+                let a: SampleArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let sample = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    invectus_unsearch::paraphrase_sample(
+                        &s.project,
+                        &s.vectors,
+                        &table,
+                        &invectus_unsearch::CalibrateOptions::default(),
+                    )
+                })?;
+                let (offset, limit) = (a.offset.unwrap_or(0), a.limit.unwrap_or(50).clamp(1, 300));
+                let items: Vec<Value> = sample
+                    .iter()
+                    .skip(offset)
+                    .take(limit)
+                    .map(|i| {
+                        // Item ids exceed JavaScript's exact integer range: strings.
+                        json!({ "item_id": i.item_id.to_string(), "title": i.title,
+                                "text_start": i.text_start })
+                    })
+                    .collect();
+                Ok(json!({
+                    "total": sample.len(),
+                    "offset": offset,
+                    "items": items,
+                    "system": invectus_unsearch::calibrate::PARAPHRASE_SYSTEM,
+                    "rule": invectus_unsearch::calibrate::PARAPHRASE_RULE,
+                    "next": "Paraphrase every item (page with offset/limit), then call \
+                             submit_paraphrases once with all of them. At least 30 must pass \
+                             screening: not empty, not the title again, at most 80 words.",
+                }))
+            }
+            "submit_paraphrases" => {
+                let a: ParaphraseArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let mut given = std::collections::HashMap::new();
+                for p in a.paraphrases {
+                    let id: i64 = p
+                        .item_id
+                        .trim()
+                        .parse()
+                        .map_err(|_| format!("item_id {:?} is not an item id", p.item_id))?;
+                    given.insert(id, p.paraphrase);
+                }
+                let out = orch::start_calibration_from_paraphrases(
+                    &emitter(),
+                    &self.session,
+                    &self.board,
+                    a.collection,
+                    a.space,
+                    self.author(a.model.as_deref()),
+                    given,
+                )?;
+                Ok(json!({
+                    "accepted": out.accepted,
+                    "rejected": out.rejected.iter()
+                        .map(|(id, r)| json!({ "item_id": id.to_string(), "reason": r }))
+                        .collect::<Vec<_>>(),
+                    "job": out.job,
+                    "next": "The calibration runs in the background: poll job_status. When it \
+                             completes, check_idea uses the new curve.",
+                }))
+            }
+            "region_context" => {
+                let a: RegionArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let (run_id, regions) = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    invectus_regions::llm_labels::region_context(
+                        &s.project,
+                        &table,
+                        a.unnamed_only.unwrap_or(true),
+                    )
+                })?;
+                let (offset, limit) = (a.offset.unwrap_or(0), a.limit.unwrap_or(20).clamp(1, 100));
+                Ok(json!({
+                    "run_id": run_id,
+                    "total": regions.len(),
+                    "offset": offset,
+                    "regions": regions.iter().skip(offset).take(limit).collect::<Vec<_>>(),
+                    "system": invectus_regions::llm_labels::SYSTEM,
+                    "next": "Name each region from its terms and titles (3 to 8 words), then call \
+                             submit_region_names.",
+                }))
+            }
+            "submit_region_names" => {
+                let a: NamesArgs = parse(args)?;
+                self.ensure_open(a.project.as_deref())?;
+                let author = self.author(a.model.as_deref());
+                let names: Vec<(i32, String)> =
+                    a.names.into_iter().map(|n| (n.region, n.name)).collect();
+                let report = with_session_wait(&self.session, |s| {
+                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
+                    invectus_regions::llm_labels::set_names(&s.project, &table, &names, &author)
+                })?;
+                value(&report)
+            }
             "export_gaps" => {
                 let a: ExportArgs = parse(args)?;
                 self.ensure_open(a.project.as_deref())?;
@@ -387,7 +539,11 @@ fn initialize(params: &Value) -> Value {
             and where its gaps are. Open a project (list_projects, open_project), read \
             project_status for collections and readiness, then use check_idea for a calibrated \
             verdict (exists / near / open) or search for nearest items. Verdicts hold for this \
-            collection only. Everything runs offline on this computer.",
+            collection only. You can also write for the collection: gap descriptions \
+            (gap_context, submit_description), calibration paraphrases (paraphrase_sample, \
+            submit_paraphrases) and region names (region_context, submit_region_names); the \
+            engine checks your writing and records you as its author. Suggest decisions with \
+            suggest_decision; the person makes them. Everything runs offline on this computer.",
     })
 }
 
@@ -499,6 +655,106 @@ struct SuggestArgs {
     gap_id: i32,
     verdict: String,
     reasoning: String,
+    model: Option<String>,
+}
+
+/// The description target of a gap: its region, or the point `t` between a bridge's sides.
+fn gap_target(
+    s: &orch::Session,
+    table: &invectus_core::store::VectorTableRecord,
+    gap_id: i32,
+    t: Option<f32>,
+) -> anyhow::Result<invectus_midpoint::Target> {
+    let g = invectus_gaps::detail(&s.project, table, gap_id)?.view.gap;
+    Ok(match g.region_b {
+        Some(b) => invectus_midpoint::Target::Between {
+            a: g.region_a,
+            b,
+            t: t.unwrap_or(0.5),
+        },
+        None => invectus_midpoint::Target::Region { region: g.region_a },
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DescribeArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    gap_id: i32,
+    t: Option<f32>,
+    genre: Option<String>,
+    coverage_genre: Option<String>,
+    // submit_description only.
+    title: Option<String>,
+    description: Option<String>,
+    model: Option<String>,
+}
+
+impl DescribeArgs {
+    fn options(&self) -> invectus_midpoint::DescribeOptions {
+        let d = invectus_midpoint::DescribeOptions::default();
+        invectus_midpoint::DescribeOptions {
+            genre: self.genre.clone().unwrap_or(d.genre),
+            coverage_genre: self.coverage_genre.clone().unwrap_or(d.coverage_genre),
+            ..d
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SampleArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Paraphrase {
+    item_id: String,
+    paraphrase: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ParaphraseArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    paraphrases: Vec<Paraphrase>,
+    model: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RegionArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    unnamed_only: Option<bool>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RegionName {
+    region: i32,
+    name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NamesArgs {
+    project: Option<String>,
+    collection: String,
+    space: Option<String>,
+    names: Vec<RegionName>,
     model: Option<String>,
 }
 
@@ -738,6 +994,87 @@ fn tools() -> Value {
             "annotations": writes,
         },
         {
+            "name": "gap_context",
+            "description": "Evidence and instructions for describing what would fill a gap: the \
+                same prompt the local language model gets (titles and roles only) and the checks \
+                a description must pass. For bridges, `t` (0 to 1) picks the point between the \
+                two sides.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "gap_id": { "type": "integer" },
+                "t": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5 },
+                "genre": { "type": "string", "description": "What one item is, e.g. \"research study\"." },
+                "coverage_genre": { "type": "string", "description": "What a coverage item is, e.g. \"systematic review\"." }
+            }, "required": ["collection", "gap_id"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "submit_description",
+            "description": "Submit your title and description for a gap. The engine checks it \
+                lands on the gap's point and is not already in the collection (calibrated), and \
+                stores it only if both pass; otherwise the reasons come back so you can revise.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "gap_id": { "type": "integer" },
+                "t": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5 },
+                "title": { "type": "string" }, "description": { "type": "string" },
+                "genre": { "type": "string" }, "coverage_genre": { "type": "string" },
+                "model": { "type": "string", "description": "Your model's name, recorded as the writer." }
+            }, "required": ["collection", "gap_id", "title", "description"],
+                "additionalProperties": false },
+            "annotations": writes,
+        },
+        {
+            "name": "paraphrase_sample",
+            "description": "The items calibration samples (title and start of text), with the \
+                paraphrase instructions, paged. Paraphrase them for submit_paraphrases.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "offset": { "type": "integer", "minimum": 0, "default": 0 },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 300, "default": 50 }
+            }, "required": ["collection"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "submit_paraphrases",
+            "description": "Fit the collection's calibration (what similarity means \"the same \
+                thing\") from your paraphrases, exactly as with the local model's. Screened first; \
+                runs as a background job (job_status). Replaces the current calibration.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "paraphrases": { "type": "array", "items": { "type": "object", "properties": {
+                    "item_id": { "type": "string" }, "paraphrase": { "type": "string" }
+                }, "required": ["item_id", "paraphrase"], "additionalProperties": false } },
+                "model": { "type": "string", "description": "Your model's name, recorded as the writer." }
+            }, "required": ["collection", "paraphrases"], "additionalProperties": false },
+            "annotations": writes,
+        },
+        {
+            "name": "region_context",
+            "description": "Fine regions of the latest map with their distinctive terms and \
+                central titles, to name them (unnamed only by default), paged.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "unnamed_only": { "type": "boolean", "default": true },
+                "offset": { "type": "integer", "minimum": 0, "default": 0 },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+            }, "required": ["collection"], "additionalProperties": false },
+            "annotations": read_only,
+        },
+        {
+            "name": "submit_region_names",
+            "description": "Store readable names for regions beside their term labels, recorded \
+                as written by you. Replaces an existing name.",
+            "inputSchema": { "type": "object", "properties": {
+                "project": project, "collection": collection, "space": space,
+                "names": { "type": "array", "items": { "type": "object", "properties": {
+                    "region": { "type": "integer" }, "name": { "type": "string" }
+                }, "required": ["region", "name"], "additionalProperties": false } },
+                "model": { "type": "string", "description": "Your model's name, recorded as the writer." }
+            }, "required": ["collection", "names"], "additionalProperties": false },
+            "annotations": writes,
+        },
+        {
             "name": "export_gaps",
             "description": "Write the latest gaps as Markdown or CSV (titles and links only) into \
                 the project's exports folder; returns the file path.",
@@ -805,6 +1142,12 @@ mod tests {
                 "scan_gaps",
                 "verify_gap",
                 "suggest_decision",
+                "gap_context",
+                "submit_description",
+                "paraphrase_sample",
+                "submit_paraphrases",
+                "region_context",
+                "submit_region_names",
                 "export_gaps"
             ]
         );

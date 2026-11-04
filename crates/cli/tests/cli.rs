@@ -359,7 +359,7 @@ fn mcp_server_over_stdio() {
         "one reply per request, none for the notification"
     );
     assert_eq!(replies[0]["result"]["serverInfo"]["name"], "invectus");
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 15);
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 21);
     assert_eq!(replies[2]["result"]["isError"], true);
     assert!(String::from_utf8_lossy(&o.stderr).contains("ready on stdio"));
 }
@@ -551,6 +551,141 @@ fn agent_imports_a_csv_and_reports_gaps_over_mcp() {
         );
         assert_eq!(d["suggestion"]["note"], "Study 0 already covers this.");
     }
+    // Agent-written descriptions (A5): same evidence and checks as the local model's.
+    let ctx = m.tool(
+        "gap_context",
+        serde_json::json!({ "collection": "notes", "gap_id": id }),
+    );
+    assert!(
+        ctx["prompt"].as_str().unwrap().contains("Reply exactly as"),
+        "{ctx}"
+    );
+    assert!(!ctx["checks"].as_array().unwrap().is_empty());
+    let off = m.tool(
+        "submit_description",
+        serde_json::json!({
+            "collection": "notes", "gap_id": id, "model": "test-model",
+            "title": "Lattice gauge theory on quantum hardware",
+            "description": "Simulating quark confinement with superconducting qubits and error mitigation."
+        }),
+    );
+    assert_eq!(off["stored"], false, "{off}");
+    assert!(
+        off["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n.as_str().unwrap().contains("rejected")),
+        "{off}"
+    );
+    let label = gaps["gaps"][0]["label"]
+        .as_str()
+        .unwrap()
+        .replace(" · ", " ");
+    let on = m.tool(
+        "submit_description",
+        serde_json::json!({
+            "collection": "notes", "gap_id": id, "model": "test-model",
+            "title": format!("Systematic review of {label}"),
+            "description": format!("A systematic review pooling cohorts on {label}, with outcomes at one and two years.")
+        }),
+    );
+    assert_eq!(on["attempts"][0]["on_target"]["passed"], true, "{on}");
+    assert_eq!(on["author"], "agent:t/test-model");
+    assert_eq!(on["stored"], on["accepted"].is_number());
+
+    // Agent paraphrases (A5): the calibration sample, paged; the curve is refitted from them.
+    let mut items = Vec::new();
+    loop {
+        let page = m.tool(
+            "paraphrase_sample",
+            serde_json::json!({ "collection": "notes", "offset": items.len(), "limit": 100 }),
+        );
+        let got = page["items"].as_array().unwrap().clone();
+        if got.is_empty() {
+            assert_eq!(items.len(), page["total"].as_u64().unwrap() as usize);
+            break;
+        }
+        items.extend(got);
+    }
+    assert_eq!(items.len(), 240);
+    assert!(
+        items[0]["item_id"].is_string(),
+        "ids are strings for JavaScript clients"
+    );
+    let mut paraphrases: Vec<serde_json::Value> = items
+        .iter()
+        .map(|i| {
+            let topic = i["title"].as_str().unwrap().split(" on ").nth(1).unwrap_or("it");
+            serde_json::json!({ "item_id": i["item_id"], "paraphrase": format!("Following a patient cohort for {topic} over two years") })
+        })
+        .collect();
+    paraphrases.push(serde_json::json!({ "item_id": "12", "paraphrase": "not sampled" }));
+    let cal = m.tool(
+        "submit_paraphrases",
+        serde_json::json!({ "collection": "notes", "paraphrases": paraphrases, "model": "test-model" }),
+    );
+    assert_eq!(cal["accepted"], 240, "{cal}");
+    assert_eq!(
+        cal["rejected"][0]["reason"],
+        "not in the calibration sample"
+    );
+    let start = std::time::Instant::now();
+    let job = loop {
+        let v = m.tool("job_status", serde_json::json!({}));
+        if v["current"]["state"] != "running" {
+            break v["current"].clone();
+        }
+        assert!(
+            start.elapsed().as_secs() < 300,
+            "calibration did not finish"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert_eq!(job["state"], "completed", "{job}");
+    let status = m.tool("project_status", serde_json::json!({}));
+    let method = status["tables"][0]["calibration"]["method"]
+        .as_str()
+        .unwrap();
+    assert_eq!(method, "llm paraphrase (agent:t/test-model)");
+
+    // Agent region names (A5), recorded with the agent as writer.
+    let regions = m.tool(
+        "region_context",
+        serde_json::json!({ "collection": "notes" }),
+    );
+    let first = &regions["regions"][0];
+    assert!(
+        !first["central_titles"].as_array().unwrap().is_empty(),
+        "{first}"
+    );
+    let names: Vec<serde_json::Value> = regions["regions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| serde_json::json!({ "region": r["region"], "name": format!("\"{} studies.\"", r["terms"][0].as_str().unwrap()) }))
+        .chain([serde_json::json!({ "region": 999, "name": "nowhere" })])
+        .collect();
+    let named = m.tool(
+        "submit_region_names",
+        serde_json::json!({ "collection": "notes", "names": names, "model": "test-model" }),
+    );
+    assert_eq!(named["rejected"].as_array().unwrap().len(), 1, "{named}");
+    let all = m.tool(
+        "region_context",
+        serde_json::json!({ "collection": "notes", "unnamed_only": false }),
+    );
+    let r0 = &all["regions"][0];
+    assert_eq!(r0["named_by"], "agent:t/test-model");
+    assert!(
+        !r0["name"].as_str().unwrap().ends_with('.'),
+        "cleaned like the model's"
+    );
+    let unnamed = m.tool(
+        "region_context",
+        serde_json::json!({ "collection": "notes" }),
+    );
+    assert_eq!(unnamed["total"], 0);
     let exported = m.tool(
         "export_gaps",
         serde_json::json!({ "collection": "notes", "format": "markdown" }),

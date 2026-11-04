@@ -3649,6 +3649,7 @@ dependencies = [
  "invectus-ingest",
  "invectus-llm",
  "invectus-midpoint",
+ "invectus-orchestration",
  "invectus-regions",
  "invectus-unsearch",
  "invectus-verify",
@@ -3807,6 +3808,25 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "invectus-orchestration"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs 6.0.0",
+ "invectus-core",
+ "invectus-embed",
+ "invectus-gaps",
+ "invectus-index",
+ "invectus-ingest",
+ "invectus-llm",
+ "invectus-regions",
+ "invectus-unsearch",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

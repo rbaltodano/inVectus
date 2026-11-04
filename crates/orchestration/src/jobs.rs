@@ -1,6 +1,6 @@
-//! The desktop's background jobs: one at a time, each tied to the project it runs in, with
-//! progress, cancellation and a short history. Jobs run on their own database connection, so
-//! the open project keeps answering reads while one runs (SPEC §7.6).
+//! Background jobs: one at a time, each tied to the project it runs in, with progress,
+//! cancellation and a short history. Jobs run on their own database connection, so the open
+//! project keeps answering reads while one runs (SPEC §7.6).
 
 use invectus_core::CancelToken;
 use serde::Serialize;

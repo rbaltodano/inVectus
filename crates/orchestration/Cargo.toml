@@ -1,0 +1,24 @@
+[package]
+license.workspace = true
+name = "invectus-orchestration"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Sessions, the job board, the import pipeline and readiness, shared by the desktop app and agent tools"
+
+[dependencies]
+invectus-core.workspace = true
+invectus-ingest.workspace = true
+invectus-embed.workspace = true
+invectus-index.workspace = true
+invectus-unsearch.workspace = true
+invectus-regions.workspace = true
+invectus-gaps.workspace = true
+invectus-llm.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dirs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

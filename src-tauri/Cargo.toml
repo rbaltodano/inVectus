@@ -34,6 +34,7 @@ invectus-gaps.workspace = true
 invectus-llm.workspace = true
 invectus-midpoint.workspace = true
 invectus-verify.workspace = true
+invectus-orchestration.workspace = true
 tauri-plugin-dialog = "2.8"
 
 [dev-dependencies]

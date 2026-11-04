@@ -38,7 +38,7 @@ instructions in a conversation win over these.
 ## Fixed stack
 
 Tauri 2 desktop app; a Rust workspace of `invectus-{core,ingest,embed,index,regions,gaps,
-unsearch,midpoint,llm,verify,eval,cli}` plus `src-tauri`; the `invectus` CLI; React 18 +
+unsearch,midpoint,llm,verify,eval,orchestration,cli}` plus `src-tauri`; the `invectus` CLI; React 18 +
 TypeScript + Vite. One set of engine crates serves both the CLI and the desktop app. Targets:
 macOS, Windows, Linux. `unsearch` is an internal crate name only; nothing user-facing may say
 "unSearch" (the name is taken; the feature is "inVectus search").

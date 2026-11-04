@@ -844,8 +844,8 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A1–A3 in [docs/target-product.md](docs/target-product.md): shared
-   orchestration crate, `invectus mcp` read tools, then write tools with single-writer handling.
+1. Agent interface, roadmap A2–A3 in [docs/target-product.md](docs/target-product.md):
+   `invectus mcp` read tools, then write tools with single-writer handling (A1 done 2026-11-03).
 2. Decision provenance (A4) before agents can suggest decisions.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
    indexing preview is intentional for tuning and must be removed before release.
@@ -1939,3 +1939,22 @@ packaging gates are still open. Details, reproducible commands and limitations:
 - Rebuilt the macOS bundle and passed 29 existing UI tests and diff checks. Following
   the owner's preference, no computer-use verification/relaunch was performed; the
   updated bundle needs a full quit/reopen before testing. No CI or push performed.
+
+## 2026-11-03 — Shared orchestration crate (roadmap A1)
+
+- New crate `invectus-orchestration` (`crates/orchestration`), free of Tauri: the session
+  (open project, cached query encoder, local model), the job board (moved from
+  `src-tauri/src/jobs.rs` unchanged), project readiness (`project_info`, `index_status`,
+  `plan_index`), the import → index → map → gap scan → calibration pipeline, calibration and
+  region jobs, model lists/downloads, search and check. Job changes go through an `Emit`
+  callback, so the MCP server (A2) can reuse it without a window.
+- `src-tauri/src/lib.rs` (1,849 → 584 lines) now adapts these to commands and the `job-event`;
+  command names, arguments and JSON shapes are unchanged. Gap commands stay thin wrappers
+  over `invectus-gaps` in the shell for now.
+- The end-to-end test (import → automatic model → index → regions → gaps → calibration,
+  outdated after re-import, failed job and retry) and the job-guard tests moved to the crate
+  and pass against it with the dev BGE model (M4 Pro, 240 synthetic rows).
+- Checks (arm64 macOS only): `cargo fmt --check`, workspace clippy `-D warnings`, 98
+  workspace tests (release) and `npm run build` passed. The desktop bundle was not rebuilt or
+  relaunched; behavior is expected unchanged but not checked in the running app. No CI or push.
+

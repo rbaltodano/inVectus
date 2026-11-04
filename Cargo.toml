@@ -21,6 +21,7 @@ invectus-eval = { path = "crates/eval" }
 invectus-llm = { path = "crates/llm" }
 invectus-midpoint = { path = "crates/midpoint" }
 invectus-verify = { path = "crates/verify" }
+invectus-orchestration = { path = "crates/orchestration" }
 
 anyhow = "1"
 thiserror = "2"

@@ -32,7 +32,7 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
     .sort((a, b) => Number(b.verdict.verdict === "selected") - Number(a.verdict.verdict === "selected"));
   const suggested = gapsLoading || gapsError ? [] : gaps.filter((g) => g.suggestion);
   const next = !gapsLoading && !gapsError && saved ? [...gaps].sort((a, b) => b.score - a.score)
-    .find((g) => !g.verdict && !saved.bookmarks.some((b) => b.gap_id === g.gap_id)) : undefined;
+    .find((g) => !g.verdict && !g.suggestion && !saved.bookmarks.some((b) => b.gap_id === g.gap_id)) : undefined;
 
   return <div className="saved-page stack">
     <div className="row wrap"><span className="section">Saved</span><span className="dim small push">Kept in this project</span></div>

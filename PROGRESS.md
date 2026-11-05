@@ -2236,3 +2236,24 @@ calibration for both writers' novelty checks; genres "research study" / "systema
   and the paraphrase guidance, remain the owner's decisions (A5 entry). Covered by the MCP
   end-to-end test. Not re-run on the demo.
 
+## 2026-11-05 — Agent UI: connect screen, live activity, suggestion refinements
+
+Owner asked for a first pass at the agent UI ("try your hand at those"); built in the
+instrument style, dashed outlines marking agents' work throughout, for review together.
+- **Settings → Connect an AI agent:** Claude Code, Claude Desktop and Cursor with their
+  status (connected, connected to another install, not connected, not found). "Connect…"
+  shows the exact change first (file and JSON entry, or the `claude mcp add` command, with
+  notes) and makes it only on "Make this change"; Disconnect; copy-command fallback.
+- **Live agent activity** (`src/agents.tsx`, from `agent-activity` events): a sidebar line
+  above the job line while an agent is active (client, what it just did, when; clears 90 s
+  after its last call), an "Agent active" chip in the project header, and the last eight
+  calls under "Recent agent activity" in Settings. Pulse is off with reduced motion.
+- **Refinements:** gap rows carry a compact "Agent suggestion" tag instead of a status that
+  wrapped; the suggestion is its own panel above the decision panel, with a small tracked
+  label and the suggested decision larger; Saved no longer lists a gap with a pending
+  suggestion under "Next to review".
+- Checked by rendering the real frontend in headless WebKit with engine JSON from the
+  gapmap dev project and a stub for app calls (not committed); 29 UI tests, `npm run build`;
+  app bundle rebuilt. Not checked in the native window. Circle marks for agents' searches
+  are not built (agent calls do not return map positions yet).
+

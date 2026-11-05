@@ -3,6 +3,7 @@ import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type Proj
 import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
+import ConnectAgents from "./ConnectAgents";
 
 /** Gap-score weights per project, kept on this computer; scans read them. */
 export const weightsKey = (root: string) => `invectus.weights.${root}`;
@@ -61,6 +62,8 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
       </div>)}
       {!llmReady && <div className="muted small">Not installed: descriptions and language-model calibration are off. <code>invectus llm list</code> shows where the pinned file goes.</div>}
     </section>
+
+    <ConnectAgents />
 
     <div className="label section-label">Project · {project ? project.name : "none open"}</div>
     {!project && <p className="muted">Open a project to change its network switch, gap weights and calibration.</p>}

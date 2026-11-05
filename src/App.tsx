@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { listen } from "@tauri-apps/api/event";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
+import { AgentChip, AgentLine, AgentsProvider } from "./agents";
 import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, renameRecent, type Recent } from "./screens/Projects";
 import ProjectName from "./ProjectName";
@@ -54,7 +55,9 @@ export default function App() {
   const refresh = async () => { try { setProject(await api.info()); } catch { /* no project open */ } };
   const onFinished = (j: JobInfo) => { if (j.project) refresh(); };
   return <JobsProvider onFinished={onFinished}>
-    <Shell project={project} setProject={setProject} refresh={refresh} />
+    <AgentsProvider>
+      <Shell project={project} setProject={setProject} refresh={refresh} />
+    </AgentsProvider>
   </JobsProvider>;
 }
 
@@ -172,6 +175,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         {error && <p className="side-error" role="alert">{error}</p>}
       </div>
       <div className="side-bottom">
+        <AgentLine />
         {job && <JobLine job={job} recent={recent} />}
         {nav("Settings", SettingsIcon, route.view === "settings", () => setRoute({ view: "settings" }))}
       </div>
@@ -389,10 +393,11 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   return <>
     <header className="head">
       <div className="project-heading"><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1><ProjectName name={project.name} onSave={onRename} /></h1><div className="path">{tilde(project.root)}</div></div>
+      <div className="head-actions"><AgentChip project={project.root} />
       <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
         onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
         title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
-        {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button>
+        {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button></div>
     </header>
     <WorkspaceSplit>
       <section className="project-console" aria-label="Project workspace">

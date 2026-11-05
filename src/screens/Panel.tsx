@@ -230,7 +230,7 @@ function GapsPage({ ctx, active }: { ctx: Ctx; active: boolean }) {
     {shown.length > 0 && <div className={`result-list${active ? " gap-results" : ""}`} role="group" aria-label="Gaps" key={kind}>
     {shown.map((g, i) => <button key={g.gap_id} type="button" className="menu-row rank" style={{ "--i": i } as CSSProperties} onClick={() => ctx.push({ kind: "gap", id: g.gap_id })}>
       <span className="score">{g.score.toFixed(2)}</span>
-      <span className="rank-title">{g.label}<span className="dim">{gapCode(ctx.gaps.indexOf(g))} · {KIND_LABEL[g.kind]} · {verdictLabel(g.verdict?.verdict)}{g.suggestion ? ` · agent suggests ${verdictLabel(g.suggestion.verdict).toLowerCase()}` : ""}{g.verification ? ` · ${g.verification.matches ? `${g.verification.matches} outside matches` : "no outside match"}` : ""}</span></span>
+      <span className="rank-title">{g.label}{g.suggestion && <span className="tag agent-tag" title={`An agent suggests: ${verdictLabel(g.suggestion.verdict)}`}>Agent suggestion</span>}<span className="dim">{gapCode(ctx.gaps.indexOf(g))} · {KIND_LABEL[g.kind]} · {verdictLabel(g.verdict?.verdict)}{g.verification ? ` · ${g.verification.matches ? `${g.verification.matches} outside matches` : "no outside match"}` : ""}</span></span>
     </button>)}
     </div>}
     {shown.length > 0 && <div className="row wrap small">

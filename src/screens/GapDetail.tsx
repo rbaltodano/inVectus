@@ -153,24 +153,24 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
       </div>
 
       <div className="stack gap">
+        {suggestion && <section aria-labelledby="sg" className="panel suggestion stack gap-s">
+          <div className="row wrap"><span id="sg" className="eyebrow suggestion-label">Agent suggests</span><span className="dim small push">{agentName(suggestion.author)}{suggestion.updated_at ? ` · ${when(`${suggestion.updated_at}Z`)}` : ""}</span></div>
+          <div className="suggestion-verdict">{verdictLabel(suggestion.verdict)}</div>
+          <p className="saved-note">{suggestion.note}</p>
+          <div className="row wrap">
+            <button type="button" className="btn" disabled={respond.busy} onClick={acceptSuggestion}>Accept</button>
+            <button type="button" className="text-btn" disabled={respond.busy} onClick={editSuggestion}>Edit before saving</button>
+            <button type="button" className="text-btn push" disabled={respond.busy} onClick={dismissSuggestion}>Dismiss</button>
+          </div>
+          <div className="dim small">A suggestion, not a decision: nothing changes until you accept it or save your own.</div>
+          <ErrorLine error={respond.error} />
+        </section>}
         <section aria-labelledby="vd" className="panel stack gap">
           <div className="row wrap"><div className="label">Your decision</div>
             <button type="button" className="text-btn push" aria-pressed={!!bookmark} disabled={pin.busy} onClick={toggleBookmark}>{bookmark ? "Remove bookmark" : "Save gap"}</button>
           </div>
           <p className="dim small">{bookmark ? "Bookmarked in Saved." : "Save this gap to review later, with or without a decision."}</p>
           <ErrorLine error={pin.error} />
-          {suggestion && <div className="suggestion stack gap-s" role="note" aria-labelledby="sg">
-            <div className="row wrap"><span id="sg" className="label">Agent suggests</span><span className="dim small push">{agentName(suggestion.author)}{suggestion.updated_at ? ` · ${when(`${suggestion.updated_at}Z`)}` : ""}</span></div>
-            <b>{verdictLabel(suggestion.verdict)}</b>
-            <p className="saved-note">{suggestion.note}</p>
-            <div className="row wrap">
-              <button type="button" className="btn" disabled={respond.busy} onClick={acceptSuggestion}>Accept</button>
-              <button type="button" className="text-btn" disabled={respond.busy} onClick={editSuggestion}>Edit before saving</button>
-              <button type="button" className="text-btn push" disabled={respond.busy} onClick={dismissSuggestion}>Dismiss</button>
-            </div>
-            <div className="dim small">A suggestion, not a decision: nothing changes until you accept it or save your own.</div>
-            <ErrorLine error={respond.error} />
-          </div>}
           <h2 id="vd">Decision and note</h2>
           <div className="muted small">Yours, kept apart from the engine’s score{gap.verdict?.author === "person" && gap.verdict.updated_at ? ` · saved ${when(`${gap.verdict.updated_at}Z`)}` : ""}; it carries over when gaps are scanned again.</div>
           <div role="radiogroup" aria-labelledby="vd" className="stack gap-s">

@@ -2338,3 +2338,31 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   “Claude Opus 5.5”, without guessing Medium. Missing models fall back to the client name.
 - Frontend build and direct formatting assertions passed. Native bundle not rebuilt;
   layout not visually verified in the app.
+
+## 2026-11-05 — Real agent sessions: Claude Code and Codex end to end
+
+- Owner approved. Registered the dev CLI (`target/release/invectus`) in the real clients with
+  `invectus connect add claude-code --yes` and `… codex --yes` (user scope; still connected).
+  Status then read "Claude Pro subscription" and "ChatGPT subscription".
+- Project: a copy of `demo.invectus` at `.spike-data/p1/work/agent-e2e.invectus` (papers, BGE
+  space). App not running, so calls went to the server's own session. Transcripts:
+  `.spike-data/p1/agent-e2e/{claude,codex}.jsonl`.
+- Same five-step task in each, headless (`claude -p`, Claude Code 2.1.311, model
+  claude-sonnet-5-5; `codex exec -s read-only`, codex-cli 0.166.0, model gpt-6): open and
+  status, search + `check_idea`, `list_gaps` + `gap_detail` + `gap_context`,
+  `submit_description`, `suggest_decision`.
+  - Claude Code: 11 turns, 41 s, all calls succeeded. "flood resilient housing" → open,
+    P(exists) 0.01, AUC 0.95. Gap 1 description passed both checks (region 9 at 0.90; P(exists)
+    0.02), `stored: true`. Suggested `confirmed_gap`.
+  - Codex: all calls succeeded, no shell commands. "retinal gene therapy outcomes" → exists,
+    P(exists) 0.90. Gap 2 description passed (region 6 at 0.91; P(exists) 0.04), `stored: true`.
+    Suggested `confirmed_gap`. ~260k input tokens (mostly cached), 1.3k output.
+  - Independently with `invectus gaps show`: both suggestions are stored with provenance
+    (`agent:claude-code/claude-sonnet-5-5`, `agent:codex-mcp-client/gpt-6`); both gaps' decisions
+    are still unset. Both agents reported scope as "this collection" only.
+- Findings: Codex identifies itself as `codex-mcp-client`, so provenance and the activity list
+  show that name rather than "Codex". Tool results are large (gap JSON carries 20-id `core`
+  arrays and timelines); fine here but costly for long sessions.
+- Not verified: live activity in the open app over the hand-off socket (needs a project open
+  in the window), Claude Desktop (`.mcpb`), Cursor (not installed), interactive (non-headless)
+  sessions.

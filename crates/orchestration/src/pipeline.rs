@@ -693,6 +693,12 @@ pub fn start_calibration_from_paraphrases(
         ));
     }
     let accepted = kept.len();
+    // The curve this replaces, so the report can say whether the new one is better.
+    let previous = project
+        .store
+        .latest_calibration(&table.collection_id, &table.space_id)
+        .map_err(err)?
+        .map(|c| (c.method, c.metrics["holdout"]["auc"].as_f64()));
     let mut info = JobInfo::new(
         "calibrate",
         Some(project.root.display().to_string()),
@@ -729,7 +735,19 @@ pub fn start_calibration_from_paraphrases(
                 &mut |p| tick("Calibrating", p.done, p.total),
             )?;
             let cancelled = report.cancelled;
-            Ok((serde_json::to_value(&report)?, cancelled))
+            let mut out = serde_json::to_value(&report)?;
+            if let Some((method, auc)) = &previous {
+                out["previous"] = serde_json::json!({ "method": method, "holdout_auc": auc });
+                if let Some(old) = auc.filter(|old| report.holdout.auc < *old) {
+                    out["warning"] = serde_json::json!(format!(
+                        "the new curve separates worse on held-out items (AUC {:.3}) than the \
+                         one it replaced ({method}, AUC {old:.3}); check_idea now uses the new \
+                         one, and the old one stays in the calibration history",
+                        report.holdout.auc
+                    ));
+                }
+            }
+            Ok((out, cancelled))
         }),
     )?;
     Ok(ParaphraseCalibration {

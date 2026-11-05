@@ -2228,3 +2228,11 @@ calibration for both writers' novelty checks; genres "research study" / "systema
   downloading a 2–4 B GGUF model; Windows/Linux packaging is unverified; no code signing or
   notarization (the binary is unsigned, so Gatekeeper may block a downloaded copy).
 
+## 2026-11-04 — Agent calibration reports the curve it replaced
+
+- `submit_paraphrases` jobs now record the replaced calibration (`previous`: method and
+  held-out AUC) and add a `warning` when the new curve's held-out AUC is lower. Report only:
+  the new curve is still used and the old one stays in the history. Refusing worse curves,
+  and the paraphrase guidance, remain the owner's decisions (A5 entry). Covered by the MCP
+  end-to-end test. Not re-run on the demo.
+

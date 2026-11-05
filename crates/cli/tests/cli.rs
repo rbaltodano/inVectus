@@ -648,6 +648,14 @@ fn agent_imports_a_csv_and_reports_gaps_over_mcp() {
         .as_str()
         .unwrap();
     assert_eq!(method, "llm paraphrase (agent:t/test-model)");
+    // The report compares with the curve it replaced (the pipeline's title calibration).
+    assert!(
+        job["report"]["previous"]["method"]
+            .as_str()
+            .unwrap()
+            .contains("title"),
+        "{job}"
+    );
 
     // Agent region names (A5), recorded with the agent as writer.
     let regions = m.tool(

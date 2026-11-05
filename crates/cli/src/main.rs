@@ -120,8 +120,43 @@ enum Command {
         #[command(subcommand)]
         command: GapmapCommand,
     },
-    /// Model Context Protocol server over stdio, for AI agents (read tools; no network port).
+    /// Model Context Protocol server over stdio, for AI agents (no network port).
     Mcp,
+    /// Connect an AI agent client to `invectus mcp`: prints the change; writes only with --yes.
+    Connect {
+        #[command(subcommand)]
+        command: ConnectCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConnectCommand {
+    /// Register with a client: claude-code, claude-desktop or cursor.
+    Add {
+        client: String,
+        /// Make the change (otherwise only show it).
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove the registration from a client.
+    Remove {
+        client: String,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Which clients are connected, and to which binary.
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Build a Claude Desktop extension (.mcpb) holding this binary.
+    Bundle {
+        /// Output file (default: invectus-<version>.mcpb in the current folder).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(Args)]
@@ -593,6 +628,95 @@ fn open(p: &ProjectArg) -> Result<Project> {
     Ok(project)
 }
 
+fn cmd_connect(c: ConnectCommand) -> Result<()> {
+    use invectus_orchestration::connect;
+    let env = connect::Env::system()?;
+    match c {
+        ConnectCommand::Add { client, yes, json } => {
+            let client = connect::Client::parse(&client)?;
+            let plan = connect::plan(client, &connect::server_binary()?, &env)?;
+            if json && !yes {
+                return print_json(&plan);
+            }
+            println!("{}: {}", plan.display_name, plan.manual);
+            for n in &plan.notes {
+                println!("note: {n}");
+            }
+            if plan.up_to_date {
+                println!("already connected");
+            } else if yes {
+                println!("{}", connect::apply(&plan)?);
+            } else {
+                println!("nothing changed; run again with --yes to apply");
+            }
+        }
+        ConnectCommand::Remove { client, yes } => {
+            let client = connect::Client::parse(&client)?;
+            if yes {
+                println!("{}", connect::disconnect(client, &env)?);
+            } else {
+                println!(
+                    "would remove the invectus entry from {}; run again with --yes",
+                    client.display_name()
+                );
+            }
+        }
+        ConnectCommand::Status { json } => {
+            let s = connect::status(connect::server_binary().ok().as_deref(), &env);
+            if json {
+                return print_json(&s);
+            }
+            for c in s {
+                println!(
+                    "{:<15} {}{}",
+                    c.display_name,
+                    match (c.connected, c.client_found) {
+                        (true, _) => "connected",
+                        (false, true) => "not connected",
+                        (false, false) => "not found",
+                    },
+                    match (&c.binary, c.matches_this_install) {
+                        (Some(b), false) => format!(" (to another install: {b})"),
+                        _ => String::new(),
+                    }
+                );
+            }
+        }
+        ConnectCommand::Bundle { out } => {
+            let version = invectus_core::VERSION;
+            let out = out.unwrap_or_else(|| PathBuf::from(format!("invectus-{version}.mcpb")));
+            let staging = tempfile::tempdir()?;
+            let server = staging.path().join("server");
+            std::fs::create_dir_all(&server)?;
+            let bin = connect::server_binary()?;
+            std::fs::copy(&bin, server.join(bin.file_name().unwrap()))?;
+            std::fs::write(
+                staging.path().join("manifest.json"),
+                serde_json::to_string_pretty(&connect::mcpb_manifest(version))?,
+            )?;
+            let out = std::path::absolute(&out)?;
+            let _ = std::fs::remove_file(&out);
+            // The system zip keeps the binary's executable bit.
+            let status = std::process::Command::new("zip")
+                .current_dir(staging.path())
+                .args(["-q", "-r", "-X"])
+                .arg(&out)
+                .args(["manifest.json", "server"])
+                .status()
+                .context("running zip (needed to build the bundle)")?;
+            if !status.success() {
+                bail!("zip failed");
+            }
+            println!(
+                "wrote {} ({:.1} MB); open it with Claude Desktop to install",
+                out.display(),
+                std::fs::metadata(&out)?.len() as f64 / 1e6
+            );
+        }
+    }
+    Ok(())
+}
+
 fn print_json<T: serde::Serialize>(v: &T) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(v)?);
     Ok(())
@@ -611,6 +735,7 @@ fn run() -> Result<()> {
     }
     match cli.command {
         Command::Mcp => mcp::serve()?,
+        Command::Connect { command } => cmd_connect(command)?,
         Command::Init { path } => {
             let p = Project::create(&path)?;
             println!("created {}", p.root.display());

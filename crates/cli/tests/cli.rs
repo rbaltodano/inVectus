@@ -722,3 +722,73 @@ fn agent_imports_a_csv_and_reports_gaps_over_mcp() {
         jobs.iter().map(|j| &j.state).collect::<Vec<_>>()
     );
 }
+
+/// `invectus connect` (A6) against a temporary home: shows the change, writes only with
+/// --yes, reports status, and builds a .mcpb holding this binary.
+#[test]
+fn connect_writes_only_when_asked_and_bundles() {
+    let home = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_invectus"))
+            .args(args)
+            .env("HOME", home.path())
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .unwrap()
+    };
+    let cursor = home.path().join(".cursor/mcp.json");
+    let o = ok(run(&["connect", "add", "cursor"]));
+    assert!(o.contains("--yes") && o.contains("\"mcpServers\""), "{o}");
+    assert!(!cursor.exists(), "nothing written without --yes");
+    ok(run(&["connect", "add", "cursor", "--yes"]));
+    let c: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&cursor).unwrap()).unwrap();
+    let registered = c["mcpServers"]["invectus"]["command"].as_str().unwrap();
+    assert_eq!(
+        std::fs::canonicalize(registered).unwrap(),
+        std::fs::canonicalize(env!("CARGO_BIN_EXE_invectus")).unwrap()
+    );
+    let s: serde_json::Value =
+        serde_json::from_str(&ok(run(&["connect", "status", "--json"]))).unwrap();
+    let cs = s
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["client"] == "cursor")
+        .unwrap();
+    assert_eq!(
+        (cs["connected"].clone(), cs["matches_this_install"].clone()),
+        (true.into(), true.into())
+    );
+    // Claude Code without `claude` on PATH: the command to run is shown, nothing happens.
+    let o = ok(run(&["connect", "add", "claude-code"]));
+    assert!(o.contains("claude mcp add --scope user invectus --"), "{o}");
+    assert!(
+        fail(run(&["connect", "add", "claude-code", "--yes"])).contains("cannot be configured")
+    );
+    ok(run(&["connect", "remove", "cursor", "--yes"]));
+    assert!(
+        !std::fs::read_to_string(&cursor)
+            .unwrap()
+            .contains("invectus\"")
+    );
+    assert!(fail(run(&["connect", "add", "vim"])).contains("unknown client"));
+
+    let bundle = home.path().join("invectus.mcpb");
+    ok(run(&[
+        "connect",
+        "bundle",
+        "--out",
+        bundle.to_str().unwrap(),
+    ]));
+    let list = Command::new("unzip")
+        .arg("-l")
+        .arg(&bundle)
+        .output()
+        .unwrap();
+    let list = String::from_utf8_lossy(&list.stdout);
+    assert!(
+        list.contains("manifest.json") && list.contains("server/invectus"),
+        "{list}"
+    );
+}

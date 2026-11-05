@@ -168,7 +168,7 @@ DuckDB allows one writer per database file. Two stages:
 | `invectus mcp` server and tools (§5) | **Built** for A2–A3 (read, import, jobs, scan, verify, export); §6 writing tools planned |
 | Agent-written descriptions, paraphrases, region names with checks (§6) | **Built** (A5); pass rates measured on the demo, see PROGRESS.md |
 | Decision provenance (§7) | **Built**: decisions and suggestions (A4); descriptions, paraphrase calibrations and region names record their writer (A5) |
-| Connect-an-agent button, `.mcpb` bundle | Planned |
+| Connect-an-agent button, `.mcpb` bundle | **Backend and CLI built** (A6: `invectus connect`, `connect bundle`); Settings screen not designed yet |
 | App hand-off socket (§8 stage 2) | Planned |
 | Headless agent-edition installer | Planned |
 | Small local model evaluation | Planned |

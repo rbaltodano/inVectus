@@ -470,6 +470,44 @@ async fn export_gaps(
     off_thread(move || orch::export_gaps(&session, form, &format)).await
 }
 
+/// What connecting an agent client would change (Settings → Connect an AI agent). Reads only.
+#[tauri::command]
+fn connect_plan(client: String) -> CmdResult<orch::connect::ConnectPlan> {
+    use orch::connect;
+    let env = connect::Env::system().map_err(err)?;
+    connect::plan(
+        connect::Client::parse(&client).map_err(err)?,
+        &connect::server_binary().map_err(err)?,
+        &env,
+    )
+    .map_err(err)
+}
+
+/// Connect a client after the person agreed: the plan is recomputed here, never taken from
+/// the window.
+#[tauri::command]
+fn connect_apply(client: String) -> CmdResult<String> {
+    let plan = connect_plan(client)?;
+    orch::connect::apply(&plan).map_err(err)
+}
+
+#[tauri::command]
+fn connect_remove(client: String) -> CmdResult<String> {
+    use orch::connect;
+    let env = connect::Env::system().map_err(err)?;
+    connect::disconnect(connect::Client::parse(&client).map_err(err)?, &env).map_err(err)
+}
+
+#[tauri::command]
+fn connect_status() -> CmdResult<Vec<orch::connect::ConnectStatus>> {
+    use orch::connect;
+    let env = connect::Env::system().map_err(err)?;
+    Ok(connect::status(
+        connect::server_binary().ok().as_deref(),
+        &env,
+    ))
+}
+
 /// Open an http(s) link in the system browser (the webview does not follow external links).
 #[tauri::command]
 fn open_url(url: String) -> CmdResult<()> {
@@ -528,6 +566,10 @@ pub fn run() {
             default_gap_weights,
             export_gaps,
             open_url,
+            connect_plan,
+            connect_apply,
+            connect_remove,
+            connect_status,
             preview_import,
             import_collection,
             reimport_collection,

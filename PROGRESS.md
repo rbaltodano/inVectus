@@ -844,9 +844,9 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A6–A7 in [docs/target-product.md](docs/target-product.md):
-   connect-an-agent setup and `.mcpb` bundle, then the app hand-off socket (A1–A5 done
-   2026-11-03/04). A6 and A7 have app UI the owner will design.
+1. Agent interface, roadmap A7 in [docs/target-product.md](docs/target-product.md): the app
+   hand-off socket (A1–A6 backend done 2026-11-03/04). A6's Settings screen and A7's live
+   activity are app UI the owner will design.
 2. Decide the agent paraphrase guidance (see the 2026-11-04 A5 entry): agents that follow
    "in your own words" literally drop technical terms and calibrate worse than titles.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
@@ -2139,4 +2139,37 @@ calibration for both writers' novelty checks; genres "research study" / "systema
 - Description novelty uses coverage items only for region targets (unchanged from P5); the
   gap 8 case suggests it over-calls `exists` when a coverage item shares method vocabulary.
 - Region names from agents replace an existing name; no check, as in the spec.
+
+## 2026-11-04 — Connect an AI agent and `.mcpb` bundle (roadmap A6, backend)
+
+- `invectus-orchestration::connect`: plan / apply / disconnect / status for **Claude Code**
+  (runs `claude mcp add --scope user invectus -- <bin> mcp`; status read from
+  `~/.claude.json` without running anything), **Claude Desktop** (macOS
+  `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows `%APPDATA%`;
+  Linux `~/.config/Claude`) and **Cursor** (`~/.cursor/mcp.json`). A plan shows the exact
+  entry, file and notes and writes nothing. Apply merges into `mcpServers` keeping every other
+  key and server, copies the old file to `<file>.invectus-backup`, writes atomically, and
+  refuses a file that is not a JSON object (left untouched). The registered binary is the CLI
+  itself or the `invectus` beside the app's executable.
+- CLI: `invectus connect add <client> [--yes] [--json]`, `connect remove <client> [--yes]`,
+  `connect status [--json]`, `connect bundle [--out]`. Without `--yes` nothing changes.
+- `.mcpb` (Claude Desktop extension): `manifest.json` (manifest_version 0.3, binary server
+  `${__dirname}/server/invectus mcp`, platform of the build) zipped with the binary using the
+  system `zip`. The unpacked bundle's server answered `initialize`. 110.5 MB zipped.
+- App: the macOS bundle now ships the CLI (`bundle.macOS.files` → `Contents/MacOS/invectus`;
+  `beforeBuildCommand` builds `invectus-cli`). Tauri commands `connect_plan`, `connect_apply`
+  (recomputes the plan itself), `connect_remove`, `connect_status`, and `api.ts` bindings;
+  **no Settings screen yet** (owner designs it).
+- Tests (all against a temporary home; no real client config was read or written): merge and
+  backup, other servers kept, idempotent re-plan, replacing another install's entry, broken
+  JSON refused, Claude Code via a stand-in `claude` script, status, manifest; CLI test of
+  add/remove/status/bundle. 109 workspace tests, fmt, clippy, 29 UI tests passed; app bundle
+  rebuilt (arm64 macOS).
+- Unverified: installing the `.mcpb` in Claude Desktop, and connecting a real Claude Code,
+  Claude Desktop or Cursor (needs the owner's go-ahead to touch their configs). The
+  manifest fields follow the published MCPB format as understood here, not a validator.
+- Size: `invectus` is 361 MB (`strip -x` gives 281 MB; most is LanceDB/DataFusion code), and
+  the app bundle carries it beside the 371 MB app executable. Options for later: strip
+  symbols in release, or one multi-call binary for app and CLI.
+- Windows/Linux: the bundle path, `.exe` names and config locations are coded but unverified.
 

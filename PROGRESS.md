@@ -2288,3 +2288,17 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   255 … 1480 ms, strictly increasing. Frontend build passed. The app bundle was not rebuilt:
   another agent had uncommitted changes in the tree, which this commit leaves out.
 
+## 2026-11-05 — Terminal-style stepped shimmer
+
+- Owner: the ordered CSS wave still looked like an ordinary gradient shimmer. Cause: CSS
+  interpolates each letter's opacity continuously at display rate, so neighbouring letters
+  blend into a smooth band. Terminal shimmers repaint on a tick and snap each character cell
+  to a few fixed colours.
+- `Shimmer` now works the same way: an 80 ms tick (≈12 fps) moves the bright head exactly one
+  letter; each letter takes 100%, 80% or 60% at distance 0, 1, 2 from the head, else 40%, with
+  no transition; eight ticks of pause between passes. Reduced motion shows it still.
+- Verified in headless WebKit with Playwright's clock paused between ticks: only the four
+  levels occur, and the head advances by exactly one letter per tick (0…23, pause, repeat).
+  An unpaused run showed two-letter jumps; that was the test clock flowing during screenshots.
+  Frontend build passed. Bundle not rebuilt (another agent's uncommitted changes in the tree).
+

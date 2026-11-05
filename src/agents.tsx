@@ -91,17 +91,34 @@ export function ProjectRowDetail({ root, fallback }: { root: string; fallback: s
 /** How long after a call the agent counts as mid-work (its line shimmers). */
 const WORKING_MS = 15_000;
 
-/** Thinking shimmer, letter by letter: one bright peak travels left to right, each letter
- * lighting in strict order one step after its neighbour, then a pause before the next pass.
- * Letters change brightness individually, so it steps rather than glides like a gradient. The
- * step shrinks for long lines so a pass always fits in the cycle. Screen readers get the text. */
+/** Terminal-style thinking shimmer. Like a CLI, it repaints on a tick (80 ms, about 12 fps):
+ * the bright head moves exactly one letter per tick, and every letter snaps to one of four
+ * brightness levels by its distance from the head, with nothing in between, so the band jumps
+ * letter by letter instead of gliding like a CSS gradient. A short pause follows each pass.
+ * Screen readers get the plain text; reduced motion shows it still. */
+const TICK_MS = 80;
+const LEVELS = [1, 0.8, 0.6]; // distance 0, 1, 2 from the head; further letters use BASE
+const BASE = 0.4;
+const PAUSE_TICKS = 8;
+
 export function Shimmer({ text }: { text: string }) {
   const chars = Array.from(text);
-  // The pass takes at most 70% of the 2 s cycle; the rest is the pause.
-  const step = Math.min(60, 1400 / Math.max(1, chars.length));
+  const span = chars.length + 2 * LEVELS.length;
+  const [tick, setTick] = useState(0);
+  const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  useEffect(() => {
+    if (still) return;
+    const t = setInterval(() => setTick((n) => n + 1), TICK_MS);
+    return () => clearInterval(t);
+  }, [still]);
+  // The head starts just before the first letter and leaves just after the last.
+  const head = (tick % (span + PAUSE_TICKS)) - LEVELS.length;
   return <span className="shimmer" aria-label={text}>
-    {chars.map((ch, i) => <span key={i} aria-hidden="true" className="shimmer-ch"
-      style={{ animationDelay: `${(i * step).toFixed(1)}ms` }}>{ch}</span>)}
+    {chars.map((ch, i) => {
+      const d = Math.abs(i - head);
+      return <span key={i} aria-hidden="true" className="shimmer-ch"
+        style={{ opacity: still ? 1 : d < LEVELS.length ? LEVELS[d] : BASE }}>{ch}</span>;
+    })}
   </span>;
 }
 

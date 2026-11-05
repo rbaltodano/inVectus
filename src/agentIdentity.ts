@@ -1,4 +1,13 @@
 /** Display only the reported model; never infer a reasoning effort that wasn't supplied. */
+/** A client's name as people know it. Older records keep Codex's handshake name. */
+export function clientName(client: string | null | undefined): string {
+  const names: Record<string, string> = {
+    "claude-code": "Claude Code", "claude-desktop": "Claude Desktop", "claude-ai": "Claude Desktop",
+    codex: "Codex", "codex-mcp-client": "Codex", cursor: "Cursor",
+  };
+  return client ? names[client.toLowerCase()] ?? client : "An agent";
+}
+
 export function agentIdentity(author: string): { client: string; label: string } {
   const [client = "", ...parts] = author.replace(/^agent:/, "").split("/");
   const model = parts.join(" ").trim();

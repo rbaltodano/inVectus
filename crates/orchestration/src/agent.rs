@@ -41,6 +41,15 @@ impl Default for Agent {
     }
 }
 
+/// The handshake's client name as a stable id for provenance. Codex introduces itself as
+/// `codex-mcp-client`; it is recorded as `codex`, like the connect client id.
+pub fn client_id(name: &str) -> String {
+    match name.trim() {
+        "codex-mcp-client" => "codex".into(),
+        other => other.to_string(),
+    }
+}
+
 /// Job changes are logged to stderr; agents follow progress with `job_status`.
 pub fn log_emitter() -> Emit {
     std::sync::Arc::new(|j: &JobInfo| {
@@ -1006,4 +1015,13 @@ pub fn tools() -> Value {
             "annotations": writes,
         },
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn codex_is_recorded_under_its_connect_id() {
+        assert_eq!(super::client_id(" codex-mcp-client "), "codex");
+        assert_eq!(super::client_id("claude-code"), "claude-code");
+    }
 }

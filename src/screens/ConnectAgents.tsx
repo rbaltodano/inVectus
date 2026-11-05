@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api, inTauri, type AgentAccount, type AgentClient, type ConnectPlan, type ConnectStatus } from "../api";
 import { ErrorLine, useAction } from "../App";
 import { ago, describe, useAgentActivity } from "../agents";
+import { clientName } from "../agentIdentity";
 
 const CLIENTS: { id: AgentClient; name: string; how: string }[] = [
   { id: "claude-code", name: "Claude Code", how: "Registers inVectus with Claude Code's own `claude mcp add` command." },
@@ -91,7 +92,7 @@ export default function ConnectAgents() {
     {activity.length === 0 && <div className="dim small">No agent has worked through this app since it opened.</div>}
     {activity.length > 0 && <ul className="plain agent-activity">{activity.slice(0, 8).map((a, i) => <li key={`${a.at_ms}-${i}`} className="small">
       <span className="when">{ago(a.at_ms, Date.now())}</span>
-      <span>{a.client ?? "agent"} {describe(a)}</span>
+      <span>{clientName(a.client)} {describe(a)}</span>
       {!a.ok && <span className="err">failed</span>}
     </li>)}</ul>}
   </section>;

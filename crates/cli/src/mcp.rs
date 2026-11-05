@@ -80,7 +80,7 @@ impl Server {
             "initialize" => {
                 self.agent.client = params["clientInfo"]["name"]
                     .as_str()
-                    .map(|n| n.trim().to_string())
+                    .map(invectus_orchestration::agent::client_id)
                     .filter(|n| !n.is_empty());
                 Ok(initialize(&params))
             }

@@ -2373,7 +2373,8 @@ instrument style, dashed outlines marking agents' work throughout, for review to
     (`agent:claude-code/claude-sonnet-5-5`, `agent:codex-mcp-client/gpt-6`); both gaps' decisions
     are still unset. Both agents reported scope as "this collection" only.
 - Findings: Codex identifies itself as `codex-mcp-client`, so provenance and the activity list
-  show that name rather than "Codex". Tool results are large (gap JSON carries 20-id `core`
+  show that name rather than "Codex". Fixed: the server records it as `codex`, and the app shows
+  "Codex" (also for older `codex-mcp-client` records). Tool results are large (gap JSON carries 20-id `core`
   arrays and timelines); fine here but costly for long sessions.
 - Not verified: live activity in the open app over the hand-off socket (needs a project open
   in the window), Claude Desktop (`.mcpb`), Cursor (not installed), interactive (non-headless)

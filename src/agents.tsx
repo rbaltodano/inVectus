@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { listen } from "@tauri-apps/api/event";
 import { inTauri } from "./api";
 import AgentIcon from "./AgentIcon";
+import { clientName } from "./agentIdentity";
 
 export interface AgentActivity {
   client: string | null; tool: string; project: string; query: string | null;
@@ -83,7 +84,7 @@ export function ProjectRowDetail({ root, fallback }: { root: string; fallback: s
   const now = useNow();
   if (!a) return <span className="project-row-sub">{fallback}</span>;
   const text = `${describe(a)}${!a.ok ? " · failed" : ""}`;
-  return <span className="project-row-sub agent" title={`${a.client ?? "An agent"} ${text} · ${ago(a.at_ms, now)}`}>
+  return <span className="project-row-sub agent" title={`${clientName(a.client)} ${text} · ${ago(a.at_ms, now)}`}>
     {now - a.at_ms < WORKING_MS ? <Shimmer text={text} /> : text}
   </span>;
 }
@@ -125,7 +126,7 @@ export function Shimmer({ text }: { text: string }) {
 export function ProjectRowAgent({ root }: { root: string }) {
   const a = useActiveAgent(root);
   if (!a) return null;
-  return <span className="project-row-agent" title={`${a.client ?? "An agent"} is working here`} aria-label={`${a.client ?? "An agent"} is working here`}>
+  return <span className="project-row-agent" title={`${clientName(a.client)} is working here`} aria-label={`${clientName(a.client)} is working here`}>
     <AgentIcon client={a.client} />
   </span>;
 }

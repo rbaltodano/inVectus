@@ -2301,7 +2301,9 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   levels occur, and the head advances by exactly one letter per tick (0…23, pause, repeat).
   An unpaused run showed two-letter jumps; that was the test clock flowing during screenshots.
   Frontend build passed. Bundle not rebuilt (another agent's uncommitted changes in the tree).
-
+- Tuned with the owner (approved): 120 ms tick (≈8 fps), three levels (head 100%, direct
+  neighbours 65%, rest 35%), six ticks of pause. Re-verified with the paused clock: only those
+  levels, one letter per tick.
 
 ## 2026-11-05 — Codex as a connect client; each agent's sign-in shown
 

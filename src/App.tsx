@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { listen } from "@tauri-apps/api/event";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
-import { AgentChip, AgentLine, AgentsProvider } from "./agents";
+import { AgentsProvider, ProjectRowAgent, ProjectRowDetail } from "./agents";
 import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, renameRecent, type Recent } from "./screens/Projects";
 import ProjectName from "./ProjectName";
@@ -165,8 +165,11 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
               <div className="project-sidebar-row" aria-keyshortcuts={index < 9 ? `Meta+${index + 1}` : undefined} data-current={route.view === "project" && project?.root === r.root}>
                 <button type="button" className="project-open" aria-label={`Open project ${r.name}`} title={tilde(r.root)}
                   disabled={opening || (switchingBlocked && job?.project !== r.root)} onClick={() => openRecent(r)}><Folder size={14} aria-hidden="true" /></button>
-                <ProjectName name={r.name} className="sidebar-project-name" disabled={opening || (switchingBlocked && job?.project !== r.root)} onSelect={() => void openRecent(r)} onSave={(name) => renameProject(r.root, name)} />
-                {commandHeld && index < 9 && <kbd className="project-shortcut" aria-hidden="true">{index + 1}</kbd>}
+                <div className="project-row-text">
+                  <ProjectName name={r.name} className="sidebar-project-name" disabled={opening || (switchingBlocked && job?.project !== r.root)} onSelect={() => void openRecent(r)} onSave={(name) => renameProject(r.root, name)} />
+                  <ProjectRowDetail root={r.root} fallback={rowFact(r, job)} />
+                </div>
+                {commandHeld && index < 9 ? <kbd className="project-shortcut" aria-hidden="true">{index + 1}</kbd> : <ProjectRowAgent root={r.root} />}
               </div>
             </li>)}
           </ul>
@@ -175,7 +178,6 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         {error && <p className="side-error" role="alert">{error}</p>}
       </div>
       <div className="side-bottom">
-        <AgentLine />
         {job && <JobLine job={job} recent={recent} />}
         {nav("Settings", SettingsIcon, route.view === "settings", () => setRoute({ view: "settings" }))}
       </div>
@@ -192,6 +194,12 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         initialStack={stack} goRoute={setRoute} onRename={(name) => renameProject(project.root, name)} />}
     </main>
   </div>;
+}
+
+/** The quiet second line of a sidebar project: a running job, else its size. */
+function rowFact(r: Recent, job?: JobInfo): string {
+  if (job && job.project === r.root && isRunning(job)) return job.phase ?? job.label;
+  return r.items ? `${r.items.toLocaleString()} items` : "Empty";
 }
 
 function JobLine({ job, recent }: { job: JobInfo; recent: Recent[] }) {
@@ -335,13 +343,13 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   }, [viewingGaps]);
   // Agent calls through the hand-off socket (A7) change the project behind the window's back:
   // reload what they can change. The live-activity display itself is still to be designed.
-  const reloadRef = useRef({ refresh, reloadGaps });
-  reloadRef.current = { refresh, reloadGaps };
+  const reloadRef = useRef({ refresh, reloadGaps, root: project.root });
+  reloadRef.current = { refresh, reloadGaps, root: project.root };
   useEffect(() => {
     if (!inTauri) return;
     const writes = new Set(["suggest_decision", "scan_gaps", "submit_description", "submit_region_names", "import_collection", "open_project"]);
-    const un = listen<{ tool: string; ok: boolean }>("agent-activity", (e) => {
-      if (!e.payload.ok || !writes.has(e.payload.tool)) return;
+    const un = listen<{ tool: string; ok: boolean; project: string }>("agent-activity", (e) => {
+      if (!e.payload.ok || !writes.has(e.payload.tool) || e.payload.project !== reloadRef.current.root) return;
       void reloadRef.current.refresh();
       void reloadRef.current.reloadGaps();
     });
@@ -393,7 +401,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   return <>
     <header className="head">
       <div className="project-heading"><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1><ProjectName name={project.name} onSave={onRename} /></h1><div className="path">{tilde(project.root)}</div></div>
-      <div className="head-actions"><AgentChip project={project.root} />
+      <div className="head-actions">
       <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
         onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
         title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>

@@ -8,6 +8,8 @@
 //! - `{"op":"status"}` → `{"ok":{"project": "<root>" | null, "version": "…"}}`
 //! - `{"op":"tool","client":"…","name":"…","arguments":{…}}` → `{"ok": <result>}` or
 //!   `{"error": "…"}`
+//! - `{"op":"activity","event":{…}}` → `{"ok":{}}`: an agent's call in another project,
+//!   shown in the app's sidebar; nothing runs
 //!
 //! Unix only for now; elsewhere the MCP server always opens projects itself.
 
@@ -189,6 +191,22 @@ pub fn app_handler(
                 .and_then(|g| g.as_ref().map(|s| s.project.root.clone()))
         };
         match req["op"].as_str() {
+            // An agent working in another project, outside this app: recorded for the sidebar,
+            // nothing is run. Only the fields the activity display uses are passed on.
+            Some("activity") => {
+                let e = &req["event"];
+                activity(&serde_json::json!({
+                    "client": e["client"].as_str(),
+                    "tool": e["tool"].as_str().unwrap_or_default(),
+                    "project": e["project"].as_str().unwrap_or_default(),
+                    "query": e["query"].as_str(),
+                    "gap_id": e["gap_id"].as_i64(),
+                    "ok": e["ok"].as_bool().unwrap_or(true),
+                    "error": e["error"].as_str(),
+                    "at_ms": crate::jobs::now_ms(),
+                }));
+                Ok(serde_json::json!({}))
+            }
             Some("status") => Ok(serde_json::json!({
                 "project": root().map(|p| p.display().to_string()),
                 "version": invectus_core::VERSION,

@@ -2257,3 +2257,21 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   app bundle rebuilt. Not checked in the native window. Circle marks for agents' searches
   are not built (agent calls do not return map positions yet).
 
+## 2026-11-05 — Agents shown in the sidebar's project rows
+
+- Owner's direction (like T3 Code): sidebar projects are two lines, the name and a quiet line
+  under it. The line shows an active agent's latest call (e.g. "checked “…”", "suggested a
+  decision on gap 4"), else a running job's phase, else the item count. The agent client's
+  mark sits at the right edge (Claude, OpenAI/Codex, Cursor; others get a generic bot icon),
+  pulsing gently; the Command-number hint replaces it while Command is held. The sidebar
+  box and header chip from the previous pass are removed; Settings keeps the recent list.
+- The marks' SVG paths come from T3 Code (MIT, `docs/licenses/T3-Code-MIT.txt`); they are
+  their owners' trademarks, used only to name the client.
+- Agents in other projects now show too: when `invectus mcp` runs a call locally (not the
+  app's project) and the app is running, it sends the app a one-way `activity` notice over
+  the hand-off socket; the app only records it (nothing runs). The window reloads after an
+  agent's writes only when they are in its open project.
+- Tests: the hand-off integration test checks the local call's notice reaches the app. 111
+  workspace tests, fmt, clippy, 29 UI tests, `npm run build`; bundle rebuilt. Checked in
+  headless WebKit with simulated activity; not in the native window.
+

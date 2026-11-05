@@ -4,6 +4,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { inTauri } from "./api";
+import AgentIcon from "./AgentIcon";
 
 export interface AgentActivity {
   client: string | null; tool: string; project: string; query: string | null;
@@ -75,23 +76,21 @@ export function useActiveAgent(project?: string): AgentActivity | undefined {
   return events.find((e) => (!project || e.project === project) && now - e.at_ms < ACTIVE_MS);
 }
 
-/** Sidebar line while an agent works: who, what it just did, and when. */
-export function AgentLine() {
-  const a = useActiveAgent();
+/** The second line of a project's sidebar row: an active agent's latest call, else a quiet
+ * fact about the project; and the agent's mark for the right edge of the row. */
+export function ProjectRowDetail({ root, fallback }: { root: string; fallback: string }) {
+  const a = useActiveAgent(root);
   const now = useNow();
-  if (!a) return null;
-  return <div className="agent-line" aria-live="polite">
-    <span className="agent-line-head"><span className="agent-pulse" aria-hidden="true" />Agent · {a.client ?? "unknown client"}</span>
-    <span className="dim agent-line-what">{describe(a)}</span>
-    <span className="dim small mono">{ago(a.at_ms, now)}</span>
-    {!a.ok && a.error && <span className="err small">{clip(a.error, 90)}</span>}
-  </div>;
+  if (!a) return <span className="project-row-sub">{fallback}</span>;
+  return <span className="project-row-sub agent" title={`${a.client ?? "An agent"} ${describe(a)} · ${ago(a.at_ms, now)}`}>
+    {describe(a)}{!a.ok ? " · failed" : ""}
+  </span>;
 }
 
-/** Header chip on the project an agent is working in. */
-export function AgentChip({ project }: { project: string }) {
-  const a = useActiveAgent(project);
+export function ProjectRowAgent({ root }: { root: string }) {
+  const a = useActiveAgent(root);
   if (!a) return null;
-  return <span className="tag agent-chip" title={`${a.client ?? "An agent"} ${describe(a)}`}>
-    <span className="agent-pulse" aria-hidden="true" />Agent active</span>;
+  return <span className="project-row-agent" title={`${a.client ?? "An agent"} is working here`} aria-label={`${a.client ?? "An agent"} is working here`}>
+    <AgentIcon client={a.client} />
+  </span>;
 }

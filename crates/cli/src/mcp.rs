@@ -140,7 +140,15 @@ impl Server {
         if project_bound && !follows_jobs {
             self.via_app = false;
         }
-        self.agent.run_tool(name, args)
+        let (query, gap_id) = (
+            args.get("query").or_else(|| args.get("idea")).cloned(),
+            args.get("gap_id").cloned(),
+        );
+        let result = self.agent.run_tool(name, args);
+        if project_bound && !follows_jobs {
+            self.notify_app(name, query, gap_id, &result);
+        }
+        result
     }
 
     /// The project the running app has open, reconnecting once if the app restarted.
@@ -156,6 +164,35 @@ impl Server {
             }
         }
         None
+    }
+
+    /// Tell a running app about a call made here (another project than the app's), so its
+    /// sidebar shows which agent works where. Best effort; never affects the call.
+    fn notify_app(
+        &mut self,
+        name: &str,
+        query: Option<Value>,
+        gap_id: Option<Value>,
+        result: &Result<Value, String>,
+    ) {
+        let Some(project) = self.agent.open_root() else {
+            return;
+        };
+        if self.app_project().is_none() {
+            return;
+        }
+        let event = json!({
+            "op": "activity",
+            "event": {
+                "client": self.agent.client, "tool": name, "project": project.display().to_string(),
+                "query": query, "gap_id": gap_id, "ok": result.is_ok(), "error": result.as_ref().err(),
+            },
+        });
+        if let Some(app) = self.app.as_mut()
+            && app.request(&event).is_err()
+        {
+            self.app = None;
+        }
     }
 
     fn forward(&mut self, name: &str, args: Value) -> Result<Value, String> {

@@ -728,6 +728,7 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .model-current-switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
 .model-current-switch[aria-checked="true"] > span { transform: translateX(12px); background: var(--bg); }
 .model-current-switch:disabled { opacity: .5; cursor: default; }
+.cursor-hint { position: fixed; z-index: 110; width: 240px; max-width: calc(100vw - 16px); padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); color: var(--text); font-size: 11px; line-height: 1.5; box-shadow: 0 4px 16px #0005; pointer-events: none; }
 .suggestion-verdict { font-size: 18px; font-weight: 400; color: var(--text); }
 .saved-entry.agent { border-top-style: dashed; }
 .agent-tag { align-self: flex-start; width: fit-content; border-style: dashed; }

@@ -2411,6 +2411,15 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Frontend build, 31 UI tests and the headless WebKit selector checks passed, including
   switching to current-model mode and restoring the previous choice. Native bundle not rebuilt.
 
+## 2026-11-05 — Cursor-following help for the current-model switch
+
+- Moved the explanation beneath the switch into a bordered tooltip shown while hovering the
+  setting. It follows the pointer, stays within the viewport, hides on leave and renders
+  outside the dropdown's scroll container. Keyboard focus also shows help; the switch keeps
+  a screen-reader description. Touch does not produce a hover tooltip.
+- Frontend build and headless WebKit selector checks passed, including cursor tracking,
+  viewport bounds and hiding on leave. Native bundle not rebuilt.
+
 
 ## 2026-11-05 — Compact MCP results
 

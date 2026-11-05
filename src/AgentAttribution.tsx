@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import AgentIcon from "./AgentIcon";
 import { agentIdentity } from "./agentIdentity";
 import ModelSelector from "./ModelSelector";
+import CursorHint from "./CursorHint";
 import { api, local, type ProjectInfo } from "./api";
 
 export default function AgentAttribution({ author, project, setProject }: {
@@ -75,14 +76,14 @@ export default function AgentAttribution({ author, project, setProject }: {
     {open && createPortal(<div ref={popup} id={id} className="model-popover" style={position} role="dialog" aria-label="Model for future work"
       onBlur={(e) => { if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node) && e.relatedTarget !== trigger.current) setOpen(false); }}>
       <ModelSelector value={project.preferred_agent_model ?? ""} onChange={choose} disabled={busy} />
-      <div className="model-selector-note model-current-row">
+      <CursorHint className="model-selector-note model-current-row" text="For future work in this project. Your agent app controls model switching.">
         <span id={`${id}-current`}>Use agent’s current model</span>
-        <button type="button" role="switch" className="model-current-switch" aria-labelledby={`${id}-current`}
+        <button type="button" role="switch" className="model-current-switch" aria-labelledby={`${id}-current`} aria-describedby={`${id}-help`}
           aria-checked={!project.preferred_agent_model} disabled={busy || (!project.preferred_agent_model && !lastModel)}
           title={!project.preferred_agent_model && !lastModel ? "Choose a model above to set a preference" : undefined}
           onClick={() => choose(project.preferred_agent_model ? null : lastModel, false)}><span aria-hidden="true" /></button>
-      </div>
-      <div className="model-selector-note dim small">For future work in this project. Your agent app controls model switching.</div>
+        <span id={`${id}-help`} className="sr-only">For future work in this project. Your agent app controls model switching.</span>
+      </CursorHint>
       {error && <div role="alert" className="err small model-selector-note">{error}</div>}
     </div>, document.body)}
   </span>;

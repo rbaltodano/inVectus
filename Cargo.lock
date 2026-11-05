@@ -3832,6 +3832,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "toml 0.8.2",
 ]
 
 [[package]]

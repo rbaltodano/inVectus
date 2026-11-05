@@ -508,6 +508,21 @@ fn connect_status() -> CmdResult<Vec<orch::connect::ConnectStatus>> {
     ))
 }
 
+/// Who a client's CLI is signed in as (`claude auth status`, `codex login status`). Runs the
+/// CLI, so it is asked for separately from `connect_status`.
+#[tauri::command]
+async fn connect_account(client: String) -> CmdResult<Option<orch::connect::Account>> {
+    use orch::connect;
+    let client = connect::Client::parse(&client).map_err(err)?;
+    off_thread(move || {
+        Ok(connect::account(
+            client,
+            &connect::Env::system().map_err(err)?,
+        ))
+    })
+    .await
+}
+
 /// Open an http(s) link in the system browser (the webview does not follow external links).
 #[tauri::command]
 fn open_url(url: String) -> CmdResult<()> {
@@ -591,6 +606,7 @@ pub fn run() {
             connect_apply,
             connect_remove,
             connect_status,
+            connect_account,
             preview_import,
             import_collection,
             reimport_collection,

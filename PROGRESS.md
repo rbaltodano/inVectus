@@ -2302,3 +2302,27 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   An unpaused run showed two-letter jumps; that was the test clock flowing during screenshots.
   Frontend build passed. Bundle not rebuilt (another agent's uncommitted changes in the tree).
 
+
+## 2026-11-05 — Codex as a connect client; each agent's sign-in shown
+
+- Approach: inVectus never handles an agent's tokens. It asks the client's own CLI who is
+  signed in and, if nobody is, tells the person to run `claude auth login` / `codex login`.
+- `connect::Client::Codex`: `codex mcp add invectus -- <bin> mcp` / `codex mcp remove
+  invectus`; status and plans read `$CODEX_HOME/config.toml` (default `~/.codex`) without
+  running Codex, so an up-to-date entry is a no-op. Codex's `mcp add` replaces an existing
+  entry (checked with a temporary `CODEX_HOME`). New dependency: `toml` 0.8 (already in the
+  lockfile).
+- `connect::account`: `claude auth status` (JSON) → "Claude Pro/Max/Team… subscription",
+  "Anthropic API key", Bedrock/Vertex/Foundry; `codex login status` → "ChatGPT subscription",
+  "OpenAI API key", or not signed in. Masked keys are never repeated. 20 s timeout; not run
+  under `INVECTUS_OFFLINE`, since whether the CLIs use the network for this is unverified.
+  Claude Desktop and Cursor have no CLI to ask; no sign-in is shown for them.
+- Settings → Connect an AI agent lists Codex and a sign-in line under Claude Code and Codex
+  (loaded after the fast status). `invectus connect status` prints it too.
+- Checked on the owner's Mac (claude 2.1.311, codex-cli 0.166.0): Claude Code "Claude Pro
+  subscription", Codex "ChatGPT subscription". Unit tests use stand-in CLIs; orchestration
+  connect tests, the CLI connect test, clippy, fmt and `npm run build` pass. Unverified: a
+  real Codex session calling invectus tools; the ChatGPT plan type (Plus/Pro), which
+  `codex login status` does not print.
+- **Decision (owner, 2026-11-05):** agents stay MCP-only, used from their own client (target
+  product §5). No in-app chat panel that runs `claude`/`codex` for now.

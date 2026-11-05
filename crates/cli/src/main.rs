@@ -628,6 +628,20 @@ fn open(p: &ProjectArg) -> Result<Project> {
     Ok(project)
 }
 
+/// ` · signed in: Claude Pro subscription (a@b.c)`, ` · not signed in: run …`.
+fn account_text(a: &invectus_orchestration::connect::Account) -> String {
+    let who = match (&a.label, &a.email) {
+        (Some(l), Some(e)) => format!(": {l} ({e})"),
+        (Some(x), None) | (None, Some(x)) => format!(": {x}"),
+        (None, None) => String::new(),
+    };
+    match a.status.as_str() {
+        "signed-in" => format!(" · signed in{who}"),
+        "signed-out" => format!(" · not signed in: {}", a.message.as_deref().unwrap_or("")),
+        _ => format!(" · sign-in unknown: {}", a.message.as_deref().unwrap_or("")),
+    }
+}
+
 fn cmd_connect(c: ConnectCommand) -> Result<()> {
     use invectus_orchestration::connect;
     let env = connect::Env::system()?;
@@ -662,13 +676,16 @@ fn cmd_connect(c: ConnectCommand) -> Result<()> {
             }
         }
         ConnectCommand::Status { json } => {
-            let s = connect::status(connect::server_binary().ok().as_deref(), &env);
+            let mut s = connect::status(connect::server_binary().ok().as_deref(), &env);
+            for c in s.iter_mut().filter(|c| c.client_found) {
+                c.account = connect::account(c.client, &env);
+            }
             if json {
                 return print_json(&s);
             }
             for c in s {
                 println!(
-                    "{:<15} {}{}",
+                    "{:<15} {}{}{}",
                     c.display_name,
                     match (c.connected, c.client_found) {
                         (true, _) => "connected",
@@ -678,7 +695,8 @@ fn cmd_connect(c: ConnectCommand) -> Result<()> {
                     match (&c.binary, c.matches_this_install) {
                         (Some(b), false) => format!(" (to another install: {b})"),
                         _ => String::new(),
-                    }
+                    },
+                    c.account.map(|a| account_text(&a)).unwrap_or_default()
                 );
             }
         }

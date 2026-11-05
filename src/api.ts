@@ -94,7 +94,7 @@ export interface SavedBookmark {
 }
 export interface SavedDecision { core_key: string; label: string; gap_id: number | null; verdict: GapVerdictRecord }
 export interface SavedOverview { bookmarks: SavedBookmark[]; decisions: SavedDecision[] }
-export type AgentClient = "claude-code" | "claude-desktop" | "cursor";
+export type AgentClient = "claude-code" | "claude-desktop" | "codex" | "cursor";
 export interface ConnectPlan {
   client: AgentClient; display_name: string; binary: string; method: "file" | "command";
   config_file: string | null; current: unknown; entry: unknown; command: string[] | null;
@@ -103,6 +103,10 @@ export interface ConnectPlan {
 export interface ConnectStatus {
   client: AgentClient; display_name: string; client_found: boolean; connected: boolean;
   binary: string | null; matches_this_install: boolean;
+}
+/** Who a client's own CLI says is signed in; inVectus never holds the token. */
+export interface AgentAccount {
+  status: "signed-in" | "signed-out" | "unknown"; label: string | null; email: string | null; message: string | null;
 }
 export interface GapList { run_id: string; stats: Record<string, unknown>; gaps: GapView[] }
 export interface ItemSummary { item_id: number; title: string | null; date: string | null; role: Role; url: string | null }
@@ -166,6 +170,7 @@ export const api = {
   connectApply: (client: AgentClient) => invoke<string>("connect_apply", { client }),
   connectRemove: (client: AgentClient) => invoke<string>("connect_remove", { client }),
   connectStatus: () => invoke<ConnectStatus[]>("connect_status"),
+  connectAccount: (client: AgentClient) => invoke<AgentAccount | null>("connect_account", { client }),
   defaultWeights: () => invoke<Weights>("default_gap_weights"),
   exportGaps: (t: TableRef, format: "csv" | "markdown") => invoke<string>("export_gaps", { form: t, format }),
 };

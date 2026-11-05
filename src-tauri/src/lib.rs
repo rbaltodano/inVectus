@@ -527,9 +527,30 @@ fn open_url(url: String) -> CmdResult<()> {
     cmd.arg(&url).spawn().map(|_| ()).map_err(err)
 }
 
+/// Listen for agent calls from `invectus mcp` (target product §8 stage 2). They run in this
+/// app's session and job board; each call is also sent to the window as `agent-activity`.
+fn start_agent_handoff(app: &AppHandle, session: Shared, board: SharedBoard) {
+    let path = match orch::handoff::socket_path() {
+        Ok(p) => p,
+        Err(e) => return eprintln!("agent hand-off disabled: {e:#}"),
+    };
+    let window = app.clone();
+    let activity: Arc<dyn Fn(&serde_json::Value) + Send + Sync> =
+        Arc::new(move |event: &serde_json::Value| {
+            let _ = window.emit("agent-activity", event);
+        });
+    let handler = orch::handoff::app_handler(session, board, emitter(app), activity);
+    if let Err(e) = orch::handoff::serve(&path, handler) {
+        eprintln!("agent hand-off disabled: {e:#}");
+    }
+}
+
 pub fn run() {
+    let state = AppState::default();
+    let (session, board) = (state.session.clone(), state.board.clone());
     tauri::Builder::default()
-        .setup(|_| {
+        .setup(move |app| {
+            start_agent_handoff(app.handle(), session.clone(), board.clone());
             // A release executable launched outside its .app bundle has no Dock icon by
             // default. Set the same icon explicitly, keeping its existing WebKit profile.
             #[cfg(target_os = "macos")]
@@ -552,7 +573,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState::default())
+        .manage(state)
         .invoke_handler(tauri::generate_handler![
             engine_version,
             default_projects_dir,

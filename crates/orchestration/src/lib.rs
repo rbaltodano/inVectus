@@ -3,7 +3,9 @@
 //! (target product §11, A1). Nothing here knows about a window or a transport; callers pass an
 //! [`Emit`] for job changes and run the blocking calls off their UI or async threads.
 
+pub mod agent;
 pub mod connect;
+pub mod handoff;
 pub mod jobs;
 mod pipeline;
 mod session;

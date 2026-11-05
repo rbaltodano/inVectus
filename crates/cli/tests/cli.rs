@@ -792,3 +792,109 @@ fn connect_writes_only_when_asked_and_bundles() {
         "{list}"
     );
 }
+
+/// A7: while "the app" (this test process) holds a project, `invectus mcp` reaches it through
+/// the hand-off socket instead of failing on the one-process lock; other projects open locally.
+#[cfg(unix)]
+#[test]
+fn mcp_hands_calls_for_the_apps_project_to_the_app() {
+    use invectus_orchestration as orch;
+    use std::sync::{Arc, Mutex};
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("agent.sock");
+    let session = orch::Shared::default();
+    let board = orch::SharedBoard::default();
+    let app_project = dir.path().join("held");
+    orch::open_project(&session, &board, app_project.to_str().unwrap(), true).unwrap();
+    let other = dir.path().join("free");
+    invectus_core::Project::create(&other).unwrap();
+    let seen: Arc<Mutex<Vec<serde_json::Value>>> = Arc::default();
+    let s2 = seen.clone();
+    orch::handoff::serve(
+        &sock,
+        orch::handoff::app_handler(
+            session.clone(),
+            board.clone(),
+            orch::agent::log_emitter(),
+            Arc::new(move |e: &serde_json::Value| s2.lock().unwrap().push(e.clone())),
+        ),
+    )
+    .unwrap();
+
+    let run = |lines: Vec<serde_json::Value>, socket: Option<&Path>| {
+        use std::io::Write;
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_invectus"));
+        cmd.args(["--offline", "mcp"])
+            .env("INVECTUS_MODELS_DIR", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        match socket {
+            Some(s) => cmd.env("INVECTUS_AGENT_SOCKET", s),
+            None => cmd.env("INVECTUS_AGENT_SOCKET", dir.path().join("nobody.sock")),
+        };
+        let mut child = cmd.spawn().unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        writeln!(stdin, r#"{{"jsonrpc":"2.0","id":0,"method":"initialize","params":{{"clientInfo":{{"name":"handoff-test"}}}}}}"#).unwrap();
+        for (i, l) in lines.iter().enumerate() {
+            let msg =
+                serde_json::json!({"jsonrpc":"2.0","id":i+1,"method":"tools/call","params":l});
+            writeln!(stdin, "{msg}").unwrap();
+        }
+        drop(stdin);
+        let out = child.wait_with_output().unwrap();
+        String::from_utf8(out.stdout)
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+            .filter(|r| r["id"] != 0)
+            .map(|r| r["result"].clone())
+            .collect::<Vec<_>>()
+    };
+    let held = format!("{}", app_project.with_extension("invectus").display());
+    let free = format!("{}", other.with_extension("invectus").display());
+    let replies = run(
+        vec![
+            serde_json::json!({"name":"project_status","arguments":{"project": held}}),
+            serde_json::json!({"name":"project_status","arguments":{}}),
+            serde_json::json!({"name":"job_status","arguments":{}}),
+            serde_json::json!({"name":"project_status","arguments":{"project": free}}),
+        ],
+        Some(&sock),
+    );
+    assert_eq!(replies[0]["isError"], false, "{}", replies[0]);
+    assert!(
+        replies[0]["structuredContent"]["root"]
+            .as_str()
+            .unwrap()
+            .ends_with("held.invectus")
+    );
+    assert_eq!(replies[1]["isError"], false, "no project named: the app's");
+    assert_eq!(replies[2]["isError"], false);
+    // Another project opens locally in the server (the app keeps its own).
+    assert_eq!(replies[3]["isError"], false, "{}", replies[3]);
+    assert!(
+        replies[3]["structuredContent"]["root"]
+            .as_str()
+            .unwrap()
+            .ends_with("free.invectus")
+    );
+    let events = seen.lock().unwrap().clone();
+    assert_eq!(events.len(), 3, "{events:?}");
+    assert!(events.iter().all(|e| e["client"] == "handoff-test"));
+
+    // Without the app, the held project is refused by the one-process lock, as before.
+    let replies = run(
+        vec![serde_json::json!({"name":"project_status","arguments":{"project": held}})],
+        None,
+    );
+    assert_eq!(replies[0]["isError"], true);
+    assert!(
+        replies[0]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("one inVectus process"),
+        "{}",
+        replies[0]
+    );
+}

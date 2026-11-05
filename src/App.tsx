@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
+import { listen } from "@tauri-apps/api/event";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
 import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, renameRecent, type Recent } from "./screens/Projects";
@@ -328,6 +329,20 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   useEffect(() => {
     if (viewingGaps && table?.regions?.scanned) void reloadGaps();
   }, [viewingGaps]);
+  // Agent calls through the hand-off socket (A7) change the project behind the window's back:
+  // reload what they can change. The live-activity display itself is still to be designed.
+  const reloadRef = useRef({ refresh, reloadGaps });
+  reloadRef.current = { refresh, reloadGaps };
+  useEffect(() => {
+    if (!inTauri) return;
+    const writes = new Set(["suggest_decision", "scan_gaps", "submit_description", "submit_region_names", "import_collection", "open_project"]);
+    const un = listen<{ tool: string; ok: boolean }>("agent-activity", (e) => {
+      if (!e.payload.ok || !writes.has(e.payload.tool)) return;
+      void reloadRef.current.refresh();
+      void reloadRef.current.reloadGaps();
+    });
+    return () => { un.then((f) => f()); };
+  }, []);
 
   const pushFrom = (tab: ProjectTab, p: Page) => {
     const target = p.kind === "item" || p.kind === "gap" ? tab : pageTab(p);

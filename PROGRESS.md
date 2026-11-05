@@ -844,9 +844,10 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A7 in [docs/target-product.md](docs/target-product.md): the app
-   hand-off socket (A1–A6 backend done 2026-11-03/04). A6's Settings screen and A7's live
-   activity are app UI the owner will design.
+1. Agent interface, roadmap A8 in [docs/target-product.md](docs/target-product.md):
+   headless installer and the small local model evaluation (A1–A7 backend done
+   2026-11-03/04). App UI still to design with the owner: A4 suggestions (built, to refine),
+   A6 Settings → Connect an AI agent, A7 live agent activity.
 2. Decide the agent paraphrase guidance (see the 2026-11-04 A5 entry): agents that follow
    "in your own words" literally drop technical terms and calibrate worse than titles.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
@@ -2172,4 +2173,38 @@ calibration for both writers' novelty checks; genres "research study" / "systema
   the app bundle carries it beside the 371 MB app executable. Options for later: strip
   symbols in release, or one multi-call binary for app and CLI.
 - Windows/Linux: the bundle path, `.exe` names and config locations are coded but unverified.
+
+## 2026-11-04 — App hand-off socket (roadmap A7, backend)
+
+- The tools moved from `crates/cli/src/mcp.rs` into `invectus-orchestration::agent`
+  (`Agent { session, board, emit, client, pinned }`), so `invectus mcp` and the app run the
+  same code. `mcp.rs` keeps the JSON-RPC protocol and routing.
+- `invectus-orchestration::handoff`: while the app runs it listens on a per-user Unix socket,
+  `<OS data dir>/inVectus/agent.sock` (override `INVECTUS_AGENT_SOCKET`); no network port. The
+  folder is 0700, the socket 0600, and each connection's peer uid (`getpeereid`) must be the
+  app's. A stale socket is replaced; a live one (a second app) is refused. Requests: `status`
+  (the open project) and `tool` (runs in the app's session and job board).
+- Routing in `invectus mcp`: a call goes to the app when it names the app's open project, or
+  names none and the agent has no local project; `job_status` / `cancel_job` follow the last
+  routed call; `list_projects` / `inspect_source` stay local. Through the app the agent is
+  **pinned** to the app's open project: it can never switch the person's project, and
+  `open_project` elsewhere is refused there (other projects open in the server itself).
+- App: listens at startup (`start_agent_handoff`); forwarded jobs emit the usual
+  `job-event` (so they show in Activity), and each call emits `agent-activity` (client, tool,
+  project, query/idea, gap id, ok/error, time) for the live-activity display. The window
+  reloads project info and gaps after an agent's writes (suggestions, scans, descriptions,
+  names, imports). No new visuals.
+- This replaces target product §8 stage 1's "open read-only" (impossible while another process
+  holds DuckDB's lock; see A2): with the app running, its project is reachable; without it,
+  the server opens projects directly.
+- Tests: socket permissions, stale/duplicate listeners, status, pinning and activity events
+  (unit); a spawned `invectus mcp` reaching a project whose DuckDB lock this test process
+  holds, `job_status` following it, another project opening locally, and the lock refusal
+  without the app (integration). 111 workspace tests, fmt, clippy, 29 UI tests passed; app
+  bundle rebuilt (arm64 macOS). Relaunch the app to load it.
+- Unverified: the running app with a real agent client; Windows (named pipe not built; the
+  server always opens projects itself there); a forwarded long job while the person also
+  works in the window (both share one board, so the second job is refused as designed).
+- Known edge: if the server opened a project before the app did, the app cannot open it
+  until the agent session ends (the lock is the server's).
 

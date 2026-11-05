@@ -169,7 +169,7 @@ DuckDB allows one writer per database file. Two stages:
 | Agent-written descriptions, paraphrases, region names with checks (§6) | **Built** (A5); pass rates measured on the demo, see PROGRESS.md |
 | Decision provenance (§7) | **Built**: decisions and suggestions (A4); descriptions, paraphrase calibrations and region names record their writer (A5) |
 | Connect-an-agent button, `.mcpb` bundle | **Backend and CLI built** (A6: `invectus connect`, `connect bundle`); Settings screen not designed yet |
-| App hand-off socket (§8 stage 2) | Planned |
+| App hand-off socket (§8 stage 2) | **Backend built** (A7: Unix socket, pinned to the app's project; `agent-activity` events); live-activity UI not designed yet |
 | Headless agent-edition installer | Planned |
 | Small local model evaluation | Planned |
 | TUI | Optional, later |

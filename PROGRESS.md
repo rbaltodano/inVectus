@@ -2379,3 +2379,22 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Not verified: live activity in the open app over the hand-off socket (needs a project open
   in the window), Claude Desktop (`.mcpb`), Cursor (not installed), interactive (non-headless)
   sessions.
+
+## 2026-11-05 — Collapsible model selector and future-work preference
+
+- Clicking a suggestion's model label opens the selector in gap detail and Saved. Model
+  names align with their provider's text; provider headings independently collapse/expand.
+  Spacing remains 8 px within groups and 24 px between providers. Escape, outside click,
+  narrow viewports and saving are handled; failed saves leave the selector open with an error.
+- The owner's choice is stored per project in `project.json` as `preferred_agent_model`;
+  legacy projects default to none. The command checks the project root before saving.
+  A “Next” line shows the request; existing suggestion authorship remains unchanged.
+- MCP responses carry the saved request for future work, read afresh for existing sessions.
+  **Decision:** keep the MCP-only execution model. Switching remains controlled by the
+  external agent client; this preference does not launch a model or guarantee a switch.
+  The listed options are requests, not a verified catalog of each client's availability.
+- Verification on macOS: 117 workspace tests and 30 UI tests passed; workspace formatting
+  and clippy passed; frontend build passed. Headless WebKit checks passed for indentation,
+  24/8 px gaps, independent collapse, preference save, unchanged author, Escape/outside close
+  and narrow viewport. Screenshots are in `.spike-data/ui/model-selector/` (ignored).
+  Real client model switching is unverified; native bundle not rebuilt.

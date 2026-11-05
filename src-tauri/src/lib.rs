@@ -137,6 +137,16 @@ async fn set_network(state: State<'_, AppState>, enabled: bool) -> CmdResult<Pro
 }
 
 #[tauri::command]
+async fn set_agent_model(
+    state: State<'_, AppState>,
+    project: String,
+    model: Option<String>,
+) -> CmdResult<ProjectInfo> {
+    let (session, board) = (state.session.clone(), state.board.clone());
+    off_thread(move || orch::set_agent_model(&session, &board, &project, model.as_deref())).await
+}
+
+#[tauri::command]
 fn list_llms() -> CmdResult<Vec<LlmInfo>> {
     orch::list_llms()
 }
@@ -597,6 +607,7 @@ pub fn run() {
             rename_project,
             inspect_source,
             set_network,
+            set_agent_model,
             list_llms,
             install_model,
             default_gap_weights,

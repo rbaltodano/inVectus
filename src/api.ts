@@ -32,6 +32,7 @@ export interface MissingModel { key: string; repo: string; megabytes: number }
 export interface IndexPlan { models: string[]; missing: MissingModel[]; notes: string[] }
 export interface ProjectInfo {
   root: string; name: string; warning: string | null; network_enabled: boolean; offline_env: boolean;
+  preferred_agent_model?: string | null;
   collections: Collection[]; tables: TableInfo[]; activity: JobRecord[]; running: JobInfo | null;
 }
 export interface ModelInfo { key: string; repo: string; dimensions: number; megabytes: number; installed: boolean; default: boolean; note: string }
@@ -136,6 +137,7 @@ export const api = {
   info: () => invoke<ProjectInfo>("project_info"),
   rename: (path: string, name: string) => invoke<string>("rename_project", { path, name }),
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
+  setAgentModel: (project: string, model: string | null) => invoke<ProjectInfo>("set_agent_model", { project, model }),
   inspect: (path: string) => invoke<SourceInfo>("inspect_source", { path }),
   preview: (form: ImportForm, rows = 20) => invoke<Preview>("preview_import", { form, rows }),
   importCollection: (form: ImportForm) => invoke<ImportOutcome>("import_collection", { form }),

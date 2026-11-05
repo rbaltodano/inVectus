@@ -155,7 +155,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
 
       <div className="stack gap">
         {suggestion && <section aria-labelledby="sg" className="panel suggestion stack gap-s">
-          <div className="row wrap"><span id="sg" className="eyebrow suggestion-label">Agent suggests</span><AgentAttribution author={suggestion.author} /></div>
+          <div className="row wrap"><span id="sg" className="eyebrow suggestion-label">Agent suggests</span><AgentAttribution author={suggestion.author} project={ctx.project} setProject={ctx.setProject} /></div>
           <div className="suggestion-verdict">{verdictLabel(suggestion.verdict)}</div>
           <p className="saved-note">{suggestion.note}</p>
           <div className="row wrap">

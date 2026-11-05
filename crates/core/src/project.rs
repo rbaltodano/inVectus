@@ -15,6 +15,9 @@ pub struct ProjectConfig {
     /// Connectors and cloud LLM calls are refused unless this is true (SPEC §7.7). P1 has no
     /// connectors; the flag is persisted so later milestones inherit the default.
     pub network_enabled: bool,
+    /// Requested model for future MCP agent work; the agent client controls execution.
+    #[serde(default)]
+    pub preferred_agent_model: Option<String>,
 }
 
 pub struct Project {
@@ -42,6 +45,7 @@ impl Project {
             format_version: PROJECT_FORMAT,
             name,
             network_enabled: false,
+            preferred_agent_model: None,
         };
         write_json_atomic(&root.join("project.json"), &config)?;
         let store = Store::open(&root.join("project.duckdb"))?;
@@ -71,6 +75,27 @@ impl Project {
     pub fn set_network_enabled(&mut self, enabled: bool) -> Result<()> {
         self.config.network_enabled = enabled;
         write_json_atomic(&self.root.join("project.json"), &self.config)
+    }
+
+    /// Save a request for future agent work without changing recorded authorship.
+    pub fn set_preferred_agent_model(&mut self, model: Option<&str>) -> Result<()> {
+        if let Some(model) = model
+            && (model.trim().is_empty() || model.len() > 128 || model.chars().any(char::is_control))
+        {
+            bail!(
+                "model name must be nonempty, at most 128 bytes, and contain no control characters"
+            );
+        }
+        let mut config = read_config(&self.root)?;
+        config.preferred_agent_model = model.map(|s| s.trim().to_owned());
+        write_json_atomic(&self.root.join("project.json"), &config)?;
+        self.config = config;
+        Ok(())
+    }
+
+    /// Read current metadata, including preferences changed by the desktop app.
+    pub fn preferred_agent_model(&self) -> Result<Option<String>> {
+        Ok(read_config(&self.root)?.preferred_agent_model)
     }
 
     /// Change the display name without moving the project or touching its database.
@@ -190,6 +215,38 @@ pub fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_model_preference_is_optional_persistent_and_validated() {
+        let legacy: ProjectConfig = serde_json::from_value(serde_json::json!({
+            "format_version": 1, "name": "Legacy", "network_enabled": false
+        }))
+        .unwrap();
+        assert!(legacy.preferred_agent_model.is_none());
+        let dir = tempfile::tempdir().unwrap();
+        let mut project = Project::create(&dir.path().join("preference")).unwrap();
+        project
+            .set_preferred_agent_model(Some("Claude Opus 5.5 Medium"))
+            .unwrap();
+        assert_eq!(
+            read_config(&project.root)
+                .unwrap()
+                .preferred_agent_model
+                .as_deref(),
+            Some("Claude Opus 5.5 Medium")
+        );
+        assert!(
+            project
+                .set_preferred_agent_model(Some("bad\nmodel"))
+                .is_err()
+        );
+        assert_eq!(
+            project.preferred_agent_model().unwrap().as_deref(),
+            Some("Claude Opus 5.5 Medium")
+        );
+        project.set_preferred_agent_model(None).unwrap();
+        assert!(project.preferred_agent_model().unwrap().is_none());
+    }
 
     #[test]
     fn create_then_open() {

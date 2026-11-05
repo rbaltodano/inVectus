@@ -87,7 +87,7 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
         <div className="row wrap"><h2 id="saved-suggested" className="section">03 / Agent suggestions</h2><span className="dim small push">Waiting for you</span></div>
         <p className="dim small">Suggested by an AI agent connected to this project. They are not decisions until you accept them.</p>
         {suggested.map((g) => <article className="saved-entry agent" key={g.gap_id}>
-          <div className="row wrap"><span className="label">Suggests {verdictLabel(g.suggestion!.verdict).toLowerCase()}</span><AgentAttribution author={g.suggestion!.author} /></div>
+          <div className="row wrap"><span className="label">Suggests {verdictLabel(g.suggestion!.verdict).toLowerCase()}</span><AgentAttribution author={g.suggestion!.author} project={ctx.project} setProject={ctx.setProject} /></div>
           <h3 className="saved-title">{g.label}</h3>
           <p className="saved-note">{g.suggestion!.note}</p>
           <button type="button" className="text-btn" onClick={() => ctx.push({ kind: "gap", id: g.gap_id })}>Review evidence and respond</button>

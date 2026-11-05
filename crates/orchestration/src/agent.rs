@@ -77,6 +77,22 @@ impl Agent {
     }
 
     pub fn run_tool(&mut self, name: &str, args: Value) -> OpResult<Value> {
+        let mut result = self.run_tool_inner(name, args)?;
+        if let Some(root) = self.open_root() {
+            // Read metadata afresh so an already-running client sees the app's next choice.
+            let model = with_session_wait(&self.session, |s| s.project.preferred_agent_model())?;
+            if let Some(model) = model {
+                result["agent_model_preference"] = json!({
+                    "requested_model": model,
+                    "project": root,
+                    "instruction": "For future work, the user requests this model and effort. Model switching is controlled by your client, not inVectus. If you cannot use it, tell the user; do not claim to have switched. Always report your actual model in submissions."
+                });
+            }
+        }
+        Ok(result)
+    }
+
+    fn run_tool_inner(&mut self, name: &str, args: Value) -> OpResult<Value> {
         match name {
             "list_projects" => {
                 let a: ListArgs = parse(args)?;
@@ -1019,6 +1035,56 @@ pub fn tools() -> Value {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn later_agent_calls_receive_saved_model_preference_without_changing_author() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("preference.invectus");
+        let mut agent = super::Agent {
+            client: Some("claude-code".into()),
+            ..Default::default()
+        };
+        agent
+            .run_tool(
+                "open_project",
+                serde_json::json!({"project": root, "create": true}),
+            )
+            .unwrap();
+        assert!(
+            super::orch::set_agent_model(
+                &agent.session,
+                &agent.board,
+                "/another-project.invectus",
+                Some("GPT-6.1 High")
+            )
+            .is_err()
+        );
+        super::orch::set_agent_model(
+            &agent.session,
+            &agent.board,
+            root.to_str().unwrap(),
+            Some("GPT-6.1 High"),
+        )
+        .unwrap();
+        let response = agent
+            .run_tool("project_status", serde_json::json!({}))
+            .unwrap();
+        assert_eq!(response["preferred_agent_model"], "GPT-6.1 High");
+        assert_eq!(
+            response["agent_model_preference"]["requested_model"],
+            "GPT-6.1 High"
+        );
+        assert_eq!(
+            agent.author(Some("claude-opus-5-5")),
+            "agent:claude-code/claude-opus-5-5"
+        );
+        super::orch::set_agent_model(&agent.session, &agent.board, root.to_str().unwrap(), None)
+            .unwrap();
+        let response = agent
+            .run_tool("project_status", serde_json::json!({}))
+            .unwrap();
+        assert!(response.get("agent_model_preference").is_none());
+    }
+
     #[test]
     fn codex_is_recorded_under_its_connect_id() {
         assert_eq!(super::client_id(" codex-mcp-client "), "codex");

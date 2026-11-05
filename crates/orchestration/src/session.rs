@@ -147,6 +147,7 @@ pub struct ProjectInfo {
     pub name: String,
     pub warning: Option<String>,
     pub network_enabled: bool,
+    pub preferred_agent_model: Option<String>,
     /// `INVECTUS_OFFLINE=1`: every network use is refused whatever the project switch says.
     pub offline_env: bool,
     pub collections: Vec<CollectionInfo>,
@@ -244,6 +245,7 @@ pub fn project_info(s: &Session, board: &SharedBoard) -> anyhow::Result<ProjectI
         name: s.project.config.name.clone(),
         warning: s.project.storage_warning(),
         network_enabled: s.project.config.network_enabled,
+        preferred_agent_model: s.project.preferred_agent_model()?,
         offline_env: invectus_core::net::offline(),
         collections,
         tables,
@@ -310,6 +312,22 @@ pub fn rename_project(session: &Shared, path: &str, name: &str) -> OpResult<Stri
 pub fn set_network(session: &Shared, board: &SharedBoard, enabled: bool) -> OpResult<ProjectInfo> {
     with_session(session, |s| {
         s.project.set_network_enabled(enabled)?;
+        project_info(s, board)
+    })
+}
+
+pub fn set_agent_model(
+    session: &Shared,
+    board: &SharedBoard,
+    project: &str,
+    model: Option<&str>,
+) -> OpResult<ProjectInfo> {
+    with_session(session, |s| {
+        anyhow::ensure!(
+            s.project.root == std::path::Path::new(project),
+            "the open project changed; choose the model again"
+        );
+        s.project.set_preferred_agent_model(model)?;
         project_info(s, board)
     })
 }

@@ -2275,3 +2275,16 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   workspace tests, fmt, clippy, 29 UI tests, `npm run build`; bundle rebuilt. Checked in
   headless WebKit with simulated activity; not in the native window.
 
+## 2026-11-05 — Letter-by-letter thinking shimmer on agent rows
+
+- While an agent is mid-work (last call under 15 s ago) the sidebar row's agent line shimmers
+  letter by letter: one bright peak per 2 s cycle travels strictly left to right, each letter
+  lighting one equal step after its neighbour (60 ms, smaller for long lines so a pass fits in
+  70% of the cycle), then a pause. Plain text afterwards until the agent clears (90 s). Off
+  with reduced motion; screen readers get the plain text.
+- The first version added an irregular per-letter offset and several peaks per cycle, so
+  letters flashed out of order (owner caught it); replaced.
+- Measured in headless WebKit by setting the animation clock: 24 letters peaked at 140, 200,
+  255 … 1480 ms, strictly increasing. Frontend build passed. The app bundle was not rebuilt:
+  another agent had uncommitted changes in the tree, which this commit leaves out.
+

@@ -728,3 +728,10 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .project-row-agent { display: flex; align-items: center; justify-content: center; flex: none; width: 18px; min-height: 20px; color: var(--ink); }
 .project-row-agent svg { animation: agent-pulse 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .project-row-agent svg { animation: none; } }
+
+/* Letter-by-letter thinking shimmer: one peak per 2 s cycle, each letter's delay one equal step
+   after its neighbour's (set inline), so the wave moves strictly left to right. */
+.shimmer { white-space: inherit; }
+.shimmer-ch { opacity: 0.4; animation: shimmer-ch 2s linear infinite both; white-space: pre; }
+@keyframes shimmer-ch { 0% { opacity: 0.4; } 7% { opacity: 1; } 20% { opacity: 0.4; } 100% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .shimmer-ch { animation: none; opacity: 1; } }

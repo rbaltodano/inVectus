@@ -82,8 +82,26 @@ export function ProjectRowDetail({ root, fallback }: { root: string; fallback: s
   const a = useActiveAgent(root);
   const now = useNow();
   if (!a) return <span className="project-row-sub">{fallback}</span>;
-  return <span className="project-row-sub agent" title={`${a.client ?? "An agent"} ${describe(a)} · ${ago(a.at_ms, now)}`}>
-    {describe(a)}{!a.ok ? " · failed" : ""}
+  const text = `${describe(a)}${!a.ok ? " · failed" : ""}`;
+  return <span className="project-row-sub agent" title={`${a.client ?? "An agent"} ${text} · ${ago(a.at_ms, now)}`}>
+    {now - a.at_ms < WORKING_MS ? <Shimmer text={text} /> : text}
+  </span>;
+}
+
+/** How long after a call the agent counts as mid-work (its line shimmers). */
+const WORKING_MS = 15_000;
+
+/** Thinking shimmer, letter by letter: one bright peak travels left to right, each letter
+ * lighting in strict order one step after its neighbour, then a pause before the next pass.
+ * Letters change brightness individually, so it steps rather than glides like a gradient. The
+ * step shrinks for long lines so a pass always fits in the cycle. Screen readers get the text. */
+export function Shimmer({ text }: { text: string }) {
+  const chars = Array.from(text);
+  // The pass takes at most 70% of the 2 s cycle; the rest is the pause.
+  const step = Math.min(60, 1400 / Math.max(1, chars.length));
+  return <span className="shimmer" aria-label={text}>
+    {chars.map((ch, i) => <span key={i} aria-hidden="true" className="shimmer-ch"
+      style={{ animationDelay: `${(i * step).toFixed(1)}ms` }}>{ch}</span>)}
   </span>;
 }
 

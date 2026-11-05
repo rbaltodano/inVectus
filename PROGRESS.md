@@ -2339,6 +2339,18 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Frontend build and direct formatting assertions passed. Native bundle not rebuilt;
   layout not visually verified in the app.
 
+## 2026-11-05 — Provider-grouped model selector layout for review
+
+- Built a controlled `ModelSelector` component with the sidebar's Claude/OpenAI symbols:
+  8 px from provider heading to model list, 8 px between options, 24 px between providers.
+- Options are illustrative UI review entries, not a verified client capability catalog.
+  Not wired to suggestion attribution yet: awaiting the owner's clarification of whether
+  choosing a model is a prototype interaction or controls future work. Existing authorship
+  must not be changed by selecting a different model.
+- Frontend build passed. Rendered the actual component in headless WebKit and checked
+  computed gaps (24/8/8 px); review HTML and PNG are in ignored `.spike-data/ui/model-selector/`.
+  Native bundle not rebuilt.
+
 ## 2026-11-05 — Real agent sessions: Claude Code and Codex end to end
 
 - Owner approved. Registered the dev CLI (`target/release/invectus`) in the real clients with

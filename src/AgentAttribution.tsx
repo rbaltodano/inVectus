@@ -4,12 +4,16 @@ import { ChevronDown } from "lucide-react";
 import AgentIcon from "./AgentIcon";
 import { agentIdentity } from "./agentIdentity";
 import ModelSelector from "./ModelSelector";
-import { api, type ProjectInfo } from "./api";
+import { api, local, type ProjectInfo } from "./api";
 
 export default function AgentAttribution({ author, project, setProject }: {
   author: string; project: ProjectInfo; setProject: (project: ProjectInfo) => void;
 }) {
   const { client, label } = agentIdentity(author);
+  const lastModelKey = `invectus.last-agent-model.${project.root}`;
+  const [rememberedModel, setRememberedModel] = useState(() => local.get<string | null>(lastModelKey, null));
+  const candidate = project.preferred_agent_model ?? rememberedModel;
+  const lastModel = typeof candidate === "string" && candidate.trim() ? candidate : null;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -50,9 +54,15 @@ export default function AgentAttribution({ author, project, setProject }: {
       window.removeEventListener("scroll", place, true);
     };
   }, [open]);
-  const choose = async (model: string | null) => {
+  const choose = async (model: string | null, close = true) => {
     setBusy(true); setError(undefined);
-    try { setProject(await api.setAgentModel(project.root, model)); setOpen(false); trigger.current?.focus(); }
+    try {
+      const updated = await api.setAgentModel(project.root, model);
+      const remember = model ?? project.preferred_agent_model;
+      if (remember) { local.set(lastModelKey, remember); setRememberedModel(remember); }
+      setProject(updated);
+      if (close) { setOpen(false); trigger.current?.focus(); }
+    }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
@@ -65,7 +75,13 @@ export default function AgentAttribution({ author, project, setProject }: {
     {open && createPortal(<div ref={popup} id={id} className="model-popover" style={position} role="dialog" aria-label="Model for future work"
       onBlur={(e) => { if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node) && e.relatedTarget !== trigger.current) setOpen(false); }}>
       <ModelSelector value={project.preferred_agent_model ?? ""} onChange={choose} disabled={busy} />
-      {project.preferred_agent_model && <div className="model-selector-note"><button type="button" className="text-btn small" disabled={busy} onClick={() => choose(null)}>Use agent’s current model</button></div>}
+      <div className="model-selector-note model-current-row">
+        <span id={`${id}-current`}>Use agent’s current model</span>
+        <button type="button" role="switch" className="model-current-switch" aria-labelledby={`${id}-current`}
+          aria-checked={!project.preferred_agent_model} disabled={busy || (!project.preferred_agent_model && !lastModel)}
+          title={!project.preferred_agent_model && !lastModel ? "Choose a model above to set a preference" : undefined}
+          onClick={() => choose(project.preferred_agent_model ? null : lastModel, false)}><span aria-hidden="true" /></button>
+      </div>
       <div className="model-selector-note dim small">For future work in this project. Your agent app controls model switching.</div>
       {error && <div role="alert" className="err small model-selector-note">{error}</div>}
     </div>, document.body)}

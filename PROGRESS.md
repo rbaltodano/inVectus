@@ -2399,6 +2399,18 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   and narrow viewport. Screenshots are in `.spike-data/ui/model-selector/` (ignored).
   Real client model switching is unverified; native bundle not rebuilt.
 
+## 2026-11-05 — Current-model switch and complete GPT labels
+
+- Replaced the reset link with a “Use agent’s current model” switch. On clears the requested
+  model; off restores the last explicit selection. That selection is remembered per project
+  in app storage, with an in-memory fallback. Before any explicit selection, choose a model
+  from the list to leave current-model mode. Switch saves keep the dropdown open.
+- ChatGPT options now say “GPT-6.1 Sol Medium/High”. Attribution formatting preserves and
+  capitalizes reported Sol, Terra and Luna names and retains the GPT version hyphen; it does
+  not infer a missing family or effort. No new model variants were added to the option list.
+- Frontend build, 31 UI tests and the headless WebKit selector checks passed, including
+  switching to current-model mode and restoring the previous choice. Native bundle not rebuilt.
+
 
 ## 2026-11-05 — Compact MCP results
 

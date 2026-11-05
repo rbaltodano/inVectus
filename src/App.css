@@ -722,6 +722,12 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .model-popover { position: fixed; z-index: 100; width: 280px; max-width: calc(100vw - 16px); overflow-y: auto; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); box-shadow: 0 8px 24px #0005; }
 .model-popover .model-selector { border: 0; box-shadow: none; }
 .model-selector-note { padding: 0 16px 16px; font-size: 11px; }
+.model-current-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.model-current-switch { flex-shrink: 0; width: 28px; height: 16px; padding: 2px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2); cursor: pointer; }
+.model-current-switch > span { display: block; width: 10px; height: 10px; border-radius: 50%; background: var(--text); }
+.model-current-switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.model-current-switch[aria-checked="true"] > span { transform: translateX(12px); background: var(--bg); }
+.model-current-switch:disabled { opacity: .5; cursor: default; }
 .suggestion-verdict { font-size: 18px; font-weight: 400; color: var(--text); }
 .saved-entry.agent { border-top-style: dashed; }
 .agent-tag { align-self: flex-start; width: fit-content; border-style: dashed; }

@@ -19,7 +19,8 @@ export function agentIdentity(author: string): { client: string; label: string }
     .replace(/^gpt[-_](\d+)(?:[-_.](\d+))?/i,
       (_, major: string, minor: string | undefined) => `GPT-${major}${minor ? `.${minor}` : ""}`)
     .replace(/[-_]+/g, " ")
-    .replace(/\b(low|medium|high|xhigh|mini|nano|codex)\b/gi,
+    .replace(/^GPT (?=\d)/, "GPT-")
+    .replace(/\b(low|medium|high|xhigh|mini|nano|codex|sol|terra|luna)\b/gi,
       (word) => word[0].toUpperCase() + word.slice(1).toLowerCase());
   const fallback: Record<string, string> = {
     "claude-code": "Claude", "claude-desktop": "Claude", codex: "Codex", cursor: "Cursor",

@@ -5,7 +5,7 @@ import AgentIcon from "./AgentIcon";
 // Requested model preferences; availability and switching belong to the external client.
 export const MODEL_GROUPS = [
   { provider: "Claude", client: "claude-code", models: ["Claude Opus 5.5 Medium", "Claude Opus 5.5 High"] },
-  { provider: "ChatGPT", client: "codex", models: ["GPT-6.1 Medium", "GPT-6.1 High"] },
+  { provider: "ChatGPT", client: "codex", models: ["GPT-6.1 Sol Medium", "GPT-6.1 Sol High"] },
 ];
 
 /** Controlled selector: its caller decides what choosing a model means. */

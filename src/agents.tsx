@@ -91,15 +91,15 @@ export function ProjectRowDetail({ root, fallback }: { root: string; fallback: s
 /** How long after a call the agent counts as mid-work (its line shimmers). */
 const WORKING_MS = 15_000;
 
-/** Terminal-style thinking shimmer. Like a CLI, it repaints on a tick (80 ms, about 12 fps):
- * the bright head moves exactly one letter per tick, and every letter snaps to one of four
+/** Terminal-style thinking shimmer. Like a CLI, it repaints on a tick (120 ms, about 8 fps):
+ * the bright head moves exactly one letter per tick, and every letter snaps to one of three
  * brightness levels by its distance from the head, with nothing in between, so the band jumps
  * letter by letter instead of gliding like a CSS gradient. A short pause follows each pass.
  * Screen readers get the plain text; reduced motion shows it still. */
-const TICK_MS = 80;
-const LEVELS = [1, 0.8, 0.6]; // distance 0, 1, 2 from the head; further letters use BASE
-const BASE = 0.4;
-const PAUSE_TICKS = 8;
+const TICK_MS = 120;
+const LEVELS = [1, 0.65]; // distance 0, 1 from the head; further letters use BASE
+const BASE = 0.35;
+const PAUSE_TICKS = 6;
 
 export function Shimmer({ text }: { text: string }) {
   const chars = Array.from(text);

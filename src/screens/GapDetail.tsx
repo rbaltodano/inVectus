@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { api, agentName, fmt, verdictLabel, when, year, KIND_LABEL, VERDICTS, type SavedBookmark, type DescribeResult, type GapDetail, type Verification } from "../api";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import Link from "../Link";
+import AgentAttribution from "../AgentAttribution";
 import { stagger } from "../motion";
 
 // Keys are the engine's term names (crates/gaps/src/scan.rs).
@@ -154,7 +155,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
 
       <div className="stack gap">
         {suggestion && <section aria-labelledby="sg" className="panel suggestion stack gap-s">
-          <div className="row wrap"><span id="sg" className="eyebrow suggestion-label">Agent suggests</span><span className="dim small push">{agentName(suggestion.author)}{suggestion.updated_at ? ` · ${when(`${suggestion.updated_at}Z`)}` : ""}</span></div>
+          <div className="row wrap"><span id="sg" className="eyebrow suggestion-label">Agent suggests</span><AgentAttribution author={suggestion.author} /></div>
           <div className="suggestion-verdict">{verdictLabel(suggestion.verdict)}</div>
           <p className="saved-note">{suggestion.note}</p>
           <div className="row wrap">

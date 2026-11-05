@@ -704,6 +704,8 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .suggestion, .project-console .panel.suggestion { border: 1px dashed var(--line-2); border-radius: var(--r); padding: 16px; }
 .suggestion .saved-note { margin: 0; color: var(--text-2); }
 .suggestion-label { margin: 0; }
+.agent-attribution { display: inline-flex; align-items: center; gap: 6px; }
+.agent-attribution svg { flex-shrink: 0; }
 .suggestion-verdict { font-size: 18px; font-weight: 400; color: var(--text); }
 .saved-entry.agent { border-top-style: dashed; }
 .agent-tag { align-self: flex-start; width: fit-content; border-style: dashed; }

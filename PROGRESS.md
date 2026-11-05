@@ -2328,3 +2328,13 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   `codex login status` does not print.
 - **Decision (owner, 2026-11-05):** agents stay MCP-only, used from their own client (target
   product §5). No in-app chat panel that runs `claude`/`codex` for now.
+
+## 2026-11-05 — Readable suggestion attribution
+
+- Owner requested the sidebar's agent symbol and a normal model name, without the client
+  slug or timestamp. Gap detail and Saved now share that attribution component; for example,
+  `claude-opus-5-5-medium` displays as “Claude Opus 5.5 Medium”. Stored provenance is unchanged.
+- Effort appears only when reported in the model string; existing records without it display
+  “Claude Opus 5.5”, without guessing Medium. Missing models fall back to the client name.
+- Frontend build and direct formatting assertions passed. Native bundle not rebuilt;
+  layout not visually verified in the app.

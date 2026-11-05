@@ -18,7 +18,7 @@ invectus-unsearch = { path = "crates/unsearch" }
 invectus-regions = { path = "crates/regions" }
 invectus-gaps = { path = "crates/gaps" }
 invectus-eval = { path = "crates/eval" }
-invectus-llm = { path = "crates/llm" }
+invectus-llm = { path = "crates/llm", default-features = false }
 invectus-midpoint = { path = "crates/midpoint" }
 invectus-verify = { path = "crates/verify" }
 invectus-orchestration = { path = "crates/orchestration" }

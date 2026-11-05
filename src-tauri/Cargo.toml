@@ -31,7 +31,7 @@ invectus-index.workspace = true
 invectus-unsearch.workspace = true
 invectus-regions.workspace = true
 invectus-gaps.workspace = true
-invectus-llm.workspace = true
+invectus-llm = { workspace = true, features = ["local-model"] }
 invectus-midpoint.workspace = true
 invectus-verify.workspace = true
 invectus-orchestration.workspace = true

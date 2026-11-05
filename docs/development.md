@@ -45,6 +45,21 @@ npm run tauri build -- --bundles app
 Signing, notarization and tested Windows/Linux installers are not part of the
 current publication milestone. A local build does not imply distribution readiness.
 
+## Agent edition
+
+The headless edition is the `invectus` command and its MCP server without the desktop app or a
+local language model (llama.cpp sits behind the CLI's default `local-model` feature):
+
+```sh
+scripts/package-agent-edition.sh   # → target/agent-edition/package/invectus-agent-<ver>-<os>-<arch>.tar.gz
+```
+
+The archive holds the binary, `install.sh` (copies it to `~/.local/bin`; `--model` and
+`--connect <client>` each ask before downloading or changing an agent's config), a README,
+the license and a Claude Desktop extension (`invectus.mcpb`). The desktop bundle also ships
+the CLI at `inVectus.app/Contents/MacOS/invectus`, so `invectus connect add <client>` works
+from either install.
+
 ## Embedding models
 
 BGE-small is the current default. Its pinned ONNX weights, tokenizer and config

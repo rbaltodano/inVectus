@@ -844,10 +844,10 @@ one circle per project, Martian Mono, dark mode only for now.
   Build passes; desktop app rebuilt and relaunched.
 
 ## Next
-1. Agent interface, roadmap A8 in [docs/target-product.md](docs/target-product.md):
-   headless installer and the small local model evaluation (A1–A7 backend done
-   2026-11-03/04). App UI still to design with the owner: A4 suggestions (built, to refine),
-   A6 Settings → Connect an AI agent, A7 live agent activity.
+1. Agent interface (A1–A8 built 2026-11-03/04 except the small-model evaluation, which needs
+   an approved download). App UI still to design with the owner: A4 suggestions (built, to
+   refine), A6 Settings → Connect an AI agent, A7 live agent activity. Real-client checks
+   (Claude Code / Desktop / Cursor, `.mcpb` install) need the owner's go-ahead.
 2. Decide the agent paraphrase guidance (see the 2026-11-04 A5 entry): agents that follow
    "in your own words" literally drop technical terms and calibrate worse than titles.
 3. Owner's UI work in progress: map display toggles, light mode, font size; the idle 84%
@@ -2207,4 +2207,24 @@ calibration for both writers' novelty checks; genres "research study" / "systema
   works in the window (both share one board, so the second job is refused as designed).
 - Known edge: if the server opened a project before the app did, the app cannot open it
   until the agent session ends (the lock is the server's).
+
+## 2026-11-04 — Headless agent edition (roadmap A8, first half)
+
+- `invectus-llm` puts llama.cpp behind a `local-model` feature (default on in the crate; the
+  workspace dependency turns it off and only the CLI's default feature and the desktop app
+  turn it on). Without it `LlamaGenerator::load` fails with "this edition of inVectus has no
+  local language model …; connect an AI agent …", so no caller changed.
+- Agent edition: `cargo build --release -p invectus-cli --no-default-features`. Checked: no
+  Metal framework linked (`otool -L`), `gaps describe` gives that message, `invectus mcp` lists
+  all 21 tools. Size 352 MB vs 362 MB full: llama.cpp is not what makes the binary big.
+- `scripts/package-agent-edition.sh` → `target/agent-edition/package/invectus-agent-0.1.0-
+  darwin-arm64.tar.gz` (209 MB: binary, `install.sh`, README, LICENSE, `invectus.mcpb`).
+  `install.sh` copies to `~/.local/bin` (no sudo); `--model` (≈134 MB embedding model) and
+  `--connect <client>` each ask first unless `--yes`. Checked in a temporary home: declining
+  writes nothing; `--connect cursor --yes` registers the installed binary; the installed
+  server answers. Not built into CI or tests.
+- 111 workspace tests, fmt, clippy (default and `--no-default-features`) passed (arm64 macOS).
+- **Not done (needs the owner):** the small local model evaluation (A8 second half) requires
+  downloading a 2–4 B GGUF model; Windows/Linux packaging is unverified; no code signing or
+  notarization (the binary is unsigned, so Gatekeeper may block a downloaded copy).
 

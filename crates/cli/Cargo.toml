@@ -29,6 +29,12 @@ clap.workspace = true
 ctrlc.workspace = true
 tempfile.workspace = true
 
+[features]
+# The full CLI runs the local language model; the agent edition builds without it:
+# `cargo build --release -p invectus-cli --no-default-features`.
+default = ["local-model"]
+local-model = ["invectus-llm/local-model"]
+
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 

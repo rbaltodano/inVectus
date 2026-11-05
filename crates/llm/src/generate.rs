@@ -2,19 +2,9 @@
 //! verified local file and nothing else is read. On macOS all layers run on Metal.
 
 use crate::registry::LlmSpec;
-use crate::store::verified_path;
-use anyhow::{Context, Result, anyhow, bail};
-use llama_cpp_2::context::params::LlamaContextParams;
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate, LlamaModel};
-use llama_cpp_2::sampling::LlamaSampler;
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
-use std::num::NonZeroU32;
 use std::path::Path;
-use std::sync::OnceLock;
-use std::time::Instant;
 
 pub const RUNTIME: &str = "llama.cpp (llama-cpp-2 0.1.160)";
 
@@ -82,152 +72,200 @@ pub fn gemma4_prompt(system: Option<&str>, user: &str) -> String {
     p
 }
 
-/// llama.cpp allows one backend per process.
-fn backend() -> Result<&'static LlamaBackend> {
-    static BACKEND: OnceLock<LlamaBackend> = OnceLock::new();
-    if let Some(b) = BACKEND.get() {
-        return Ok(b);
+/// llama.cpp, in builds with the `local-model` feature (the full app and the default CLI).
+#[cfg(feature = "local-model")]
+mod llama {
+    use super::*;
+    use crate::store::verified_path;
+    use anyhow::{Context, anyhow};
+    use llama_cpp_2::context::params::LlamaContextParams;
+    use llama_cpp_2::llama_backend::LlamaBackend;
+    use llama_cpp_2::llama_batch::LlamaBatch;
+    use llama_cpp_2::model::params::LlamaModelParams;
+    use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate, LlamaModel};
+    use llama_cpp_2::sampling::LlamaSampler;
+    use std::num::NonZeroU32;
+    use std::sync::OnceLock;
+    use std::time::Instant;
+
+    /// llama.cpp allows one backend per process.
+    fn backend() -> Result<&'static LlamaBackend> {
+        static BACKEND: OnceLock<LlamaBackend> = OnceLock::new();
+        if let Some(b) = BACKEND.get() {
+            return Ok(b);
+        }
+        let mut b = LlamaBackend::init().map_err(|e| anyhow!("initializing llama.cpp: {e}"))?;
+        b.void_logs();
+        Ok(BACKEND.get_or_init(|| b))
     }
-    let mut b = LlamaBackend::init().map_err(|e| anyhow!("initializing llama.cpp: {e}"))?;
-    b.void_logs();
-    Ok(BACKEND.get_or_init(|| b))
+
+    pub struct LlamaGenerator {
+        model: LlamaModel,
+        template: LlamaChatTemplate,
+        /// The model's template uses Gemma 4's `<|turn>` format.
+        gemma4: bool,
+        identity: LlmIdentity,
+        context: u32,
+        threads: i32,
+    }
+
+    impl LlamaGenerator {
+        /// Load the installed, checksum-verified model `spec` from `root`.
+        pub fn load(root: &Path, spec: &LlmSpec, threads: usize) -> Result<Self> {
+            let path = verified_path(root, spec)?;
+            let params = if cfg!(target_os = "macos") {
+                LlamaModelParams::default().with_n_gpu_layers(999)
+            } else {
+                LlamaModelParams::default()
+            };
+            let model = LlamaModel::load_from_file(backend()?, &path, &params)
+                .with_context(|| format!("loading {}", path.display()))?;
+            let template = model
+                .chat_template(None)
+                .context("the model has no built-in chat template")?;
+            let gemma4 = template
+                .to_str()
+                .is_ok_and(|t| t.contains("<|turn>") && t.contains("<turn|>"));
+            Ok(Self {
+                model,
+                template,
+                gemma4,
+                identity: LlmIdentity {
+                    model_key: spec.key.into(),
+                    repo: spec.repo.into(),
+                    revision: spec.revision.into(),
+                    sha256: spec.sha256.into(),
+                    runtime: RUNTIME.into(),
+                },
+                context: spec.context,
+                threads: threads.max(1) as i32,
+            })
+        }
+    }
+
+    impl TextGenerator for LlamaGenerator {
+        fn identity(&self) -> &LlmIdentity {
+            &self.identity
+        }
+
+        fn generate(
+            &mut self,
+            system: Option<&str>,
+            user: &str,
+            opts: &GenOptions,
+        ) -> Result<Generation> {
+            let started = Instant::now();
+            let mut messages = Vec::new();
+            if let Some(s) = system {
+                messages.push(LlamaChatMessage::new("system".into(), s.into())?);
+            }
+            messages.push(LlamaChatMessage::new("user".into(), user.into())?);
+            let prompt = match self
+                .model
+                .apply_chat_template(&self.template, &messages, true)
+            {
+                Ok(p) => p,
+                // llama.cpp's built-in template engine does not know Gemma 4's turn format yet.
+                Err(_) if self.gemma4 => gemma4_prompt(system, user),
+                Err(e) => return Err(e).context("applying the model's chat template"),
+            };
+            let vocab = self.model.vocab();
+            let tokens = vocab.tokenize(prompt.as_bytes(), true, true);
+            if tokens.is_empty() {
+                bail!("empty prompt");
+            }
+            if tokens.len() + opts.max_tokens > self.context as usize {
+                bail!(
+                    "prompt of {} tokens plus {} to generate exceeds the {}-token context",
+                    tokens.len(),
+                    opts.max_tokens,
+                    self.context
+                );
+            }
+            let params = LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(self.context))
+                .with_n_batch(self.context)
+                .with_n_threads(self.threads)
+                .with_n_threads_batch(self.threads);
+            let mut ctx = self.model.new_context(backend()?, params)?;
+            let mut batch = LlamaBatch::new(self.context as usize, 1);
+            let last = tokens.len() - 1;
+            for (i, t) in tokens.iter().enumerate() {
+                batch.add(*t, i as i32, &[0], i == last)?;
+            }
+            ctx.decode(&mut batch)?;
+            let mut sampler = if opts.temperature <= 0.0 {
+                LlamaSampler::greedy()
+            } else {
+                LlamaSampler::chain_simple([
+                    LlamaSampler::top_k(40),
+                    LlamaSampler::top_p(0.95, 1),
+                    LlamaSampler::temp(opts.temperature),
+                    LlamaSampler::dist(opts.seed),
+                ])
+            };
+            let mut out: Vec<u8> = Vec::new();
+            let mut position = tokens.len() as i32;
+            let mut generated = 0;
+            let mut truncated = true;
+            while generated < opts.max_tokens {
+                let token = sampler.sample(&ctx, batch.n_tokens() - 1);
+                sampler.accept(token);
+                // Gemma 4 ends a turn with a control token that is not always flagged
+                // end-of-generation; control tokens before any text (channel markers) are skipped.
+                let control = vocab.is_control(token);
+                if vocab.is_eog(token) || (control && !out.is_empty()) {
+                    truncated = false;
+                    break;
+                }
+                if !control {
+                    out.extend(vocab.token_to_piece(token, false, None));
+                }
+                generated += 1;
+                batch.clear();
+                batch.add(token, position, &[0], true)?;
+                position += 1;
+                ctx.decode(&mut batch)?;
+            }
+            Ok(Generation {
+                text: String::from_utf8_lossy(&out).trim().to_string(),
+                prompt_tokens: tokens.len(),
+                generated_tokens: generated,
+                seconds: started.elapsed().as_secs_f64(),
+                truncated,
+            })
+        }
+    }
 }
 
+#[cfg(feature = "local-model")]
+pub use llama::LlamaGenerator;
+
+/// The agent edition has no local language model: loading one says so, and agents do the
+/// writing through MCP instead (target product §6).
+#[cfg(not(feature = "local-model"))]
 pub struct LlamaGenerator {
-    model: LlamaModel,
-    template: LlamaChatTemplate,
-    /// The model's template uses Gemma 4's `<|turn>` format.
-    gemma4: bool,
     identity: LlmIdentity,
-    context: u32,
-    threads: i32,
 }
 
+#[cfg(not(feature = "local-model"))]
 impl LlamaGenerator {
-    /// Load the installed, checksum-verified model `spec` from `root`.
-    pub fn load(root: &Path, spec: &LlmSpec, threads: usize) -> Result<Self> {
-        let path = verified_path(root, spec)?;
-        let params = if cfg!(target_os = "macos") {
-            LlamaModelParams::default().with_n_gpu_layers(999)
-        } else {
-            LlamaModelParams::default()
-        };
-        let model = LlamaModel::load_from_file(backend()?, &path, &params)
-            .with_context(|| format!("loading {}", path.display()))?;
-        let template = model
-            .chat_template(None)
-            .context("the model has no built-in chat template")?;
-        let gemma4 = template
-            .to_str()
-            .is_ok_and(|t| t.contains("<|turn>") && t.contains("<turn|>"));
-        Ok(Self {
-            model,
-            template,
-            gemma4,
-            identity: LlmIdentity {
-                model_key: spec.key.into(),
-                repo: spec.repo.into(),
-                revision: spec.revision.into(),
-                sha256: spec.sha256.into(),
-                runtime: RUNTIME.into(),
-            },
-            context: spec.context,
-            threads: threads.max(1) as i32,
-        })
+    pub fn load(_root: &Path, spec: &LlmSpec, _threads: usize) -> Result<Self> {
+        bail!(
+            "this edition of inVectus has no local language model ({} is not available); \
+             connect an AI agent to write descriptions, paraphrases and region names",
+            spec.key
+        )
     }
 }
 
+#[cfg(not(feature = "local-model"))]
 impl TextGenerator for LlamaGenerator {
     fn identity(&self) -> &LlmIdentity {
         &self.identity
     }
-
-    fn generate(
-        &mut self,
-        system: Option<&str>,
-        user: &str,
-        opts: &GenOptions,
-    ) -> Result<Generation> {
-        let started = Instant::now();
-        let mut messages = Vec::new();
-        if let Some(s) = system {
-            messages.push(LlamaChatMessage::new("system".into(), s.into())?);
-        }
-        messages.push(LlamaChatMessage::new("user".into(), user.into())?);
-        let prompt = match self
-            .model
-            .apply_chat_template(&self.template, &messages, true)
-        {
-            Ok(p) => p,
-            // llama.cpp's built-in template engine does not know Gemma 4's turn format yet.
-            Err(_) if self.gemma4 => gemma4_prompt(system, user),
-            Err(e) => return Err(e).context("applying the model's chat template"),
-        };
-        let vocab = self.model.vocab();
-        let tokens = vocab.tokenize(prompt.as_bytes(), true, true);
-        if tokens.is_empty() {
-            bail!("empty prompt");
-        }
-        if tokens.len() + opts.max_tokens > self.context as usize {
-            bail!(
-                "prompt of {} tokens plus {} to generate exceeds the {}-token context",
-                tokens.len(),
-                opts.max_tokens,
-                self.context
-            );
-        }
-        let params = LlamaContextParams::default()
-            .with_n_ctx(NonZeroU32::new(self.context))
-            .with_n_batch(self.context)
-            .with_n_threads(self.threads)
-            .with_n_threads_batch(self.threads);
-        let mut ctx = self.model.new_context(backend()?, params)?;
-        let mut batch = LlamaBatch::new(self.context as usize, 1);
-        let last = tokens.len() - 1;
-        for (i, t) in tokens.iter().enumerate() {
-            batch.add(*t, i as i32, &[0], i == last)?;
-        }
-        ctx.decode(&mut batch)?;
-        let mut sampler = if opts.temperature <= 0.0 {
-            LlamaSampler::greedy()
-        } else {
-            LlamaSampler::chain_simple([
-                LlamaSampler::top_k(40),
-                LlamaSampler::top_p(0.95, 1),
-                LlamaSampler::temp(opts.temperature),
-                LlamaSampler::dist(opts.seed),
-            ])
-        };
-        let mut out: Vec<u8> = Vec::new();
-        let mut position = tokens.len() as i32;
-        let mut generated = 0;
-        let mut truncated = true;
-        while generated < opts.max_tokens {
-            let token = sampler.sample(&ctx, batch.n_tokens() - 1);
-            sampler.accept(token);
-            // Gemma 4 ends a turn with a control token that is not always flagged
-            // end-of-generation; control tokens before any text (channel markers) are skipped.
-            let control = vocab.is_control(token);
-            if vocab.is_eog(token) || (control && !out.is_empty()) {
-                truncated = false;
-                break;
-            }
-            if !control {
-                out.extend(vocab.token_to_piece(token, false, None));
-            }
-            generated += 1;
-            batch.clear();
-            batch.add(token, position, &[0], true)?;
-            position += 1;
-            ctx.decode(&mut batch)?;
-        }
-        Ok(Generation {
-            text: String::from_utf8_lossy(&out).trim().to_string(),
-            prompt_tokens: tokens.len(),
-            generated_tokens: generated,
-            seconds: started.elapsed().as_secs_f64(),
-            truncated,
-        })
+    fn generate(&mut self, _: Option<&str>, _: &str, _: &GenOptions) -> Result<Generation> {
+        bail!("this edition of inVectus has no local language model")
     }
 }
 

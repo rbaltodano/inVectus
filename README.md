@@ -39,6 +39,37 @@ example below uses the separately reproducible fictional Urban Futures demo.*
   Optional model downloads and PubMed/OpenAlex checks require explicit network access.
 - **Use the same engine from the terminal.** The desktop app and `invectus` CLI
   share the Rust workspace.
+- **Work through an AI agent (experimental).** Claude Code, Claude Desktop, Codex
+  and Cursor can search, check ideas, list gaps and suggest decisions through MCP.
+
+## Use it from an AI agent (experimental)
+
+The agent's client starts `invectus mcp` on your computer and talks to it over
+stdio. inVectus opens no network port, and the agent's suggestions wait for your
+decision. Connect a client in **Settings → Connect an AI agent**, or from the terminal:
+
+```sh
+invectus connect add claude-code   # shows the change; add --yes to make it
+invectus connect status            # which clients are connected, and signed in how
+```
+
+| Client | How inVectus connects it |
+|---|---|
+| Claude Code | Runs `claude mcp add --scope user invectus -- <path>/invectus mcp` |
+| Codex | Runs `codex mcp add invectus -- <path>/invectus mcp` |
+| Claude Desktop | Adds one entry to its config file; also installable as a `.mcpb` bundle |
+| Cursor | Adds one entry to `~/.cursor/mcp.json` |
+
+**Privacy.** The agent uses your own Claude or ChatGPT plan, or API key, through
+its own app. inVectus never reads, stores or sends tokens or credential files.
+For Claude Code and Codex it asks the client's own status command
+(`claude auth status`, `codex login status`) who is signed in and shows the plan
+name, never an API key. This check is skipped in offline mode. Config files are
+changed only after you approve the exact change; other entries are kept and the
+old file is saved as a backup.
+
+Connecting and the sign-in check are tested with stand-in clients and checked on
+one Mac; full agent sessions in each client are not yet verified.
 
 ## A typical workflow
 
@@ -141,7 +172,8 @@ Synthetic demo results do not validate real-world relevance or discovery quality
 The app is exercised locally on Apple Silicon macOS. Windows and Linux remain
 unverified. CI workflows are manual-only; their existence is not evidence of a
 passing cross-platform build. Multimodal work is experimental and separate from
-the current text workflow. The agent/MCP edition is a [future direction](docs/target-product.md).
+the current text workflow. Agent use through MCP is experimental; see the
+[agent design](docs/target-product.md).
 
 Measured experiments, failures and open questions are recorded in
 [PROGRESS.md](PROGRESS.md), [the evaluation notes](docs/spikes/README.md) and the

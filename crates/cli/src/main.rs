@@ -1,5 +1,6 @@
 //! `invectus`: the engine CLI over the same crates as the desktop app (SPEC §7.1).
 
+mod compact;
 mod mcp;
 
 use anyhow::{Context, Result, bail};

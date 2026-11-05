@@ -2398,3 +2398,28 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   24/8 px gaps, independent collapse, preference save, unchanged author, Escape/outside close
   and narrow viewport. Screenshots are in `.spike-data/ui/model-selector/` (ignored).
   Real client model switching is unverified; native bundle not rebuilt.
+
+
+## 2026-11-05 — Compact MCP results
+
+- Owner approved reducing repeated tool-result context. `invectus mcp` now defaults to
+  compact, unindented JSON at the transport boundary, covering direct and app hand-off calls.
+  Every tool advertises `detail: "full"` to recover all original fields; invalid detail values
+  fail before executing a tool. CLI commands, engine results and persisted data are unchanged.
+- Search hits keep identity, title, role, date, URL and a 200-character excerpt; `check_idea`
+  keeps three hits while retaining verdict, calibration, scope, approximate/exhaustive flags,
+  comparison counts and notes. Gap lists omit cores, timelines and verification matches' text;
+  verification summary/counts remain. Gap detail retains central items and nonempty years.
+  Suggested decisions return the saved suggestion rather than echoing the full gap. Status
+  retains running-job data and two recent history entries. Compact item IDs use strings to
+  avoid JavaScript precision loss. Other result metadata is retained where possible.
+- Measured on Apple M4 Pro/macOS using the nine saved response shapes from the earlier real
+  agent sessions (`.spike-data/p1/agent-e2e/shapes`): old pretty JSON 95,349 bytes, compact JSON
+  25,986 bytes, **72.7% smaller** in aggregate, one response per tool. This is output size,
+  not measured token usage or subscription savings; repeated calls and client caching vary.
+- Local checks: 9 CLI unit tests and 6 integration tests passed, including stdio, app hand-off,
+  real local BGE search, full-result fidelity and detail validation. Scoped release clippy
+  (`invectus-cli`, all targets, warnings denied) and workspace fmt check passed. Linker emitted
+  the existing large unwind-table warning. No CI or network model/data downloads ran.
+- Unverified: fresh Claude/Codex session token counts, live activity in the desktop window,
+  Windows/Linux, Claude Desktop and Cursor. No new spec conflict; computation is unchanged.

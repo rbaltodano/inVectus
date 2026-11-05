@@ -6,6 +6,7 @@
 //! session, so its jobs, decisions and suggestions show there; otherwise the server opens the
 //! project itself.
 
+use crate::compact;
 use anyhow::{Context, Result};
 use invectus_orchestration::agent::{Agent, tools};
 use invectus_orchestration::handoff;
@@ -85,7 +86,7 @@ impl Server {
                 Ok(initialize(&params))
             }
             "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({ "tools": tools() })),
+            "tools/list" => Ok(json!({ "tools": with_detail(tools()) })),
             "tools/call" => Ok(self.call(&params)),
             "" => Err((-32600, "invalid request: no method".to_string())),
             other => Err((-32601, format!("method not found: {other}"))),
@@ -97,15 +98,31 @@ impl Server {
     }
 
     /// A tool call; tool failures are results with `isError`, so the agent can read and retry.
+    /// Results are compact unless `detail: "full"` (see `compact`), and their text is
+    /// unindented: agents re-read every result on each later turn.
     fn call(&mut self, params: &Value) -> Value {
         let name = params["name"].as_str().unwrap_or_default();
-        let args = params.get("arguments").cloned().unwrap_or(json!({}));
+        let mut args = params.get("arguments").cloned().unwrap_or(json!({}));
+        let full = match args.as_object_mut().and_then(|a| a.remove("detail")) {
+            None => false,
+            Some(Value::String(detail)) if detail == "compact" => false,
+            Some(Value::String(detail)) if detail == "full" => true,
+            Some(_) => {
+                return json!({
+                    "content": [{ "type": "text", "text": "invalid detail: expected compact or full" }],
+                    "isError": true,
+                });
+            }
+        };
         match self.route(name, args) {
-            Ok(v) => json!({
-                "content": [{ "type": "text", "text": serde_json::to_string_pretty(&v).unwrap_or_default() }],
-                "structuredContent": v,
-                "isError": false,
-            }),
+            Ok(v) => {
+                let v = if full { v } else { compact::result(name, v) };
+                json!({
+                    "content": [{ "type": "text", "text": serde_json::to_string(&v).unwrap_or_default() }],
+                    "structuredContent": v,
+                    "isError": false,
+                })
+            }
             Err(e) => json!({
                 "content": [{ "type": "text", "text": e }],
                 "isError": true,
@@ -215,6 +232,22 @@ impl Server {
 
 fn error(id: Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+}
+
+/// Every tool takes `detail`; its description says what the compact form leaves out.
+fn with_detail(mut tools: Value) -> Value {
+    for t in tools.as_array_mut().into_iter().flatten() {
+        if let Some(props) = t["inputSchema"]["properties"].as_object_mut() {
+            props.insert(
+                "detail".into(),
+                json!({ "type": "string", "enum": ["compact", "full"],
+                    "description": "`compact` (default) leaves out timings, hashes, full item \
+                        texts and, in gap lists, cores and timelines (see gap_detail); `full` \
+                        returns every field." }),
+            );
+        }
+    }
+    tools
 }
 
 fn initialize(params: &Value) -> Value {
@@ -332,6 +365,39 @@ mod tests {
                 .unwrap()
                 .contains("invalid arguments")
         );
+    }
+
+    #[test]
+    fn result_detail_is_advertised_validated_and_full_is_lossless() {
+        let mut server = Server::default();
+        for tool in with_detail(tools()).as_array().unwrap() {
+            assert_eq!(
+                tool["inputSchema"]["properties"]["detail"]["enum"],
+                json!(["compact", "full"])
+            );
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("detail.invectus");
+        invectus_core::Project::create(&root).unwrap();
+        let full = server.call(
+            &json!({"name": "open_project", "arguments": {"project": root, "detail": "full"}}),
+        );
+        assert_eq!(full["isError"], false, "{full}");
+        let raw = server.route("project_status", json!({})).unwrap();
+        assert_eq!(full["structuredContent"], raw);
+        assert_eq!(
+            serde_json::from_str::<Value>(full["content"][0]["text"].as_str().unwrap()).unwrap(),
+            raw
+        );
+        let compact =
+            server.call(&json!({"name": "project_status", "arguments": {"detail": "compact"}}));
+        assert_eq!(
+            compact["structuredContent"],
+            compact::result("project_status", raw)
+        );
+        let invalid =
+            server.call(&json!({"name": "project_status", "arguments": {"detail": false}}));
+        assert_eq!(invalid["isError"], true);
     }
 
     #[test]

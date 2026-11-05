@@ -96,6 +96,14 @@ built from the engine's existing result types.
 | `suggest_decision` | Records the agent's suggested decision and reasoning (§7) | Yes | No |
 | `export_gaps` | Markdown or CSV report, titles and links only | Yes (file) | No |
 
+MCP results default to compact JSON: search hits keep a short text excerpt, `check_idea`
+keeps the top three evidence hits, gap lists omit cores and timelines, and status omits most
+job history and table internals. Verdicts, calibration quality, scope notes and approximate
+search indicators remain. Pass `detail: "full"` to any tool for all original fields;
+`gap_detail` keeps central items and nonempty timeline years even in compact mode. Compact
+item IDs are strings so clients can preserve all 64 bits. This only changes MCP replies,
+not engine calculations, stored records or exports.
+
 ### 5.3 Guardrails (unchanged from the app)
 
 - Network use stays explicit: `verify_gap` refuses while the project is offline;

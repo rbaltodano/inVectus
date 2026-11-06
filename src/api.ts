@@ -111,7 +111,7 @@ export interface AgentAccount {
 }
 export interface GapList { run_id: string; stats: Record<string, unknown>; gaps: GapView[] }
 export interface ItemSummary { item_id: number; title: string | null; date: string | null; role: Role; url: string | null }
-export type GapDetail = GapView & { core_items: ItemSummary[] };
+export type GapDetail = GapView & { core_items: ItemSummary[]; description?: DescribeResult | null };
 export interface ScanReport { coverage: number; stale: number; bridge: number; unstable_regions: number; latest_date: string | null; notes: string[] }
 export interface Weights { demand_since: number; coverage_ratio: number; momentum: number; stale_share: number; bridge: number; saturation: number }
 
@@ -120,7 +120,7 @@ export interface Attempt {
   on_target: { passed: boolean; to_target: number };
   novelty: { passed: boolean; verdict: string; p_exists: number; nearest_title: string | null; nearest_similarity: number | null } | null;
 }
-export interface DescribeResult { label: string; accepted: number | null; attempts: Attempt[]; notes: string[] }
+export interface DescribeResult { author?: string; target?: { kind: string; t?: number }; label: string; accepted: number | null; attempts: Attempt[]; notes: string[] }
 export interface RankedHit { source: string; title: string; year: number | null; url: string | null; similarity: number; looks_like_match: boolean }
 export interface Verification {
   summary: string; matches: number; match_at: number; compared_with: string; hits: RankedHit[]; notes: string[];
@@ -128,7 +128,7 @@ export interface Verification {
 }
 
 /** The collection and vector space the screens work on. */
-export interface TableRef { collection: string; space: string | null }
+export interface TableRef { project?: string; collection: string; space: string | null }
 
 export const api = {
   version: () => invoke<string>("engine_version"),
@@ -150,7 +150,7 @@ export const api = {
   installModel: (model: string) => invoke<JobInfo>("install_model", { model }),
   startCalibration: (t: TableRef, llm: boolean) => invoke<JobInfo>("start_calibration", { collection: t.collection, space: t.space, llm }),
   startRegions: (t: TableRef) => invoke<JobInfo>("start_regions", { collection: t.collection, space: t.space }),
-  cancel: () => invoke<void>("cancel_job"),
+  cancel: (job: JobInfo) => invoke<void>("cancel_job", { id: job.id, project: job.project }),
   search: (t: TableRef, query: string, role: Role | null, exhaustive: boolean) =>
     invoke<SearchResult>("search", { form: { collection: t.collection, space: t.space, query, k: 10, role, exhaustive } }),
   check: (t: TableRef, query: string, role: Role | null, fast: boolean) =>
@@ -158,10 +158,10 @@ export const api = {
   map: (t: TableRef) => invoke<MapData>("region_map", { collection: t.collection, space: t.space }),
   scan: (t: TableRef, weights: Weights | null) => invoke<ScanReport>("scan_gaps", { form: t, weights }),
   gaps: (t: TableRef) => invoke<GapList>("list_gaps", { form: t }),
-  gap: (t: TableRef, gapId: number) => invoke<GapDetail>("gap_detail", { form: t, gapId }),
-  setVerdict: (t: TableRef, gapId: number, verdict: string, note: string) =>
-    invoke<GapView>("set_gap_verdict", { form: t, gapId, verdict, note }),
-  dismissSuggestion: (t: TableRef, gapId: number) => invoke<GapView>("dismiss_gap_suggestion", { form: t, gapId }),
+  gap: (form: TableRef, gapId: number, t = 0.5) => invoke<GapDetail>("gap_detail", { form, gapId, t }),
+  setVerdict: (t: TableRef, gapId: number, verdict: string, note: string, expectedSuggestion?: string) =>
+    invoke<GapView>("set_gap_verdict", { form: t, gapId, verdict, note, expectedSuggestion }),
+  dismissSuggestion: (t: TableRef, gapId: number, expectedSuggestion: string) => invoke<GapView>("dismiss_gap_suggestion", { form: t, gapId, expectedSuggestion }),
   saved: (t: TableRef) => invoke<SavedOverview>("saved_overview", { form: t }),
   bookmark: (t: TableRef, gapId: number) => invoke<void>("bookmark_gap", { form: t, gapId }),
   removeBookmark: (t: TableRef, kind: string, coreKey: string) => invoke<void>("remove_gap_bookmark", { form: t, kind, coreKey }),

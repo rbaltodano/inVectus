@@ -1254,6 +1254,29 @@ impl Store {
         r.map(|s| Ok(serde_json::from_str(&s)?)).transpose()
     }
 
+    /// Latest description of this exact target, written since the current region run.
+    /// Region IDs can be reused by later runs, so older descriptions must not carry over.
+    pub fn latest_midpoint(
+        &self,
+        collection_id: &str,
+        space_id: &str,
+        run_id: &str,
+        target: &serde_json::Value,
+    ) -> Result<Option<serde_json::Value>> {
+        let result: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT result::VARCHAR FROM midpoints
+             WHERE collection_id = ? AND space_id = ? AND target = CAST(? AS JSON)
+             AND created_at >= (SELECT created_at FROM region_runs WHERE run_id = ?)
+             ORDER BY created_at DESC LIMIT 1",
+                params![collection_id, space_id, target.to_string(), run_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        result.map(|s| Ok(serde_json::from_str(&s)?)).transpose()
+    }
+
     /// Stored descriptions of a collection's space, newest first: `(target, result, created)`.
     pub fn midpoints(
         &self,
@@ -1407,6 +1430,44 @@ mod tests {
             parent_id: None,
             chunk_index: None,
         }
+    }
+
+    #[test]
+    fn stored_descriptions_match_the_space_target_and_region_run_age() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("descriptions.duckdb")).unwrap();
+        store.conn.execute("INSERT INTO region_runs VALUES ('old', 'c', 's', '{}', '{}', TIMESTAMP '2020-01-01')", []).unwrap();
+        store.conn.execute("INSERT INTO region_runs VALUES ('new', 'c', 's', '{}', '{}', TIMESTAMP '2099-01-01')", []).unwrap();
+        let target = serde_json::json!({"kind":"region", "region":9});
+        let result = serde_json::json!({"author":"agent:test/model", "accepted":0});
+        store.save_midpoint("c", "s", &target, &result).unwrap();
+        assert_eq!(
+            store.latest_midpoint("c", "s", "old", &target).unwrap(),
+            Some(result)
+        );
+        assert!(
+            store
+                .latest_midpoint("c", "other-space", "old", &target)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .latest_midpoint(
+                    "c",
+                    "s",
+                    "old",
+                    &serde_json::json!({"kind":"region", "region":10})
+                )
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .latest_midpoint("c", "s", "new", &target)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

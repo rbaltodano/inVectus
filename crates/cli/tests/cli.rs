@@ -889,16 +889,16 @@ fn mcp_hands_calls_for_the_apps_project_to_the_app() {
     );
     let events = seen.lock().unwrap().clone();
     // Three calls ran in the app; the local one in the other project is reported to it too.
-    assert_eq!(events.len(), 4, "{events:?}");
+    assert_eq!(events.len(), 7, "{events:?}");
     assert!(events.iter().all(|e| e["client"] == "handoff-test"));
     assert!(
-        events[3]["project"]
+        events[6]["project"]
             .as_str()
             .unwrap()
             .ends_with("free.invectus"),
         "{events:?}"
     );
-    assert_eq!(events[3]["tool"], "project_status");
+    assert_eq!(events[6]["tool"], "project_status");
 
     // Without the app, the held project is refused by the one-process lock, as before.
     let replies = run(

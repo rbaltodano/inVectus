@@ -23,7 +23,7 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
     })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
-  }, [tref, revision, active, ctx.reloadGaps]);
+  }, [tref, revision, active, ctx.dataRevision, ctx.reloadGaps]);
 
   const selected = saved?.decisions.filter((d) => d.verdict.verdict === "selected") ?? [];
   const selectedIds = new Set(selected.map((d) => d.gap_id).filter((id) => id !== null));

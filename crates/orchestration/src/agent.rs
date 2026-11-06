@@ -216,9 +216,13 @@ impl Agent {
             }
             "job_status" => value(&self.board.lock().unwrap().view()),
             "cancel_job" => {
+                let a: CancelArgs = parse(args)?;
                 let board = self.board.lock().unwrap();
-                let running = board.running().cloned();
-                board.cancel();
+                let running = board
+                    .running()
+                    .cloned()
+                    .ok_or("that job is no longer running")?;
+                board.cancel_matching(a.job_id, running.project.as_deref())?;
                 Ok(json!({ "cancelling": running }))
             }
             "scan_gaps" => {
@@ -424,6 +428,7 @@ impl Agent {
                 let a: ExportArgs = parse(args)?;
                 self.ensure_open(a.project.as_deref())?;
                 let form = TableForm {
+                    project: None,
                     collection: a.collection,
                     space: a.space,
                 };
@@ -487,6 +492,12 @@ impl Agent {
 
 fn value<T: serde::Serialize>(v: &T) -> OpResult<Value> {
     serde_json::to_value(v).map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CancelArgs {
+    job_id: u64,
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(args: Value) -> OpResult<T> {
@@ -750,6 +761,8 @@ struct TableArgs {
 impl TableArgs {
     fn table(self) -> TableForm {
         TableForm {
+            // MCP paths were resolved by ensure_open; app forms carry their exact root.
+            project: None,
             collection: self.collection,
             space: self.space,
         }
@@ -897,9 +910,11 @@ pub fn tools() -> Value {
         },
         {
             "name": "cancel_job",
-            "description": "Cancel the running job. Work done so far is kept; running it again \
-                resumes.",
-            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+            "description": "Cancel the job_id returned by job_status or import_collection. \
+                Refuses if that job has finished or been replaced. Work done so far is kept.",
+            "inputSchema": { "type": "object", "properties": {
+                "job_id": { "type": "integer", "minimum": 1 }
+            }, "required": ["job_id"], "additionalProperties": false },
             "annotations": writes,
         },
         {

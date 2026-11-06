@@ -2453,3 +2453,49 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   the existing large unwind-table warning. No CI or network model/data downloads ran.
 - Unverified: fresh Claude/Codex session token counts, live activity in the desktop window,
   Windows/Linux, Claude Desktop and Cursor. No new spec conflict; computation is unchanged.
+
+## 2026-11-05 — Live agent review and project/job guards
+
+- Owner approved completing the desktop agent workflow. App hand-off calls now emit paired
+  start/finish events with a call ID. The sidebar shimmers during an actual in-flight call;
+  a project activity disclosure shows recent calls and error messages. Completed writes
+  refresh gap details, Saved and readiness; region-name changes refresh map labels. Draft
+  decision notes and choices survive these refreshes; stale detail/map reads are discarded.
+- Accept/Dismiss check the pending suggestion's timestamp under the session lock before
+  recording a response. A changed or already-settled suggestion is refused. Accept still
+  records a person's decision; Dismiss leaves that decision unchanged. The original agent
+  author/model and reasoning remain in the append-only verdict history (regression checked).
+- A per-session transition guard spans the entire app tool call, including intervals between
+  session locks. Switching projects during it is refused. MCP remembers the last app project,
+  includes it in forwarded requests, and refuses implicit follow-up/status/cancel calls after
+  the app changes projects or becomes unreachable. Explicitly opening a project remains valid.
+  App review/table requests carry their project root and validate it after acquiring the lock.
+- Cancellation now checks the displayed job ID and project atomically. MCP `cancel_job`
+  requires `job_id` from `job_status`/`import_collection`; stale IDs fail without cancelling
+  a replacement. App cancellation failures are shown beside the control.
+- Regression coverage includes paired success/failure events, refusing switches during a
+  request, stale app-project requests, stale queued review forms, replacement-job cancellation,
+  changed-suggestion responses, retained provenance and project-specific UI refresh rules.
+- Native verification found that gap detail never retrieved persisted descriptions; it only
+  displayed a local-generation result held in React state. Added a detail read of the latest
+  exact-target description in the same embedding space, written since the current region
+  run. This prevents reusing text when later clustering reuses region IDs. The UI shows its
+  writing, checks and agent attribution; compact MCP detail omits context-title/hash metadata.
+- Native checks on Apple M4 Pro/macOS used a disposable demo copy at
+  `.spike-data/p1/work/live-agent-review.invectus` (5,000 papers in the selected BGE space).
+  A deterministic stdio MCP client, `live-check/test-fixture`, called the app's real socket;
+  this did not consume Claude/Codex plan usage. Confirmed incoming suggestions in an already
+  open gap and Saved page, preservation of a typed draft, Accept saving a person decision,
+  Dismiss retaining it, and a failed tool's error in activity. The saved note was visible
+  unchanged in Saved. A 5,000-row import started indexing; the native Cancel control stopped
+  it at the next batch boundary, recorded `cancelled`, and re-enabled project switching.
+  A persistent MCP client bound to the test project refused implicit project/job-status calls
+  after a native switch to another project. Fixture replies are in ignored
+  `.spike-data/p1/live-agent-review/`.
+- Final local checks: 127 Rust workspace tests (including local BGE paths) and all doctests
+  passed; 34 UI tests, frontend build, workspace release clippy with warnings denied, and
+  workspace formatting check passed. The first overlapping app-build/test attempt failed a
+  Tauri doctest dependency lookup; the sequential rerun passed. The linker still reports the
+  pre-existing large unwind-table warning. No CI, push, downloads or new model evaluations.
+- Windows/Linux and Claude Desktop/Cursor remain unverified. These native checks exercise
+  the real desktop/MCP transport with fixture writing, not fresh Claude/Codex model sessions.

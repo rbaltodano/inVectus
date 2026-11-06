@@ -84,7 +84,7 @@ built from the engine's existing result types.
 | `list_projects`, `open_project`, `project_status` | Recent projects; readiness of each collection and index | No | No |
 | `inspect_source` | Columns and sample rows of a CSV/Parquet/folder | No | No |
 | `import_collection` | Import with a mapping; starts index → map → gap scan → calibration | Yes | No |
-| `job_status`, `cancel_job` | Progress of the running job | — | No |
+| `job_status`, `cancel_job` | Progress; cancel a specific `job_id` from status/import (stale IDs are refused) | — | No |
 | `search` | Nearest items with cosine similarity (not a probability) | No | No |
 | `check_idea` | Calibrated verdict (exists / near / open, P(exists) in this collection, quality) | No | No |
 | `list_gaps`, `gap_detail` | Ranked gaps with score terms, timeline, central items, decisions | No | No |
@@ -103,6 +103,14 @@ search indicators remain. Pass `detail: "full"` to any tool for all original fie
 `gap_detail` keeps central items and nonempty timeline years even in compact mode. Compact
 item IDs are strings so clients can preserve all 64 bits. This only changes MCP replies,
 not engine calculations, stored records or exports.
+
+The app shows tool start/finish activity and recent failures for its project. Completed writes
+refresh open gap details and Saved; an unsaved decision note stays intact. Gap detail retrieves
+stored descriptions for the selected target/bridge position, embedding space and current region
+run, with the author's recorded checks. Accept and Dismiss
+check that the reviewed suggestion is still pending; both retain the original agent record
+in decision history. App calls stay pinned across project switches, and cancellation targets
+the job ID the person or agent saw. Project switching is refused during an app tool call.
 
 ### 5.3 Guardrails (unchanged from the app)
 
@@ -173,11 +181,11 @@ DuckDB allows one writer per database file. Two stages:
 | Desktop app: data circle, search/gaps/collections panels, import → index → map → scan → calibrate job | **Built**, macOS only verified |
 | Job board with project tagging and write guards | **Built** |
 | Shared orchestration crate (job board, pipeline, readiness) usable by app and MCP | **Built** (`invectus-orchestration`) |
-| `invectus mcp` server and tools (§5) | **Built** for A2–A3 (read, import, jobs, scan, verify, export); §6 writing tools planned |
+| `invectus mcp` server and tools (§5) | **Built** (read, import, jobs, scan, verify, export and §6 writing tools) |
 | Agent-written descriptions, paraphrases, region names with checks (§6) | **Built** (A5); pass rates measured on the demo, see PROGRESS.md |
 | Decision provenance (§7) | **Built**: decisions and suggestions (A4); descriptions, paraphrase calibrations and region names record their writer (A5) |
-| Connect-an-agent button, `.mcpb` bundle | **Backend and CLI built** (A6: `invectus connect`, `connect bundle`); Settings screen not designed yet |
-| App hand-off socket (§8 stage 2) | **Backend built** (A7: Unix socket, pinned to the app's project; `agent-activity` events); live-activity UI not designed yet |
+| Connect-an-agent button, `.mcpb` bundle | **Built** (A6: Settings, `invectus connect`, `connect bundle`); Claude Code/Codex sessions checked on macOS; Desktop/Cursor unverified |
+| App hand-off socket (§8 stage 2) | **Built** (A7: Unix socket, project-pinned calls, start/finish activity, live suggestion refresh and person review); verification limits in PROGRESS.md |
 | Headless agent-edition installer | **Built** for macOS (A8: `--no-default-features` build, `scripts/package-agent-edition.sh`, `install.sh`); unsigned |
 | Small local model evaluation | Planned |
 | TUI | Optional, later |

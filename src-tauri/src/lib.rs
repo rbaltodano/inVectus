@@ -181,8 +181,12 @@ fn start_index(
 }
 
 #[tauri::command]
-fn cancel_job(state: State<AppState>) {
-    state.board.lock().unwrap().cancel();
+fn cancel_job(state: State<AppState>, id: u64, project: Option<String>) -> CmdResult<()> {
+    state
+        .board
+        .lock()
+        .unwrap()
+        .cancel_matching(id, project.as_deref())
 }
 
 /// The running job (if any) and this session's finished ones.
@@ -272,6 +276,7 @@ async fn list_gaps(state: State<'_, AppState>, form: TableForm) -> CmdResult<Gap
     let session = state.session.clone();
     off_thread(move || {
         with_session_wait(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             invectus_gaps::list(&s.project, &table)
         })
@@ -288,6 +293,7 @@ async fn saved_overview(
     let session = state.session.clone();
     off_thread(move || {
         with_session_wait(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             invectus_gaps::saved::overview(&s.project, &table)
         })
@@ -300,6 +306,7 @@ async fn bookmark_gap(state: State<'_, AppState>, form: TableForm, gap_id: i32) 
     let session = state.session.clone();
     off_thread(move || {
         with_session_wait(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             invectus_gaps::saved::bookmark(&s.project, &table, gap_id)
         })
@@ -317,6 +324,7 @@ async fn remove_gap_bookmark(
     let session = state.session.clone();
     off_thread(move || {
         with_session_wait(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             invectus_gaps::saved::remove_bookmark(
                 &s.project,
@@ -335,12 +343,14 @@ async fn gap_detail(
     state: State<'_, AppState>,
     form: TableForm,
     gap_id: i32,
+    t: Option<f32>,
 ) -> CmdResult<GapDetail> {
     let session = state.session.clone();
     off_thread(move || {
         with_session_wait(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-            invectus_gaps::detail(&s.project, &table, gap_id)
+            invectus_gaps::detail_at(&s.project, &table, gap_id, t.unwrap_or(0.5))
         })
     })
     .await
@@ -354,12 +364,25 @@ async fn set_gap_verdict(
     gap_id: i32,
     verdict: String,
     note: String,
+    expected_suggestion: Option<String>,
 ) -> CmdResult<GapView> {
     let session = state.session.clone();
     off_thread(move || {
         with_session_wait(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-            invectus_gaps::set_verdict(&s.project, &table, gap_id, &verdict, &note)
+            if let Some(expected) = expected_suggestion {
+                invectus_gaps::respond_to_suggestion(
+                    &s.project,
+                    &table,
+                    gap_id,
+                    &expected,
+                    Some(&verdict),
+                    &note,
+                )
+            } else {
+                invectus_gaps::set_verdict(&s.project, &table, gap_id, &verdict, &note)
+            }
         })
     })
     .await
@@ -371,12 +394,21 @@ async fn dismiss_gap_suggestion(
     state: State<'_, AppState>,
     form: TableForm,
     gap_id: i32,
+    expected_suggestion: String,
 ) -> CmdResult<GapView> {
     let session = state.session.clone();
     off_thread(move || {
         with_session_wait(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-            invectus_gaps::dismiss_suggestion(&s.project, &table, gap_id)
+            invectus_gaps::respond_to_suggestion(
+                &s.project,
+                &table,
+                gap_id,
+                &expected_suggestion,
+                None,
+                "",
+            )
         })
     })
     .await
@@ -396,6 +428,7 @@ async fn describe_gap(
     let session = state.session.clone();
     off_thread(move || {
         with_session(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             let g = invectus_gaps::detail(&s.project, &table, gap_id)?.view.gap;
             let target = match g.region_b {
@@ -445,6 +478,7 @@ async fn verify_gap(
     let session = state.session.clone();
     off_thread(move || {
         with_session(&session, |s| {
+            form.ensure_project(&s.project)?;
             let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
             encoder_for(s, &table)?;
             let encoder = &mut s.encoder.as_mut().unwrap().1;

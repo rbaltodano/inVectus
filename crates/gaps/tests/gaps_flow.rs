@@ -393,10 +393,57 @@ fn planted_gaps_are_found_explained_and_keep_their_verdicts() {
         "nothing pending"
     );
     // A newer suggestion is pending again; the person's decision settles it.
-    suggest(&p, &table, g, "not_viable", "no data source", agent).unwrap();
-    let v = set_verdict(&p, &table, g, "not_viable", "agreed with the agent").unwrap();
+    let pending = suggest(&p, &table, g, "not_viable", "no data source", agent).unwrap();
+    assert!(
+        invectus_gaps::respond_to_suggestion(
+            &p,
+            &table,
+            g,
+            "stale",
+            Some("not_viable"),
+            "stale click"
+        )
+        .is_err()
+    );
+    assert!(invectus_gaps::respond_to_suggestion(&p, &table, g, "stale", None, "").is_err());
+    let expected = pending.suggestion.unwrap().updated_at.unwrap();
+    let v = invectus_gaps::respond_to_suggestion(
+        &p,
+        &table,
+        g,
+        &expected,
+        Some("not_viable"),
+        "agreed with the agent",
+    )
+    .unwrap();
     assert!(v.suggestion.is_none());
     assert_eq!(v.verdict.as_ref().unwrap().author, "person");
+
+    let history = p
+        .store
+        .gap_verdicts(&table.collection_id, &table.space_id)
+        .unwrap();
+    assert!(
+        history
+            .iter()
+            .any(|v| v.entry == "suggestion" && v.author == agent && v.note == "no data source")
+    );
+    assert!(
+        history
+            .iter()
+            .any(|v| v.entry == "dismissal" && v.author == "person")
+    );
+
+    let gap = detail(&p, &table, g).unwrap().view.gap;
+    let target = match gap.region_b {
+        Some(b) => serde_json::json!({"kind":"between","a":gap.region_a,"b":b,"t":0.5}),
+        None => serde_json::json!({"kind":"region","region":gap.region_a}),
+    };
+    let writing = serde_json::json!({"author":agent, "accepted":0, "attempts":[{"title":"A checked description", "description":"Description fixture"}]});
+    p.store
+        .save_midpoint(&table.collection_id, &table.space_id, &target, &writing)
+        .unwrap();
+    assert_eq!(detail(&p, &table, g).unwrap().description, Some(writing));
 
     // Reports carry titles, verdicts and explanations, never the source text.
     let csv = invectus_gaps::export::csv(&l);

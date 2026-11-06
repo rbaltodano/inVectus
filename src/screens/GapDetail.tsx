@@ -1,8 +1,9 @@
-import { useEffect, useState, type CSSProperties } from "react";
-import { api, agentName, fmt, verdictLabel, when, year, KIND_LABEL, VERDICTS, type SavedBookmark, type DescribeResult, type GapDetail, type Verification } from "../api";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { api, fmt, verdictLabel, when, year, KIND_LABEL, VERDICTS, type SavedBookmark, type DescribeResult, type GapDetail, type Verification } from "../api";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import Link from "../Link";
 import AgentAttribution from "../AgentAttribution";
+import { agentIdentity } from "../agentIdentity";
 import { stagger } from "../motion";
 
 // Keys are the engine's term names (crates/gaps/src/scan.rs).
@@ -33,16 +34,23 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const verify = useAction();
   const respond = useAction();
 
+  const draft = useRef(false);
+  useEffect(() => { draft.current = false; }, [project.root, id, tref.collection, tref.space]);
   useEffect(() => {
+    let cancelled = false;
     load.run(async () => {
-      const g = await api.gap(tref, id);
-      setGap(g); setVerdict(g.verdict?.verdict ?? "open"); setNote(g.verdict?.note ?? "");
+      const g = await api.gap(tref, id, t / 100);
+      if (cancelled) return;
+      setGap(g);
+      if (!draft.current) { setVerdict(g.verdict?.verdict ?? "open"); setNote(g.verdict?.note ?? ""); }
       const kept = await api.saved(tref);
+      if (cancelled) return;
       setBookmark(kept.bookmarks.find((b) => b.gap_id === id));
       ctx.setMarks({ region: g.region_a });
       setDescribed(undefined); setVerification(undefined);
     });
-  }, [id, tref.collection, tref.space]);
+    return () => { cancelled = true; };
+  }, [project.root, id, tref.collection, tref.space, ctx.dataRevision, t]);
 
   if (!gap) return <div className="page"><ErrorLine error={load.error} />{load.busy && <p className="muted">Loading…</p>}</div>;
 
@@ -51,7 +59,9 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const maxContribution = Math.max(1e-9, ...gap.terms.map((x) => Math.abs(x.contribution)));
   const every = Math.ceil(gap.timeline.length / 12);
   const maxYear = Math.max(1, ...gap.timeline.map((y) => Math.max(y.demand, y.coverage)));
-  const attempt = described && (described.accepted !== null ? described.attempts[described.accepted] : described.attempts[described.attempts.length - 1]);
+  const storedDescription = !bridge || Math.abs((gap.description?.target?.t ?? -1) - t / 100) < 0.00001 ? gap.description : undefined;
+  const description = described ?? storedDescription;
+  const attempt = description && (description.accepted !== null ? description.attempts[description.accepted] : description.attempts[description.attempts.length - 1]);
   const offline = !project.network_enabled || project.offline_env;
   const outside = verification
     ? { summary: verification.summary, hits: verification.hits.slice(0, 8) }
@@ -67,16 +77,16 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const suggestion = gap.suggestion;
   // Accepting records the person's own decision; the agent's reasoning goes into the note
   // only when the person has not written one.
-  const fromAgent = suggestion && `${agentName(suggestion.author)}: ${suggestion.note}`;
+  const fromAgent = suggestion && `${agentIdentity(suggestion.author).label}: ${suggestion.note}`;
   const acceptSuggestion = () => respond.run(async () => {
-    const updated = await api.setVerdict(tref, id, suggestion!.verdict, note.trim() ? note : fromAgent!);
+    const updated = await api.setVerdict(tref, id, suggestion!.verdict, note.trim() ? note : fromAgent!, suggestion!.updated_at ?? "");
     setGap({ ...gap, verdict: updated.verdict, suggestion: updated.suggestion });
     setVerdict(suggestion!.verdict); setNote(updated.verdict?.note ?? note);
     await ctx.reloadGaps();
   });
-  const editSuggestion = () => { setVerdict(suggestion!.verdict); if (!note.trim()) setNote(fromAgent!); };
+  const editSuggestion = () => { draft.current = true; setVerdict(suggestion!.verdict); if (!note.trim()) setNote(fromAgent!); };
   const dismissSuggestion = () => respond.run(async () => {
-    const updated = await api.dismissSuggestion(tref, id);
+    const updated = await api.dismissSuggestion(tref, id, suggestion!.updated_at ?? "");
     setGap({ ...gap, suggestion: updated.suggestion });
     await ctx.reloadGaps();
   });
@@ -128,15 +138,17 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
             <span className="small clip w-160 right">{nameB}</span>
           </div><div className="muted small center">t = {(t / 100).toFixed(2)}</div></>}
           <ErrorLine error={describe.error} />
+          {description?.author?.startsWith("agent:") && <AgentAttribution author={description.author} project={ctx.project} setProject={ctx.setProject} />}
           {attempt && <div className="quote stack gap-s">
             <b>{attempt.title}</b><span>{attempt.description}</span>
           </div>}
+          {attempt && <p className="dim small">Checks recorded when this description was written, for this collection.</p>}
           {attempt && <div className="row wrap small">
             <span className={attempt.on_target.passed ? "ok-text" : "warn-text"}>{attempt.on_target.passed ? "✓ Lands on target" : "✗ Drifts off target"}</span>
             {attempt.novelty && <span className={attempt.novelty.passed ? "ok-text" : "warn-text"}>{attempt.novelty.passed ? "✓ Not already in the collection" : `✗ Already here: ${attempt.novelty.nearest_title ?? "a close item"}`}</span>}
-            {described!.accepted === null && <span className="muted">No attempt passed both checks; showing the last one.</span>}
+            {description!.accepted === null && <span className="muted">No attempt passed both checks; showing the last one.</span>}
           </div>}
-          {described?.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
+          {description?.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
           <div className="row">
             <button type="button" className="btn" disabled={describe.busy} onClick={() => describe.run(async () => setDescribed(await api.describe(tref, id, bridge ? t / 100 : null)))}>
               {describe.busy ? "Writing… (the local model can take a minute)" : attempt ? "Regenerate" : "Describe with the local model"}</button>
@@ -159,9 +171,9 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           <div className="suggestion-verdict">{verdictLabel(suggestion.verdict)}</div>
           <p className="saved-note">{suggestion.note}</p>
           <div className="row wrap">
-            <button type="button" className="btn" disabled={respond.busy} onClick={acceptSuggestion}>Accept</button>
-            <button type="button" className="text-btn" disabled={respond.busy} onClick={editSuggestion}>Edit before saving</button>
-            <button type="button" className="text-btn push" disabled={respond.busy} onClick={dismissSuggestion}>Dismiss</button>
+            <button type="button" className="btn" disabled={respond.busy || save.busy} onClick={acceptSuggestion}>Accept</button>
+            <button type="button" className="text-btn" disabled={respond.busy || save.busy} onClick={editSuggestion}>Edit before saving</button>
+            <button type="button" className="text-btn push" disabled={respond.busy || save.busy} onClick={dismissSuggestion}>Dismiss</button>
           </div>
           <div className="dim small">A suggestion, not a decision: nothing changes until you accept it or save your own.</div>
           <ErrorLine error={respond.error} />
@@ -175,11 +187,11 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           <h2 id="vd">Decision and note</h2>
           <div className="muted small">Yours, kept apart from the engine’s score{gap.verdict?.author === "person" && gap.verdict.updated_at ? ` · saved ${when(`${gap.verdict.updated_at}Z`)}` : ""}; it carries over when gaps are scanned again.</div>
           <div role="radiogroup" aria-labelledby="vd" className="stack gap-s">
-            {VERDICTS.map(([v, label]) => <button key={v} type="button" role="radio" aria-checked={verdict === v} className="option" onClick={() => setVerdict(v)}>{label}</button>)}
+            {VERDICTS.map(([v, label]) => <button key={v} type="button" role="radio" aria-checked={verdict === v} className="option" onClick={() => { draft.current = true; setVerdict(v); }}>{label}</button>)}
           </div>
-          <label>Note<textarea rows={4} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did you check? What would you do next?" /></label>
+          <label>Note<textarea rows={4} value={note} onChange={(e) => { draft.current = true; setNote(e.target.value); }} placeholder="What did you check? What would you do next?" /></label>
           <div className="row">
-            <button type="button" className="btn primary" disabled={save.busy} onClick={saveVerdict}>{saved ? "Saved" : "Save decision"}</button>
+            <button type="button" className="btn primary" disabled={save.busy || respond.busy} onClick={saveVerdict}>{saved ? "Saved" : "Save decision"}</button>
             
           </div>
           <ErrorLine error={save.error} />

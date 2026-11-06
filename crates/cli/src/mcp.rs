@@ -47,6 +47,7 @@ pub struct Server {
     app: Option<handoff::Client>,
     /// The last project-bound call went to the app (so job_status/cancel_job follow it).
     via_app: bool,
+    app_target: Option<PathBuf>,
 }
 
 /// The same project folder, with or without the `.invectus` suffix.
@@ -134,6 +135,22 @@ impl Server {
     fn route(&mut self, name: &str, args: Value) -> Result<Value, String> {
         let project_bound = !matches!(name, "list_projects" | "inspect_source");
         let follows_jobs = matches!(name, "job_status" | "cancel_job");
+        if project_bound
+            && self.via_app
+            && self.app_target.is_some()
+            && (follows_jobs || args.get("project").is_none())
+        {
+            let expected = self.app_target.clone().unwrap();
+            let current = self.app_project().ok_or(
+                "the inVectus app is not reachable; the call was not retried in another project",
+            )?;
+            if !same_project(&expected, &current) {
+                return Err(
+                    "the app switched projects; explicitly open the intended project again".into(),
+                );
+            }
+            return self.forward(name, args);
+        }
         if project_bound && let Some(app_root) = self.app_project() {
             let wanted = args["project"]
                 .as_str()
@@ -151,6 +168,7 @@ impl Server {
             };
             if to_app {
                 self.via_app = true;
+                self.app_target = Some(app_root);
                 return self.forward(name, args);
             }
         }
@@ -219,6 +237,7 @@ impl Server {
             .ok_or("the inVectus app is not reachable")?;
         let req = json!({
             "op": "tool", "client": self.agent.client, "name": name, "arguments": args,
+            "project": self.app_target,
         });
         match app.request(&req) {
             Ok(r) => r,
@@ -280,6 +299,66 @@ mod tests {
     fn call(s: &mut Server, id: i64, method: &str, params: Value) -> Value {
         let line = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
         s.handle_line(&line.to_string()).unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn app_following_calls_refuse_a_different_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("agent.sock");
+        let session = orch::Shared::default();
+        let board = orch::SharedBoard::default();
+        let first = orch::open_project(
+            &session,
+            &board,
+            dir.path().join("first").to_str().unwrap(),
+            true,
+        )
+        .unwrap()
+        .root;
+        handoff::serve(
+            &sock,
+            handoff::app_handler(
+                session.clone(),
+                board.clone(),
+                invectus_orchestration::agent::log_emitter(),
+                std::sync::Arc::new(|_| {}),
+            ),
+        )
+        .unwrap();
+        let mut server = Server {
+            socket: Some(sock),
+            ..Default::default()
+        };
+        server
+            .route("project_status", json!({"project":first}))
+            .unwrap();
+        let next = orch::open_project(
+            &session,
+            &board,
+            dir.path().join("next").to_str().unwrap(),
+            true,
+        )
+        .unwrap()
+        .root;
+        let (job, token) = board
+            .lock()
+            .unwrap()
+            .begin(orch::JobInfo::new("index", Some(next), "next".into()))
+            .unwrap();
+        for (tool, args) in [
+            ("project_status", json!({})),
+            ("job_status", json!({})),
+            ("cancel_job", json!({"job_id":job.id})),
+        ] {
+            assert!(
+                server
+                    .route(tool, args)
+                    .unwrap_err()
+                    .contains("switched projects")
+            );
+        }
+        assert!(!token.is_cancelled());
     }
 
     #[test]

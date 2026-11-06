@@ -759,3 +759,9 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
    no CSS transition, so letters snap between levels like terminal cells. */
 .shimmer { white-space: inherit; }
 .shimmer-ch { white-space: pre; transition: none; }
+
+.agent-status { margin: 0 20px 8px; color: var(--dim); font-size: 12px; }
+.agent-status summary { cursor: pointer; }
+.agent-status ol { list-style: none; padding: 0; display: grid; gap: 8px; }
+.agent-status li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.agent-status li p { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }

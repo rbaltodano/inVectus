@@ -7,10 +7,8 @@ import { inTauri } from "./api";
 import AgentIcon from "./AgentIcon";
 import { clientName } from "./agentIdentity";
 
-export interface AgentActivity {
-  client: string | null; tool: string; project: string; query: string | null;
-  gap_id: number | null; ok: boolean; error: string | null; at_ms: number;
-}
+import { describe, recordActivity, type AgentActivity } from "./agent-activity";
+export { describe, type AgentActivity } from "./agent-activity";
 
 /** How long after its last call an agent still counts as active. */
 const ACTIVE_MS = 90_000;
@@ -21,7 +19,7 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<AgentActivity[]>([]);
   useEffect(() => {
     if (!inTauri) return;
-    const un = listen<AgentActivity>("agent-activity", (e) => setEvents((xs) => [e.payload, ...xs].slice(0, 50)));
+    const un = listen<AgentActivity>("agent-activity", (e) => setEvents((xs) => recordActivity(xs, e.payload)));
     return () => { un.then((f) => f()); };
   }, []);
   return <Ctx.Provider value={events}>{children}</Ctx.Provider>;
@@ -36,35 +34,6 @@ function useNow(ms = 5000) {
   return now;
 }
 
-const clip = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-
-/** What a tool call did, in a few words. */
-export function describe(a: AgentActivity): string {
-  const q = a.query ? `“${clip(a.query)}”` : "";
-  const gap = a.gap_id !== null ? ` on gap ${a.gap_id}` : "";
-  switch (a.tool) {
-    case "search": return `searched ${q}`;
-    case "check_idea": return `checked ${q}`;
-    case "list_gaps": return "read the gaps";
-    case "gap_detail": return `read gap ${a.gap_id ?? ""}`.trim();
-    case "gap_context": return `read the evidence${gap}`;
-    case "suggest_decision": return `suggested a decision${gap}`;
-    case "submit_description": return `wrote a description${gap}`;
-    case "paraphrase_sample": return "read the calibration sample";
-    case "submit_paraphrases": return "recalibrated with its paraphrases";
-    case "region_context": return "read the regions";
-    case "submit_region_names": return "named regions";
-    case "scan_gaps": return "scanned gaps again";
-    case "verify_gap": return `checked outside sources${gap}`;
-    case "export_gaps": return "exported the gaps";
-    case "import_collection": return "imported a collection";
-    case "project_status": case "open_project": return "read the project status";
-    case "job_status": return "followed the running job";
-    case "cancel_job": return "cancelled the running job";
-    default: return a.tool.replace(/_/g, " ");
-  }
-}
-
 export const ago = (ms: number, now: number) => {
   const s = Math.max(0, Math.round((now - ms) / 1000));
   return s < 5 ? "just now" : s < 60 ? `${s} s ago` : `${Math.round(s / 60)} min ago`;
@@ -74,7 +43,7 @@ export const ago = (ms: number, now: number) => {
 export function useActiveAgent(project?: string): AgentActivity | undefined {
   const events = useAgentActivity();
   const now = useNow();
-  return events.find((e) => (!project || e.project === project) && now - e.at_ms < ACTIVE_MS);
+  return events.find((e) => (!project || e.project === project) && (e.phase === "started" || now - e.at_ms < ACTIVE_MS));
 }
 
 /** The second line of a project's sidebar row: an active agent's latest call, else a quiet
@@ -83,14 +52,11 @@ export function ProjectRowDetail({ root, fallback }: { root: string; fallback: s
   const a = useActiveAgent(root);
   const now = useNow();
   if (!a) return <span className="project-row-sub">{fallback}</span>;
-  const text = `${describe(a)}${!a.ok ? " · failed" : ""}`;
+  const text = describe(a);
   return <span className="project-row-sub agent" title={`${clientName(a.client)} ${text} · ${ago(a.at_ms, now)}`}>
-    {now - a.at_ms < WORKING_MS ? <Shimmer text={text} /> : text}
+    {a.phase === "started" ? <Shimmer text={text} /> : text}
   </span>;
 }
-
-/** How long after a call the agent counts as mid-work (its line shimmers). */
-const WORKING_MS = 15_000;
 
 /** Terminal-style thinking shimmer. Like a CLI, it repaints on a tick (120 ms, about 8 fps):
  * the bright head moves exactly one letter per tick, and every letter snaps to one of three
@@ -126,7 +92,22 @@ export function Shimmer({ text }: { text: string }) {
 export function ProjectRowAgent({ root }: { root: string }) {
   const a = useActiveAgent(root);
   if (!a) return null;
-  return <span className="project-row-agent" title={`${clientName(a.client)} is working here`} aria-label={`${clientName(a.client)} is working here`}>
+  return <span className="project-row-agent" title={`${clientName(a.client)} · ${describe(a)}`} aria-label={`${clientName(a.client)} · ${describe(a)}`}>
     <AgentIcon client={a.client} />
   </span>;
+}
+
+/** Recent activity for this project, including errors from completed calls. */
+export function AgentStatus({ root }: { root: string }) {
+  const events = useAgentActivity().filter((e) => e.project === root);
+  const now = useNow();
+  if (!events.length) return null;
+  return <details className="agent-status">
+    <summary><span aria-live="polite">{clientName(events[0].client)} · {describe(events[0])}</span></summary>
+    <ol>{events.slice(0, 5).map((event, i) => <li key={event.call_id ?? `${event.at_ms}-${i}`}>
+      <span className={event.ok ? "" : "err"}>{clientName(event.client)} · {describe(event)}</span>
+      <span className="dim small">{event.phase === "started" ? "Running" : ago(event.at_ms, now)}</span>
+      {event.error && <p className="err small">{event.error}</p>}
+    </li>)}</ol>
+  </details>;
 }

@@ -819,7 +819,9 @@ mod tests {
 
     fn session_for(path: &std::path::Path) -> Shared {
         let project = Project::create(path).unwrap();
-        Arc::new(Mutex::new(Some(Session::open(project).unwrap())))
+        let shared = Shared::default();
+        *shared.lock().unwrap() = Some(Session::open(project).unwrap());
+        shared
     }
 
     /// Import → automatic model choice → indexing on its own connection → readiness, then a

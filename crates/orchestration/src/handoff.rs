@@ -212,9 +212,18 @@ pub fn app_handler(
                 "version": invectus_core::VERSION,
             })),
             Some("tool") => {
+                let _transition = session.transition.lock().map_err(crate::err)?;
                 let Some(pinned) = root() else {
                     return Err("no project is open in the inVectus app".into());
                 };
+                if let Some(expected) = req["project"].as_str()
+                    && pinned != std::path::Path::new(expected)
+                {
+                    return Err(
+                        "the app switched projects; explicitly open the intended project again"
+                            .into(),
+                    );
+                }
                 let name = req["name"].as_str().unwrap_or_default().to_string();
                 let mut agent = crate::agent::Agent {
                     session: session.clone(),
@@ -224,8 +233,20 @@ pub fn app_handler(
                     pinned: Some(pinned.clone()),
                 };
                 let args = req.get("arguments").cloned().unwrap_or(Value::Null);
+                static NEXT_CALL: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(1);
+                let call_id = NEXT_CALL
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                    .to_string();
+                activity(&serde_json::json!({
+                    "call_id": call_id, "phase": "started",
+                    "client": agent.client, "tool": name, "project": pinned.display().to_string(),
+                    "query": args.get("query").or_else(|| args.get("idea")), "gap_id": args.get("gap_id"),
+                    "ok": true, "error": null, "at_ms": crate::jobs::now_ms(),
+                }));
                 let result = agent.run_tool(&name, args.clone());
                 activity(&serde_json::json!({
+                    "call_id": call_id, "phase": "finished",
                     "client": agent.client,
                     "tool": name,
                     "project": pinned.display().to_string(),
@@ -247,6 +268,60 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn a_call_blocks_switching_and_stale_project_requests_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = crate::Shared::default();
+        let board = crate::SharedBoard::default();
+        let a = crate::open_project(
+            &session,
+            &board,
+            dir.path().join("a").to_str().unwrap(),
+            true,
+        )
+        .unwrap()
+        .root;
+        let other = dir.path().join("b");
+        let s2 = session.clone();
+        let b2 = board.clone();
+        let target = other.clone();
+        let handler = app_handler(
+            session.clone(),
+            board.clone(),
+            crate::agent::log_emitter(),
+            Arc::new(move |event| {
+                if event["phase"] == "started" {
+                    let error = crate::open_project(&s2, &b2, target.to_str().unwrap(), true)
+                        .err()
+                        .unwrap();
+                    assert!(error.contains("agent"), "{error}");
+                }
+            }),
+        );
+        handler(
+            serde_json::json!({"op":"tool", "name":"project_status", "project":a, "arguments":{}}),
+        )
+        .unwrap();
+        let b = crate::open_project(&session, &board, other.to_str().unwrap(), true)
+            .unwrap()
+            .root;
+        let (job, token) = board
+            .lock()
+            .unwrap()
+            .begin(crate::JobInfo::new(
+                "index",
+                Some(b.clone()),
+                "replacement".into(),
+            ))
+            .unwrap();
+        let error = handler(serde_json::json!({"op":"tool", "name":"cancel_job", "project":a, "arguments":{"job_id":job.id}})).unwrap_err();
+        assert!(error.contains("switched projects"));
+        assert!(!token.is_cancelled());
+        let form: crate::TableForm =
+            serde_json::from_value(serde_json::json!({"project":a,"collection":"papers"})).unwrap();
+        assert!(crate::with_session_wait(&session, |s| form.ensure_project(&s.project)).is_err());
+    }
 
     #[test]
     fn app_answers_status_and_pinned_tools_over_a_private_socket() {
@@ -314,9 +389,12 @@ mod tests {
                 .ends_with("a.invectus")
         );
         let events = seen.lock().unwrap();
-        assert_eq!(events.len(), 2);
+        assert_eq!(events.len(), 4);
         assert_eq!(events[0]["client"], "test-client");
         assert_eq!(events[0]["tool"], "project_status");
-        assert_eq!(events[1]["ok"], false);
+        assert_eq!(events[0]["phase"], "started");
+        assert_eq!(events[1]["phase"], "finished");
+        assert_eq!(events[0]["call_id"], events[1]["call_id"]);
+        assert_eq!(events[3]["ok"], false);
     }
 }

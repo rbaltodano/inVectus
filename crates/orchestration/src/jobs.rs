@@ -134,6 +134,16 @@ impl Board {
         }
     }
 
+    /// Refuse stale cancel buttons rather than cancelling a replacement job.
+    pub fn cancel_matching(&self, id: u64, project: Option<&str>) -> Result<(), String> {
+        let current = self.running().ok_or("that job is no longer running")?;
+        if current.id != id || current.project.as_deref() != project {
+            return Err("the running job changed; cancel it from its current status".into());
+        }
+        self.cancel();
+        Ok(())
+    }
+
     pub fn running(&self) -> Option<&JobInfo> {
         self.current.as_ref().filter(|c| c.running())
     }
@@ -278,6 +288,28 @@ mod tests {
             ("bge".into(), "BAAI/bge".into(), 134),
             ("nomic".into(), "nomic-ai/nomic".into(), 548),
         ]
+    }
+
+    #[test]
+    fn cancellation_targets_the_job_and_project_that_were_shown() {
+        let mut board = Board::default();
+        let (a, first) = board
+            .begin(JobInfo::new("index", Some("/a".into()), "first".into()))
+            .unwrap();
+        assert!(board.cancel_matching(a.id, Some("/b")).is_err());
+        assert!(!first.is_cancelled());
+        board.finish(a.id, Ok((serde_json::json!({}), false)));
+        let (b, second) = board
+            .begin(JobInfo::new(
+                "index",
+                Some("/a".into()),
+                "replacement".into(),
+            ))
+            .unwrap();
+        assert!(board.cancel_matching(a.id, Some("/a")).is_err());
+        assert!(!second.is_cancelled());
+        board.cancel_matching(b.id, Some("/a")).unwrap();
+        assert!(second.is_cancelled());
     }
 
     #[test]

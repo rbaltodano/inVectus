@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { listen } from "@tauri-apps/api/event";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
-import { AgentsProvider, ProjectRowAgent, ProjectRowDetail } from "./agents";
+import { AgentsProvider, AgentStatus, ProjectRowAgent, ProjectRowDetail } from "./agents";
+import { changesProject, type AgentActivity } from "./agent-activity";
 import DataCircle, { type Marks } from "./DataCircle";
 import ProjectsPage, { forget, recentProjects, remember, renameRecent, type Recent } from "./screens/Projects";
 import ProjectName from "./ProjectName";
@@ -32,6 +33,7 @@ export interface Ctx {
   tref?: TableRef;
   map?: MapData;
   gaps: GapView[];
+  dataRevision: number;
   gapsLoading: boolean;
   gapsError?: string;
   go: (r: Route | Legacy) => void;
@@ -52,7 +54,10 @@ const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 
 export default function App() {
   const [project, setProject] = useState<ProjectInfo>();
-  const refresh = async () => { try { setProject(await api.info()); } catch { /* no project open */ } };
+  const refresh = async () => { try {
+    const next = await api.info();
+    setProject((current) => current?.root === next.root ? next : current);
+  } catch { /* no project open */ } };
   const onFinished = (j: JobInfo) => { if (j.project) refresh(); };
   return <JobsProvider onFinished={onFinished}>
     <AgentsProvider>
@@ -203,13 +208,15 @@ function rowFact(r: Recent, job?: JobInfo): string {
 }
 
 function JobLine({ job, recent }: { job: JobInfo; recent: Recent[] }) {
+  const cancel = useAction();
   const name = job.project ? recent.find((r) => r.root === job.project)?.name ?? job.project.split("/").pop() : "all projects";
   const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
   return <div className="job-line" aria-live="polite">
     <span>{job.label}</span>
     <span className="dim">{name} · {job.state === "running" ? `${job.phase ?? "starting"} ${job.total ? `${pct}%` : ""}` : job.state === "completed" ? "done" : job.state}</span>
     {job.state === "failed" && <span className="err">{job.error}</span>}
-    {isRunning(job) && job.kind !== "download" && <button type="button" className="text-btn" onClick={() => api.cancel()}>Cancel</button>}
+    <ErrorLine error={cancel.error} />
+    {isRunning(job) && job.kind !== "download" && <button type="button" className="text-btn" disabled={cancel.busy} onClick={() => cancel.run(() => api.cancel(job))}>Cancel</button>}
   </div>;
 }
 
@@ -267,6 +274,8 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsError, setGapsError] = useState<string>();
   const gapsRequest = useRef(0);
+  const [dataRevision, setDataRevision] = useState(0);
+  const [mapRevision, setMapRevision] = useState(0);
   const initialTab = pageTab(initialStack[initialStack.length - 1]);
   const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -311,13 +320,17 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
 
   const tables = project.tables;
   const table = tables.find((t) => tableKey(t) === selected) ?? tables.find((t) => t.origin === "embedded" && t.regions) ?? tables.find((t) => t.origin === "embedded") ?? tables[0];
-  const tref = useMemo(() => table ? { collection: table.collection, space: table.space_id } : undefined, [table?.collection, table?.space_id]);
+  const tref = useMemo(() => table ? { project: project.root, collection: table.collection, space: table.space_id } : undefined, [project.root, table?.collection, table?.space_id]);
   const job = jobs.current && jobs.current.project === project.root ? jobs.current : undefined;
 
   useEffect(() => {
-    setMap(undefined); setMapError(undefined); setMapFocus(undefined);
-    if (tref && table?.regions) api.map(tref).then(setMap).catch((e) => setMapError(String(e)));
-  }, [tref?.collection, tref?.space, table?.regions?.run_id]);
+    setMapError(undefined);
+    let cancelled = false;
+    if (tref && table?.regions) api.map(tref).then((data) => { if (!cancelled) setMap(data); })
+      .catch((e) => { if (!cancelled) setMapError(String(e)); });
+    return () => { cancelled = true; };
+  }, [project.root, tref?.collection, tref?.space, table?.regions?.run_id, mapRevision]);
+  useEffect(() => { setMap(undefined); setMapFocus(undefined); }, [project.root, tref?.collection, tref?.space, table?.regions?.run_id]);
   const reloadGaps = useCallback(async () => {
     const request = ++gapsRequest.current;
     if (!tref || !table?.regions) { setGaps([]); setGapsError(undefined); setGapsLoading(false); return; }
@@ -341,20 +354,26 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   useEffect(() => {
     if (viewingGaps && table?.regions?.scanned) void reloadGaps();
   }, [viewingGaps]);
-  // Agent calls through the hand-off socket (A7) change the project behind the window's back:
-  // reload what they can change. The live-activity display itself is still to be designed.
+  // Reload only completed writes for this project. Detail views keep drafts while refreshing.
   const reloadRef = useRef({ refresh, reloadGaps, root: project.root });
   reloadRef.current = { refresh, reloadGaps, root: project.root };
   useEffect(() => {
     if (!inTauri) return;
-    const writes = new Set(["suggest_decision", "scan_gaps", "submit_description", "submit_region_names", "import_collection", "open_project"]);
-    const un = listen<{ tool: string; ok: boolean; project: string }>("agent-activity", (e) => {
-      if (!e.payload.ok || !writes.has(e.payload.tool) || e.payload.project !== reloadRef.current.root) return;
+    const un = listen<AgentActivity>("agent-activity", (e) => {
+      if (!changesProject(e.payload, reloadRef.current.root)) return;
+      setDataRevision((v) => v + 1);
+      if (e.payload.tool === "submit_region_names") setMapRevision((v) => v + 1);
       void reloadRef.current.refresh();
       void reloadRef.current.reloadGaps();
     });
     return () => { un.then((f) => f()); };
   }, []);
+  useEffect(() => {
+    if (!job || job.state === "running") return;
+    setDataRevision((v) => v + 1);
+    setMapRevision((v) => v + 1);
+    void reloadGaps();
+  }, [job?.id, job?.state]);
 
   const pushFrom = (tab: ProjectTab, p: Page) => {
     const target = p.kind === "item" || p.kind === "gap" ? tab : pageTab(p);
@@ -383,7 +402,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };
 
   const ctx: Ctx = {
-    project, table, tref, map, gaps, gapsLoading, gapsError, go, push, back, backFromDetail, setMarks, showRegion, reloadGaps, refresh, setProject, pickTable,
+    project, table, tref, map, gaps, dataRevision, gapsLoading, gapsError, go, push, back, backFromDetail, setMarks, showRegion, reloadGaps, refresh, setProject, pickTable,
     view: { ...opts, set: (k, v) => setOpts((o) => ({ ...o, [k]: v })), reset: () => setResetKey((k) => k + 1) },
   };
   const addData = async () => {
@@ -411,6 +430,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
       <section className="project-console" aria-label="Project workspace">
         {project.warning && <p className="banner">{project.warning}</p>}
         {netError && <p className="banner err">{netError}</p>}
+        <AgentStatus root={project.root} />
         <div className="project-toolbar">
           <div ref={tabsRef} className="project-tabs" role="tablist" aria-label="Project sections">
             {PROJECT_TABS.map((tab, i) => <button key={tab.id} id={`tab-${tab.id}`} type="button" role="tab"

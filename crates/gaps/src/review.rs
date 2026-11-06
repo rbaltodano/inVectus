@@ -80,6 +80,8 @@ pub struct GapDetail {
     pub view: GapView,
     /// Items nearest the region centre(s): the evidence a person reads.
     pub core_items: Vec<ItemSummary>,
+    /// Stored writing for this target in the current region run, including its checks/author.
+    pub description: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -169,6 +171,19 @@ pub fn list(project: &Project, table: &VectorTableRecord) -> Result<GapList> {
 }
 
 pub fn detail(project: &Project, table: &VectorTableRecord, gap_id: i32) -> Result<GapDetail> {
+    detail_at(project, table, gap_id, 0.5)
+}
+
+pub fn detail_at(
+    project: &Project,
+    table: &VectorTableRecord,
+    gap_id: i32,
+    t: f32,
+) -> Result<GapDetail> {
+    anyhow::ensure!(
+        t.is_finite() && (0.0..=1.0).contains(&t),
+        "position must be between 0 and 1"
+    );
     let view = list(project, table)?
         .gaps
         .into_iter()
@@ -188,7 +203,25 @@ pub fn detail(project: &Project, table: &VectorTableRecord, gap_id: i32) -> Resu
             url: i.url.clone(),
         })
         .collect();
-    Ok(GapDetail { view, core_items })
+    let run = project
+        .store
+        .latest_region_run(&table.collection_id, &table.space_id)?
+        .context("no current region run")?;
+    let target = match view.gap.region_b {
+        Some(b) => serde_json::json!({"kind":"between", "a":view.gap.region_a, "b":b, "t":t}),
+        None => serde_json::json!({"kind":"region", "region":view.gap.region_a}),
+    };
+    let description = project.store.latest_midpoint(
+        &table.collection_id,
+        &table.space_id,
+        &run.run_id,
+        &target,
+    )?;
+    Ok(GapDetail {
+        view,
+        core_items,
+        description,
+    })
 }
 
 /// Record the person's decision on a gap of the latest scan. Any pending suggestion is
@@ -225,6 +258,30 @@ pub fn suggest(
         author,
         "suggestion",
     )
+}
+
+/// Respond only to the suggestion the person actually reviewed. History retains its author
+/// and reasoning even after it is accepted or dismissed.
+pub fn respond_to_suggestion(
+    project: &Project,
+    table: &VectorTableRecord,
+    gap_id: i32,
+    expected_at: &str,
+    decision: Option<&str>,
+    note: &str,
+) -> Result<GapView> {
+    let view = find(project, table, gap_id)?;
+    let current = view
+        .suggestion
+        .context("that suggestion is no longer pending; review the latest gap")?;
+    anyhow::ensure!(
+        current.updated_at.as_deref() == Some(expected_at),
+        "the agent suggestion changed; review it before responding"
+    );
+    match decision {
+        Some(verdict) => set_verdict(project, table, gap_id, verdict, note),
+        None => dismiss_suggestion(project, table, gap_id),
+    }
 }
 
 /// The person sets a gap's pending suggestion aside without deciding.

@@ -124,6 +124,9 @@ fn gap_detail(v: Value) -> Value {
     if let Some(s) = v.get_mut("suggestion").filter(|s| s.is_object()) {
         *s = drop(s.take(), &["core", "collection_id", "space_id"]);
     }
+    if let Some(description) = v.get_mut("description").filter(|d| d.is_object()) {
+        *description = drop(description.take(), &["context_titles", "llm"]);
+    }
     // Years with neither demand nor coverage say nothing.
     map_key(v, "timeline", |t| match t {
         Value::Array(a) => Value::Array(

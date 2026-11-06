@@ -33,7 +33,19 @@ impl Session {
 }
 
 /// The session slot: `None` until a project is opened.
-pub type Shared = Arc<Mutex<Option<Session>>>;
+#[derive(Clone, Default)]
+pub struct Shared {
+    slot: Arc<Mutex<Option<Session>>>,
+    /// Held across app tool calls and project transitions, including gaps between session locks.
+    pub(crate) transition: Arc<Mutex<()>>,
+}
+
+impl std::ops::Deref for Shared {
+    type Target = Mutex<Option<Session>>;
+    fn deref(&self) -> &Self::Target {
+        &self.slot
+    }
+}
 
 pub fn with_session<T>(
     session: &Shared,
@@ -262,6 +274,10 @@ pub fn open_project(
     path: &str,
     create: bool,
 ) -> OpResult<ProjectInfo> {
+    let _transition = session.transition.try_lock().map_err(|_| {
+        "busy: an agent is answering a request; try switching projects again when it finishes"
+            .to_string()
+    })?;
     let path = user_path(path);
     let mut guard = session
         .try_lock()
@@ -358,8 +374,22 @@ pub fn encoder_for<'a>(
 /// A collection and, optionally, one of its vector spaces (else its only or default one).
 #[derive(Deserialize)]
 pub struct TableForm {
+    #[serde(default)]
+    pub project: Option<String>,
     pub collection: String,
     pub space: Option<String>,
+}
+
+impl TableForm {
+    pub fn ensure_project(&self, project: &Project) -> anyhow::Result<()> {
+        if let Some(root) = &self.project {
+            anyhow::ensure!(
+                project.root == std::path::Path::new(root),
+                "the open project changed; reopen this gap before making changes"
+            );
+        }
+        Ok(())
+    }
 }
 
 #[derive(Deserialize)]
@@ -443,6 +473,7 @@ pub fn scan_gaps(
     weights: Option<invectus_gaps::scan::Weights>,
 ) -> OpResult<invectus_gaps::ScanReport> {
     with_session(session, |s| {
+        form.ensure_project(&s.project)?;
         ensure_idle(board, &s.project)?;
         let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
         let mut opts = invectus_gaps::ScanOptions::default();
@@ -457,6 +488,7 @@ pub fn scan_gaps(
 /// the file's path. Titles and links only.
 pub fn export_gaps(session: &Shared, form: TableForm, format: &str) -> OpResult<String> {
     with_session(session, |s| {
+        form.ensure_project(&s.project)?;
         let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
         let list = invectus_gaps::list(&s.project, &table)?;
         let (text, ext) = match format {

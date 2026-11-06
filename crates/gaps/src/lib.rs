@@ -7,6 +7,7 @@ pub mod saved;
 pub mod scan;
 
 pub use review::{
-    GapDetail, GapList, GapView, detail, dismiss_suggestion, list, set_verdict, suggest,
+    GapDetail, GapList, GapView, detail, detail_at, dismiss_suggestion, list,
+    respond_to_suggestion, set_verdict, suggest,
 };
 pub use scan::{Gap, GapKind, ScanOptions, ScanReport, scan};

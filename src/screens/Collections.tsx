@@ -70,7 +70,7 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     </dl>
 
     {indexingHere && <div className="activity"><div className="small">Indexing with <span className="mono">{job!.models.join(", ")}</span></div><JobProgress job={job!} />
-      <button type="button" className="text-btn" onClick={() => api.cancel()}>Cancel</button></div>}
+      <button type="button" className="text-btn" disabled={busy} onClick={() => run(() => api.cancel(job!))}>Cancel</button></div>}
     {lastHere?.state === "failed" && <div className="error stack gap-s"><span>Indexing failed: {lastHere.error}</span>
       <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={() => index(lastHere.models, true)}>Retry</button></div>}
     {lastHere?.state === "cancelled" && <div className="note small">Indexing was cancelled. Finished batches were kept; indexing again resumes where it stopped.</div>}

@@ -1,5 +1,5 @@
 name: Desktop build
-# Manual only: never run CI while the repository is private (see AGENTS.md).
+# Manual only: dispatched by hand on the owner's request (see AGENTS.md).
 on:
   workflow_dispatch:
 

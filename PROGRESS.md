@@ -2259,7 +2259,7 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 
 ## 2026-11-05 — Agents shown in the sidebar's project rows
 
-- Owner's direction (like T3 Code): sidebar projects are two lines, the name and a quiet line
+- Owner's direction: sidebar projects are two lines, the name and a quiet line
   under it. The line shows an active agent's latest call (e.g. "checked “…”", "suggested a
   decision on gap 4"), else a running job's phase, else the item count. The agent client's
   mark sits at the right edge (Claude, OpenAI/Codex, Cursor; others get a generic bot icon),
@@ -2505,3 +2505,31 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   a newly typed unsaved note remained intact. Native accessibility assertions confirmed all
   three (updated writing, preserved draft, visible checks). App left open on the disposable
   review project. Existing MCP processes need reconnecting to load the new tool schema.
+
+## 2026-11-05 — Measured token savings, Claude Desktop, CI rule, later work
+
+- **Compact results, real tokens (Claude Code only, one run each).** Same five-step task on a
+  fresh demo copy (`.spike-data/p1/work/tokens-claude.invectus`), Claude Code 2.1.311 headless,
+  claude-sonnet-5-5. Before (`agent-e2e/claude.jsonl`) → after (`agent-tokens/claude.jsonl`):
+  tool-result text 72,142 → 23,919 chars (−67%); total input tokens 314,728 → 238,073 (−24%);
+  cache writes 52,881 → 32,797 (−38%); reported API-equivalent cost $0.267 → $0.179 (−33%);
+  29 s vs 40 s. The after run skipped one `project_status` call (its status came from
+  `open_project`), so calls are 9 vs 10. Fixed per-turn context (system prompt, tool
+  definitions) is most of the remaining input. n = 1; not a benchmark.
+- Codex rerun not done: the ChatGPT plan hit its usage limit ("try again at 10:55 PM").
+- **Claude Desktop:** connected with `invectus connect add claude-desktop --yes` (config file
+  merged, backup kept) and launched. Its log shows `invectus mcp` started, `initialize` and
+  `tools/list` succeeded. A chat session in it needs the owner (GUI); `.mcpb` install not
+  tried (needs Claude Desktop's install dialog).
+- **CI rule:** the repository is public, so AGENTS.md now allows owner-requested manual runs of
+  `build.yml`; triggers stay `workflow_dispatch` only, and `multimodal.yml` still needs
+  download approval.
+- Cleanup: removed the reword backup branch and `agent-e2e.invectus`; `live-agent-review`
+  kept while the app has it open.
+- **Later (owner, 2026-11-05), not started:**
+  1. Small local model evaluation (A8 second half): a 2–4 B GGUF model against Gemma 4 12B on
+     the paraphrase calibration and description round-trip tests. Needs a download approval
+     (file, source, size).
+  2. Product questions (target product §12): bundle the embedding model in installers or
+     fetch it on first run with consent; whether agent suggestions may ever become decisions
+     automatically; pricing and licensing between the two editions.

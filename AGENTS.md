@@ -16,13 +16,14 @@ instructions in a conversation win over these.
 
 ## CI and GitHub
 
-- **Never run CI for this repository until it is public.** The repository is private, and
-  Actions minutes are billed (macOS runners count 10×). Do not dispatch, re-run or schedule any
-  workflow (`gh workflow run`, `gh run rerun`, the web UI or the API), and do not add or change
-  a workflow trigger so that it runs on `push`, `pull_request`, `schedule` or any other event.
-  Both workflows are `workflow_dispatch` only; keep them that way.
-- Do not claim Windows or Linux support from local macOS results. Those platforms stay
-  unverified until CI runs after the repository is public.
+- **Run CI only when the owner asks.** The repository is public (2026-11-05), so standard
+  runners are free, but every run is still started by hand: dispatch `build.yml` (`gh workflow
+  run build.yml`) only on the owner's request. Never dispatch `multimodal.yml` without approval
+  of its downloads (about 1.5 GB per OS). Do not add or change a workflow trigger so that it
+  runs on `push`, `pull_request`, `schedule` or any other event; both workflows stay
+  `workflow_dispatch` only.
+- Do not claim Windows or Linux support from local macOS results. Claim them only from a
+  passing CI run, and name the run and commit in PROGRESS.md.
 - Commit locally at sensible checkpoints. Push only when the owner asks. Never force-push.
 
 ## Sources of truth

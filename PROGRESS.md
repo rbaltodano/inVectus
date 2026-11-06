@@ -2420,6 +2420,15 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Frontend build and headless WebKit selector checks passed, including cursor tracking,
   viewport bounds and hiding on leave. Native bundle not rebuilt.
 
+## 2026-11-05 — Selected-model checkmark follows the switch color
+
+- The last explicitly selected model retains its checkmark when current-model mode is on.
+  The checkmark then uses the switch's accent color; with the switch off it uses neutral text
+  color. This marks the remembered selection, not a verified model running in the client.
+- Frontend build and headless WebKit checks passed: exactly one model stays checked after
+  enabling the switch, its computed color matches the enabled switch, and it returns to
+  neutral when disabled. Existing selector interaction checks passed. Bundle not rebuilt.
+
 
 ## 2026-11-05 — Compact MCP results
 

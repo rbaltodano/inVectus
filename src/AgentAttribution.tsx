@@ -75,7 +75,7 @@ export default function AgentAttribution({ author, project, setProject }: {
     {project.preferred_agent_model && <span className="dim small agent-next-model">Next: {project.preferred_agent_model}</span>}
     {open && createPortal(<div ref={popup} id={id} className="model-popover" style={position} role="dialog" aria-label="Model for future work"
       onBlur={(e) => { if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node) && e.relatedTarget !== trigger.current) setOpen(false); }}>
-      <ModelSelector value={project.preferred_agent_model ?? ""} onChange={choose} disabled={busy} />
+      <ModelSelector value={lastModel ?? ""} followCurrent={!project.preferred_agent_model} onChange={choose} disabled={busy} />
       <CursorHint className="model-selector-note model-current-row" text="For future work in this project. Your agent app controls model switching.">
         <span id={`${id}-current`}>Use agent’s current model</span>
         <button type="button" role="switch" className="model-current-switch" aria-labelledby={`${id}-current`} aria-describedby={`${id}-help`}

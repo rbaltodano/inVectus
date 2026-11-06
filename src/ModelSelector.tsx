@@ -9,10 +9,10 @@ export const MODEL_GROUPS = [
 ];
 
 /** Controlled selector: its caller decides what choosing a model means. */
-export default function ModelSelector({ value, onChange, disabled = false }: { value: string; onChange: (model: string) => void; disabled?: boolean }) {
+export default function ModelSelector({ value, onChange, disabled = false, followCurrent = false }: { value: string; onChange: (model: string) => void; disabled?: boolean; followCurrent?: boolean }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const id = useId();
-  return <div className="model-selector" aria-label="Choose a model">
+  return <div className="model-selector" aria-label="Choose a model" data-follow-current={followCurrent}>
     {MODEL_GROUPS.map((group) => <div className="model-provider" key={group.provider} role="group" aria-label={group.provider}>
       <button type="button" className="model-provider-heading" aria-expanded={!collapsed[group.provider]} aria-controls={`${id}-${group.client}`} onClick={() => setCollapsed((previous) => ({ ...previous, [group.provider]: !previous[group.provider] }))}>
         <AgentIcon client={group.client} size={16} /><span>{group.provider}</span><ChevronDown size={12} className="push" aria-hidden="true" />

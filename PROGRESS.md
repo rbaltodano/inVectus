@@ -2499,3 +2499,9 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   pre-existing large unwind-table warning. No CI, push, downloads or new model evaluations.
 - Windows/Linux and Claude Desktop/Cursor remain unverified. These native checks exercise
   the real desktop/MCP transport with fixture writing, not fresh Claude/Codex model sessions.
+- Final macOS `.app` bundle rebuilt successfully. In that exact bundle, the existing stored
+  description appeared with its author and both recorded checks. Submitting a second checked
+  description through MCP changed the writing in the already-open gap without reopening it;
+  a newly typed unsaved note remained intact. Native accessibility assertions confirmed all
+  three (updated writing, preserved draft, visible checks). App left open on the disposable
+  review project. Existing MCP processes need reconnecting to load the new tool schema.

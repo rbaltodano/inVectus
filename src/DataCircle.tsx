@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import LineArt from "./LineArt";
 import { fmt, year, KIND_LABEL, type GapView, type JobInfo, type MapData, type MapPoint, type Region } from "./api";
 import { DotFlicker } from "./dot-flicker";
+import { canvasColors, useTheme } from "./theme";
 import { gapFocusArea, interpolateCamera, regionFocusView } from "./map-focus";
 
 export interface Marks {
@@ -42,11 +43,8 @@ interface Props {
   focusRegion?: { region: number; request: number };
 }
 
-const INK = "#d1cbc2";
-const ACCENT = "#6edcaa";
 const SINGLE = 4;         // one item, in screen px
 const LABEL_FONT = `500 9.5px "Martian Mono Variable", ui-monospace, monospace`;
-const white = (a: number) => `rgba(209, 203, 194, ${a})`;
 const markKey = {
   query: (q: { x: number; y: number }) => `mark:query:${q.x}:${q.y}`,
   item: (id: number) => `mark:item:${id}`,
@@ -119,6 +117,7 @@ function disc(i: number): [number, number] {
 }
 
 export default function DataCircle({ data, gaps, marks, showGaps, showLabels, showOutlines, gapsActive = false, selectedGapId, job, empty, idle, onGap, onItem, resetKey, focusRegion }: Props) {
+  const theme = useTheme();
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const focusedRequest = useRef<Props["focusRegion"]>();
@@ -319,6 +318,8 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     const dpr = window.devicePixelRatio || 1;
     c.width = size * dpr; c.height = size * dpr;
     const g = c.getContext("2d")!;
+    // The theme's colours, read again whenever it changes.
+    const { ink: INK, accent: ACCENT, bg: BG, inkA: white } = canvasColors();
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, size, size);
     g.save();
@@ -394,7 +395,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
         g.globalAlpha = gapsActive ? opacity(markKey.gap(data?.run.run_id, gp.gap_id)) : 1;
         const selected = gp.gap_id === selectedGapId;
         g.lineWidth = 1 + 3 * Math.max(gapEmphasis, selectedEmphasis[gp.gap_id] ?? 0);
-        g.strokeStyle = selected ? ACCENT : INK; g.fillStyle = "#141414";
+        g.strokeStyle = selected ? ACCENT : INK; g.fillStyle = BG;
         g.beginPath(); g.arc(p[0], p[1], 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
         // Codes on the strongest few only; the rest show theirs on hover.
         if (i < 6 || selected) { g.fillStyle = selected ? ACCENT : white(0.55); g.fillText(gapCode(gaps.indexOf(gp)), p[0] + 8, p[1]); }
@@ -426,7 +427,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       const frame = requestAnimationFrame(setFlickerFrame);
       return () => cancelAnimationFrame(frame);
     }
-  }, [data, size, view, gaps, mapGaps, marks, showGaps, showOutlines, gapsActive, gapEmphasis, selectedGapId, selectedEmphasis, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion]);
+  }, [data, size, view, gaps, mapGaps, marks, showGaps, showOutlines, gapsActive, gapEmphasis, selectedGapId, selectedEmphasis, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion, theme]);
 
   // Pointer: drag to pan, wheel to zoom, hover to inspect, click to open.
   const at = (e: PE) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };

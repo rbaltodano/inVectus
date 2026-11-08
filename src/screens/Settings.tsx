@@ -4,6 +4,7 @@ import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
 import ConnectAgents from "./ConnectAgents";
+import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 
 /** Gap-score weights per project, kept on this computer; scans read them. */
 export const weightsKey = (root: string) => `invectus.weights.${root}`;
@@ -19,6 +20,8 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
   const [defaults, setDefaults] = useState<Weights>();
   const [weights, setWeights] = useState<Weights>();
   const [consent, setConsent] = useState<ModelInfo>();
+  const [theme, setTheme] = useState<ThemeChoice>(themeChoice);
+  const chooseTheme = (t: ThemeChoice) => { setTheme(t); setThemeChoice(t); };
   const jobs = useStartJob();
   const { busy, error, run } = useAction();
   const running = isRunning(jobs.current);
@@ -44,6 +47,16 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
     <ErrorLine error={error ?? jobs.error} />
 
     <div className="label section-label">App · all projects</div>
+    <section aria-labelledby="s-appearance" className="panel stack gap">
+      <h2 id="s-appearance">Appearance</h2>
+      <div role="radiogroup" aria-labelledby="s-appearance" className="segmented">
+        {(["system", "light", "dark"] as const).map((t) => <button key={t} type="button" role="radio" aria-checked={theme === t} onClick={() => chooseTheme(t)}>
+          {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
+        </button>)}
+      </div>
+      <div className="muted small">Kept on this computer.</div>
+    </section>
+
     <section aria-labelledby="s-models" className="panel stack gap">
       <h2 id="s-models">Embedding models</h2>
       {models.map((m) => <div key={m.key} className="spread setting-row">

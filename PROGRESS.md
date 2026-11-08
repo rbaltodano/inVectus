@@ -2576,3 +2576,20 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   and Grok's `--reasoning-effort`; effort support per model is unverified. Grok uses the
   generic agent icon (no xAI mark added).
 - Checks (arm64 macOS only): workspace tests, clippy `-D warnings`, fmt, frontend build.
+
+## 2026-11-08 — Light mode
+
+- Settings → Appearance: Match system (default), Light, Dark; kept in local storage
+  (`invectus.theme`). `src/theme.ts` sets `data-theme` on `<html>` before the first render and
+  the native window theme (`setTheme`, new `core:window:allow-set-theme` permission), so the
+  macOS sidebar material follows. The fixed `"theme": "Dark"` was dropped from
+  `tauri.macos.conf.json`.
+- Light palette from the website hero (`invectus-website/styles.css` `.light`): paper
+  `#ebe7e0`, surfaces `#e2ddd5`/`#dad4ca`, lines `#d3cdc3`/`#bfb8ac`, ink `#1b1a18`. Raised for
+  small UI text: dim 62% ink (4.5:1 on the background; the hero uses 55%, 3.7:1), accent
+  `#0f7a50` (4.35:1; the hero's `#12895a` is 3.6:1), danger `#b3361f`.
+- Hard-coded colours in `App.css` became tokens (same dark values). The map canvas reads the
+  tokens and redraws on a theme change. Light mode uses the website's dark-text logo; the
+  primary button's plus icon and the search chevron are filtered to match.
+- Checks: frontend build, 34 UI tests, app clippy. Not checked visually in the native window
+  or a browser.

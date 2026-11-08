@@ -12,10 +12,11 @@ const CLIENTS: { id: AgentClient; name: string; how: string }[] = [
   { id: "claude-desktop", name: "Claude Desktop", how: "Adds inVectus to Claude Desktop's configuration file." },
   { id: "codex", name: "Codex", how: "Registers inVectus with Codex's own `codex mcp add` command (saved in ~/.codex/config.toml)." },
   { id: "cursor", name: "Cursor", how: "Adds inVectus to Cursor's ~/.cursor/mcp.json." },
+  { id: "grok", name: "Grok Build", how: "Registers inVectus with Grok Build's own `grok mcp add` command (saved in ~/.grok/config.toml)." },
 ];
 
 // Clients whose CLI can say who is signed in. The client keeps the sign-in.
-const HAS_ACCOUNT: AgentClient[] = ["claude-code", "codex"];
+const HAS_ACCOUNT: AgentClient[] = ["claude-code", "codex", "grok"];
 
 function accountText(a: AgentAccount | null | undefined): string | null {
   if (!a) return null;
@@ -55,8 +56,8 @@ export default function ConnectAgents() {
 
   return <section aria-labelledby="s-agents" className="panel stack gap">
     <h2 id="s-agents">Connect an AI agent</h2>
-    <div className="muted small">Lets an agent such as Claude or Codex use inVectus through MCP: search, verdicts, gaps, descriptions and suggestions. It runs on this computer over stdio and opens no network port. While this app is open, the agent works in the project you have open here, and its suggestions wait for your decision.</div>
-    <div className="muted small">The agent runs on your own Claude or ChatGPT plan (or API key), signed in through its own app. inVectus never sees the sign-in; it only asks the client who is signed in.</div>
+    <div className="muted small">Lets an agent such as Claude, Codex or Grok use inVectus through MCP: search, verdicts, gaps, descriptions and suggestions. It runs on this computer over stdio and opens no network port. While this app is open, the agent works in the project you have open here, and its suggestions wait for your decision.</div>
+    <div className="muted small">The agent runs on your own Claude, ChatGPT or Grok plan (or API key), signed in through its own app. inVectus never sees the sign-in; it only asks the client who is signed in.</div>
     {CLIENTS.map((c) => {
       const s = status.find((x) => x.client === c.id);
       const connected = s?.connected && s.matches_this_install;
@@ -86,7 +87,7 @@ export default function ConnectAgents() {
     </div>}
     {done && <div className="note small">{done}</div>}
     <ErrorLine error={action.error} />
-    <div className="muted small">Or by hand: <code>invectus connect add claude-code</code> (or <code>codex</code>) shows the change, and <code>--yes</code> makes it. Claude Desktop can also install <code>invectus connect bundle</code>'s .mcpb file.</div>
+    <div className="muted small">Or by hand: <code>invectus connect add claude-code</code> (or <code>codex</code>, <code>grok</code>) shows the change, and <code>--yes</code> makes it. Claude Desktop can also install <code>invectus connect bundle</code>'s .mcpb file.</div>
 
     <div className="label agent-activity-head">Recent agent activity</div>
     {activity.length === 0 && <div className="dim small">No agent has worked through this app since it opened.</div>}

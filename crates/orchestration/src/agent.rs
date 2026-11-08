@@ -42,10 +42,12 @@ impl Default for Agent {
 }
 
 /// The handshake's client name as a stable id for provenance. Codex introduces itself as
-/// `codex-mcp-client`; it is recorded as `codex`, like the connect client id.
+/// `codex-mcp-client` and Grok Build as `grok-shell-<server name>` (`grok-shell-invectus`); each
+/// is recorded under its connect client id (`codex`, `grok`).
 pub fn client_id(name: &str) -> String {
     match name.trim() {
         "codex-mcp-client" => "codex".into(),
+        n if n.starts_with("grok-shell-") => "grok".into(),
         other => other.to_string(),
     }
 }
@@ -1101,8 +1103,10 @@ mod tests {
     }
 
     #[test]
-    fn codex_is_recorded_under_its_connect_id() {
+    fn handshake_names_are_recorded_under_connect_ids() {
         assert_eq!(super::client_id(" codex-mcp-client "), "codex");
+        assert_eq!(super::client_id("grok-shell-invectus"), "grok");
+        assert_eq!(super::client_id("grok-shell-other"), "grok");
         assert_eq!(super::client_id("claude-code"), "claude-code");
     }
 }

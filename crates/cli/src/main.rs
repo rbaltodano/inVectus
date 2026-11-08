@@ -132,7 +132,7 @@ enum Command {
 
 #[derive(Subcommand)]
 enum ConnectCommand {
-    /// Register with a client: claude-code, claude-desktop or cursor.
+    /// Register with a client: claude-code, claude-desktop, codex, cursor or grok.
     Add {
         client: String,
         /// Make the change (otherwise only show it).

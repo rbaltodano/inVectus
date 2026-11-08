@@ -3,7 +3,7 @@
 export function clientName(client: string | null | undefined): string {
   const names: Record<string, string> = {
     "claude-code": "Claude Code", "claude-desktop": "Claude Desktop", "claude-ai": "Claude Desktop",
-    codex: "Codex", "codex-mcp-client": "Codex", cursor: "Cursor",
+    codex: "Codex", "codex-mcp-client": "Codex", cursor: "Cursor", grok: "Grok Build",
   };
   return client ? names[client.toLowerCase()] ?? client : "An agent";
 }
@@ -18,12 +18,13 @@ export function agentIdentity(author: string): { client: string; label: string }
         `Claude ${family[0].toUpperCase()}${family.slice(1).toLowerCase()} ${major}${minor ? `.${minor}` : ""}`)
     .replace(/^gpt[-_](\d+)(?:[-_.](\d+))?/i,
       (_, major: string, minor: string | undefined) => `GPT-${major}${minor ? `.${minor}` : ""}`)
+    .replace(/^grok[-_ ](?=\d)/i, "Grok ")
     .replace(/[-_]+/g, " ")
     .replace(/^GPT (?=\d)/, "GPT-")
     .replace(/\b(low|medium|high|xhigh|mini|nano|codex|sol|terra|luna)\b/gi,
       (word) => word[0].toUpperCase() + word.slice(1).toLowerCase());
   const fallback: Record<string, string> = {
-    "claude-code": "Claude", "claude-desktop": "Claude", codex: "Codex", cursor: "Cursor",
+    "claude-code": "Claude", "claude-desktop": "Claude", codex: "Codex", cursor: "Cursor", grok: "Grok",
   };
   return { client, label: label || fallback[client] || "Agent" };
 }

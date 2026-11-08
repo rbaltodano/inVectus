@@ -95,7 +95,7 @@ export interface SavedBookmark {
 }
 export interface SavedDecision { core_key: string; label: string; gap_id: number | null; verdict: GapVerdictRecord }
 export interface SavedOverview { bookmarks: SavedBookmark[]; decisions: SavedDecision[] }
-export type AgentClient = "claude-code" | "claude-desktop" | "codex" | "cursor";
+export type AgentClient = "claude-code" | "claude-desktop" | "codex" | "cursor" | "grok";
 export interface ConnectPlan {
   client: AgentClient; display_name: string; binary: string; method: "file" | "command";
   config_file: string | null; current: unknown; entry: unknown; command: string[] | null;

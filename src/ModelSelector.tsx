@@ -6,6 +6,7 @@ import AgentIcon from "./AgentIcon";
 export const MODEL_GROUPS = [
   { provider: "Claude", client: "claude-code", models: ["Claude Opus 5.5 Medium", "Claude Opus 5.5 High"] },
   { provider: "ChatGPT", client: "codex", models: ["GPT-6.1 Sol Medium", "GPT-6.1 Sol High"] },
+  { provider: "Grok", client: "grok", models: ["Grok 4.6 Medium", "Grok 4.6 High"] },
 ];
 
 /** Controlled selector: its caller decides what choosing a model means. */

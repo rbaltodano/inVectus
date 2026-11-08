@@ -2550,3 +2550,29 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Checks: 20 orchestration tests (stand-in `gh`), 34 UI tests, frontend build, clippy for
   orchestration and the app. The owner's `gh` has the `repo` scope; the repository was not
   starred, and the real star was not pressed. The card was not checked in the native window.
+
+## 2026-11-08 — Grok Build as an agent client
+
+- Owner approved installing xAI's Grok Build CLI (`curl -fsSL https://x.ai/cli/install.sh`,
+  script read first; v1.0.77, macos-aarch64, into `~/.grok`, linked from `~/.local/bin`, PATH
+  line added to `~/.zshrc`). No sudo.
+- New `grok` client in Connect an AI agent (CLI `invectus connect add grok`, Settings row,
+  model selector group). It registers with `grok mcp add --scope user invectus -- <bin> mcp`
+  and removes with `grok mcp remove --scope user invectus`. Status reads
+  `$GROK_HOME/config.toml` (default `~/.grok`) `[mcp_servers.invectus]` without running Grok;
+  Grok's own `enabled = true` key is ignored, and a disabled entry counts as not connected
+  (re-adding enables it, checked on 1.0.77). Grok also loads `~/.claude.json` servers, but its
+  own config takes precedence (its docs), so only that entry counts. The app also finds
+  `~/.grok/bin/grok` when it is not on PATH.
+- Sign-in: Grok has no status command. `grok models` prints "You are not authenticated." when
+  signed out (verified); otherwise it is read as signed in with no plan label (unverified: not
+  signed in here).
+- Provenance: Grok's MCP handshake name is `grok-shell-<server>` (`grok-shell-invectus`),
+  seen from `grok mcp doctor` with a logging stand-in server; recorded as `grok`. Unverified
+  for a full Grok session.
+- Live: connected the owner's Grok Build to `target/release/invectus`; `grok mcp doctor
+  invectus` reported handshake OK and 21 tools. No Grok model session was run (not signed in).
+- Model selector lists "Grok 4.6 Medium/High" from `grok models` (grok-4.6 default, grok-4.5)
+  and Grok's `--reasoning-effort`; effort support per model is unverified. Grok uses the
+  generic agent icon (no xAI mark added).
+- Checks (arm64 macOS only): workspace tests, clippy `-D warnings`, fmt, frontend build.

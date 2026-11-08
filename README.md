@@ -57,14 +57,16 @@ invectus connect status            # which clients are connected, and signed in 
 |---|---|
 | Claude Code | Runs `claude mcp add --scope user invectus -- <path>/invectus mcp` |
 | Codex | Runs `codex mcp add invectus -- <path>/invectus mcp` |
+| Grok Build | Runs `grok mcp add --scope user invectus -- <path>/invectus mcp` |
 | Claude Desktop | Adds one entry to its config file; also installable as a `.mcpb` bundle |
 | Cursor | Adds one entry to `~/.cursor/mcp.json` |
 
-**Privacy.** The agent uses your own Claude or ChatGPT plan, or API key, through
-its own app. inVectus never reads, stores or sends tokens or credential files.
-For Claude Code and Codex it asks the client's own status command
+**Privacy.** The agent uses your own Claude, ChatGPT or Grok plan, or API key,
+through its own app. inVectus never reads, stores or sends tokens or credential
+files. For Claude Code and Codex it asks the client's own status command
 (`claude auth status`, `codex login status`) who is signed in and shows the plan
-name, never an API key. This check is skipped in offline mode. Config files are
+name, never an API key; for Grok Build, `grok models` says only whether it is
+signed in. This check is skipped in offline mode. Config files are
 changed only after you approve the exact change; other entries are kept and the
 old file is saved as a backup.
 

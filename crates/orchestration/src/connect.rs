@@ -1,12 +1,13 @@
 //! Connect an AI agent (target product §5.1, roadmap A6): register `invectus mcp` with an agent
 //! client. Nothing is written without an explicit `apply`; a plan shows the exact change
 //! first. JSON configs are merged (other servers and keys are kept), backed up, and written
-//! atomically; Claude Code and Codex are configured through their own `mcp add` commands.
+//! atomically; Claude Code, Codex and Grok Build are configured through their own `mcp add`
+//! commands.
 //!
 //! Sign-in is left to each client: inVectus never reads, stores or sends a token.
 //! [`account`] asks the client's own CLI who is signed in (`claude auth status`, `codex login
-//! status`), so the Settings screen can say whether the agent runs on a Claude or ChatGPT
-//! subscription or an API key.
+//! status`, `grok models`), so the Settings screen can say whether the agent runs on a Claude or
+//! ChatGPT subscription or an API key, or whether Grok Build is signed in.
 
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
@@ -23,14 +24,16 @@ pub enum Client {
     ClaudeDesktop,
     Codex,
     Cursor,
+    Grok,
 }
 
 impl Client {
-    pub const ALL: [Client; 4] = [
+    pub const ALL: [Client; 5] = [
         Client::ClaudeCode,
         Client::ClaudeDesktop,
         Client::Codex,
         Client::Cursor,
+        Client::Grok,
     ];
 
     pub fn parse(s: &str) -> Result<Self> {
@@ -39,7 +42,10 @@ impl Client {
             "claude-desktop" => Client::ClaudeDesktop,
             "codex" => Client::Codex,
             "cursor" => Client::Cursor,
-            other => bail!("unknown client {other:?} (claude-code, claude-desktop, codex, cursor)"),
+            "grok" => Client::Grok,
+            other => {
+                bail!("unknown client {other:?} (claude-code, claude-desktop, codex, cursor, grok)")
+            }
         })
     }
 
@@ -49,6 +55,7 @@ impl Client {
             Client::ClaudeDesktop => "claude-desktop",
             Client::Codex => "codex",
             Client::Cursor => "cursor",
+            Client::Grok => "grok",
         }
     }
 
@@ -58,14 +65,15 @@ impl Client {
             Client::ClaudeDesktop => "Claude Desktop",
             Client::Codex => "Codex",
             Client::Cursor => "Cursor",
+            Client::Grok => "Grok Build",
         }
     }
 
     /// The JSON file this client reads MCP servers from, under `home` (and `appdata` on
-    /// Windows). `None` for Claude Code and Codex, which are configured by command.
+    /// Windows). `None` for Claude Code, Codex and Grok Build, which are configured by command.
     pub fn config_file(self, home: &Path, appdata: Option<&Path>) -> Option<PathBuf> {
         match self {
-            Client::ClaudeCode | Client::Codex => None,
+            Client::ClaudeCode | Client::Codex | Client::Grok => None,
             Client::Cursor => Some(home.join(".cursor").join("mcp.json")),
             Client::ClaudeDesktop => Some(if cfg!(target_os = "macos") {
                 home.join("Library/Application Support/Claude/claude_desktop_config.json")
@@ -157,20 +165,39 @@ pub struct Env {
     pub codex: Option<PathBuf>,
     /// Codex's settings folder: `$CODEX_HOME`, else `~/.codex`.
     pub codex_home: PathBuf,
+    /// The `grok` executable for Grok Build, if found.
+    pub grok: Option<PathBuf>,
+    /// Grok Build's settings folder: `$GROK_HOME`, else `~/.grok`.
+    pub grok_home: PathBuf,
 }
 
 impl Env {
     pub fn system() -> Result<Self> {
         let home = dirs::home_dir().context("no home folder")?;
         let exe = |name: &str| find_in_path(&format!("{name}{}", std::env::consts::EXE_SUFFIX));
-        Ok(Self {
-            codex_home: std::env::var_os("CODEX_HOME")
+        let folder = |var: &str, default: &str| {
+            std::env::var_os(var)
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from)
-                .unwrap_or_else(|| home.join(".codex")),
+                .unwrap_or_else(|| home.join(default))
+        };
+        let grok_home = folder("GROK_HOME", ".grok");
+        // Grok's installer links `grok` into `~/.local/bin` only when that is on PATH; otherwise
+        // it is reached through the PATH line it adds to the shell profile, which an app opened
+        // from the Finder does not read.
+        let grok = exe("grok").or_else(|| {
+            let own = grok_home
+                .join("bin")
+                .join(format!("grok{}", std::env::consts::EXE_SUFFIX));
+            own.is_file().then_some(own)
+        });
+        Ok(Self {
+            codex_home: folder("CODEX_HOME", ".codex"),
             appdata: std::env::var_os("APPDATA").map(PathBuf::from),
             claude: exe("claude"),
             codex: exe("codex"),
+            grok,
+            grok_home,
             home,
         })
     }
@@ -180,12 +207,14 @@ impl Env {
         match client {
             Client::ClaudeCode => self.claude.as_ref(),
             Client::Codex => self.codex.as_ref(),
+            Client::Grok => self.grok.as_ref(),
             Client::ClaudeDesktop | Client::Cursor => None,
         }
     }
 
     /// The invectus entry a command-configured client has now, read from its own files
-    /// (`~/.claude.json`, `$CODEX_HOME/config.toml`) without running it.
+    /// (`~/.claude.json`, `$CODEX_HOME/config.toml`, `$GROK_HOME/config.toml`) without running
+    /// it.
     fn registered(&self, client: Client) -> Option<Value> {
         match client {
             Client::ClaudeCode => read_config(&self.home.join(".claude.json"))
@@ -195,6 +224,22 @@ impl Env {
                 let raw = std::fs::read_to_string(self.codex_home.join("config.toml")).ok()?;
                 let config: toml::Table = raw.parse().ok()?;
                 let entry = config.get("mcp_servers")?.get(SERVER_NAME)?;
+                serde_json::to_value(entry).ok()
+            }
+            // Grok writes `enabled = true` beside the command. A disabled entry counts as not
+            // connected: `grok mcp add` enables it again. Grok also loads servers from
+            // `~/.claude.json`, but its own entry takes precedence, so only that one is read.
+            Client::Grok => {
+                let raw = std::fs::read_to_string(self.grok_home.join("config.toml")).ok()?;
+                let config: toml::Table = raw.parse().ok()?;
+                let mut entry = config.get("mcp_servers")?.get(SERVER_NAME)?.clone();
+                let table = entry.as_table_mut()?;
+                if table
+                    .remove("enabled")
+                    .is_some_and(|e| e.as_bool() == Some(false))
+                {
+                    return None;
+                }
                 serde_json::to_value(entry).ok()
             }
             Client::ClaudeDesktop | Client::Cursor => None,
@@ -239,11 +284,11 @@ fn read_config(path: &Path) -> Result<Value> {
     }
 }
 
-/// `<cli> mcp add …` without the program: Claude Code registers for the user (all projects);
-/// Codex's servers are always global, and adding again replaces the entry.
+/// `<cli> mcp add …` without the program: Claude Code and Grok Build register for the user (all
+/// projects); Codex's servers are always global. Codex and Grok replace an existing entry.
 fn add_args(client: Client, binary: &Path) -> Vec<String> {
     let scope: &[&str] = match client {
-        Client::ClaudeCode => &["--scope", "user"],
+        Client::ClaudeCode | Client::Grok => &["--scope", "user"],
         _ => &[],
     };
     ["mcp", "add"]
@@ -257,7 +302,7 @@ fn add_args(client: Client, binary: &Path) -> Vec<String> {
 
 fn remove_args(client: Client) -> Vec<&'static str> {
     match client {
-        Client::ClaudeCode => vec!["mcp", "remove", "--scope", "user", SERVER_NAME],
+        Client::ClaudeCode | Client::Grok => vec!["mcp", "remove", "--scope", "user", SERVER_NAME],
         _ => vec!["mcp", "remove", SERVER_NAME],
     }
 }
@@ -266,6 +311,7 @@ fn remove_args(client: Client) -> Vec<&'static str> {
 fn cli_name(client: Client) -> &'static str {
     match client {
         Client::Codex => "codex",
+        Client::Grok => "grok",
         _ => "claude",
     }
 }
@@ -317,9 +363,10 @@ pub fn plan(client: Client, binary: &Path, env: &Env) -> Result<ConnectPlan> {
                     "the {name} command was not found on PATH; run the command shown yourself"
                 ));
             }
-            // Codex replaces an existing entry; Claude Code has always been planned as new.
+            // Codex and Grok replace an existing entry; Claude Code has always been planned as
+            // new.
             let current = match client {
-                Client::Codex => env.registered(client),
+                Client::Codex | Client::Grok => env.registered(client),
                 _ => None,
             };
             if current.is_some() && current.as_ref() != Some(&entry) {
@@ -404,7 +451,7 @@ fn backup_path(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
-/// Remove the invectus entry from a client (Claude Code and Codex: their `mcp remove`).
+/// Remove the invectus entry from a client (Claude Code, Codex and Grok: their `mcp remove`).
 pub fn disconnect(client: Client, env: &Env) -> Result<String> {
     match client.config_file(&env.home, env.appdata.as_deref()) {
         Some(path) => {
@@ -442,8 +489,8 @@ pub fn disconnect(client: Client, env: &Env) -> Result<String> {
     }
 }
 
-/// Whether each client is connected, and to which binary. Reads only; Claude Code and Codex
-/// are read from their own config files without running them.
+/// Whether each client is connected, and to which binary. Reads only; the command-configured
+/// clients are read from their own config files without running them.
 pub fn status(binary: Option<&Path>, env: &Env) -> Vec<ConnectStatus> {
     Client::ALL
         .iter()
@@ -506,16 +553,18 @@ impl Account {
     }
 }
 
-/// Both CLIs answer from local state in about a second; a stuck one is abandoned.
+/// The CLIs answer in about a second; a stuck one is abandoned.
 const ACCOUNT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
-/// Ask a client's CLI who is signed in: `claude auth status` (JSON) or `codex login status`.
+/// Ask a client's CLI who is signed in: `claude auth status` (JSON), `codex login status` or
+/// `grok models` (Grok Build has no status command; its model list says when it is signed out).
 /// `None` for clients without a CLI to ask (Claude Desktop, Cursor). Not run while offline:
 /// whether the CLIs touch the network for this is theirs to decide.
 pub fn account(client: Client, env: &Env) -> Option<Account> {
     let args: &[&str] = match client {
         Client::ClaudeCode => &["auth", "status"],
         Client::Codex => &["login", "status"],
+        Client::Grok => &["models"],
         Client::ClaudeDesktop | Client::Cursor => return None,
     };
     let name = cli_name(client);
@@ -536,13 +585,15 @@ pub fn account(client: Client, env: &Env) -> Option<Account> {
             )));
         }
     };
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
     Some(match client {
         Client::ClaudeCode => claude_account(&out.stdout),
-        _ => codex_account(&format!(
-            "{}\n{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        )),
+        Client::Grok => grok_account(&text, out.status.success()),
+        _ => codex_account(&text),
     })
 }
 
@@ -653,6 +704,22 @@ fn codex_account(text: &str) -> Account {
     }
 }
 
+/// `grok models` prints "You are not authenticated." above the model list when signed out.
+/// Otherwise it lists the models without naming the plan, so a signed-in account has no label.
+fn grok_account(text: &str, success: bool) -> Account {
+    let t = text.to_ascii_lowercase();
+    if t.contains("not authenticated") || t.contains("not signed in") {
+        Account {
+            message: Some("run `grok login`".into()),
+            ..Account::new("signed-out", None, None)
+        }
+    } else if success && t.contains("available models") {
+        Account::new("signed-in", None, None)
+    } else {
+        Account::unknown("`grok models` gave no readable answer")
+    }
+}
+
 /// `manifest.json` of a Claude Desktop extension (`.mcpb`) that runs the bundled binary. The
 /// bundle itself is a zip of this manifest and `server/invectus`.
 pub fn mcpb_manifest(version: &str) -> Value {
@@ -706,6 +773,8 @@ mod tests {
             claude,
             codex: None,
             codex_home: home.join(".codex"),
+            grok: None,
+            grok_home: home.join(".grok"),
         }
     }
 
@@ -768,6 +837,87 @@ mod tests {
                 "mcp add invectus -- /elsewhere/invectus mcp\nmcp remove invectus\n"
             );
         }
+    }
+
+    #[test]
+    fn grok_uses_its_own_command_and_reads_its_config_toml() {
+        let home = tempfile::tempdir().unwrap();
+        let bin = home.path().join("invectus");
+        let mut e = env(home.path(), None);
+        let p = plan(Client::Grok, &bin, &e).unwrap();
+        assert_eq!(p.method, "command");
+        assert_eq!(
+            p.manual,
+            format!(
+                "grok mcp add --scope user invectus -- {} mcp",
+                bin.display()
+            )
+        );
+        assert!(p.command.is_none() && !p.up_to_date);
+        assert!(!status(Some(&bin), &e)[4].client_found);
+        // Grok also loads `~/.claude.json`; only its own config counts as connected.
+        std::fs::write(
+            home.path().join(".claude.json"),
+            json!({ "mcpServers": { "invectus": server_entry(&bin) } }).to_string(),
+        )
+        .unwrap();
+        assert!(!status(Some(&bin), &e)[4].connected);
+        // The entry as `grok mcp add` writes it, with `enabled`.
+        std::fs::create_dir_all(&e.grok_home).unwrap();
+        let write = |enabled: bool| {
+            std::fs::write(
+                e.grok_home.join("config.toml"),
+                format!(
+                    "[cli]\ninstaller = \"internal\"\n\n[mcp_servers.invectus]\n\
+                     command = \"{}\"\nargs = [\"mcp\"]\nenabled = {enabled}\n",
+                    bin.display()
+                ),
+            )
+            .unwrap()
+        };
+        write(true);
+        let s = status(Some(&bin), &e);
+        assert_eq!(s[4].client, Client::Grok);
+        assert!(s[4].connected && s[4].matches_this_install);
+        assert!(plan(Client::Grok, &bin, &e).unwrap().up_to_date);
+        let other = plan(Client::Grok, Path::new("/elsewhere/invectus"), &e).unwrap();
+        assert!(!other.up_to_date && other.notes.iter().any(|n| n.contains("replaces")));
+        // Disabled in Grok: not connected, and adding again enables it.
+        write(false);
+        assert!(!status(Some(&bin), &e)[4].connected);
+        assert!(!plan(Client::Grok, &bin, &e).unwrap().up_to_date);
+        #[cfg(unix)]
+        {
+            e.grok = Some(fake_cli(home.path(), "grok", "", 0));
+            apply(&plan(Client::Grok, Path::new("/elsewhere/invectus"), &e).unwrap()).unwrap();
+            disconnect(Client::Grok, &e).unwrap();
+            let log = std::fs::read_to_string(home.path().join("grok.log")).unwrap();
+            assert_eq!(
+                log,
+                "mcp add --scope user invectus -- /elsewhere/invectus mcp\n\
+                 mcp remove --scope user invectus\n"
+            );
+        }
+    }
+
+    #[test]
+    fn grok_account_reads_its_model_list() {
+        // Grok 1.0.77, signed out.
+        let out = grok_account(
+            "You are not authenticated.\n\nDefault model: grok-4.6\n\nAvailable models:\n  \
+             * grok-4.6 (default)\n  - grok-4.5\n",
+            true,
+        );
+        assert_eq!(out.status, "signed-out");
+        assert!(out.message.unwrap().contains("grok login"));
+        let signed_in = grok_account(
+            "Default model: grok-4.6\n\nAvailable models:\n  * grok-4.6 (default)\n",
+            true,
+        );
+        assert_eq!(signed_in.status, "signed-in");
+        assert_eq!(signed_in.label, None);
+        assert_eq!(grok_account("", true).status, "unknown");
+        assert_eq!(grok_account("Available models:\n", false).status, "unknown");
     }
 
     #[test]

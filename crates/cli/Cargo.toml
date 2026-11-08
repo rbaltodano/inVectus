@@ -28,6 +28,10 @@ serde_json.workspace = true
 clap.workspace = true
 ctrlc.workspace = true
 tempfile.workspace = true
+# Build extension archives on every platform without system zip/unzip tools.
+zip = { version = "9.4.2", default-features = false, features = ["deflate-flate2"] }
+# Select flate2's pure Rust backend without the unrelated archive codecs.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [features]
 # The full CLI runs the local language model; the agent edition builds without it:

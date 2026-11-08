@@ -173,7 +173,16 @@ pub struct Env {
 
 impl Env {
     pub fn system() -> Result<Self> {
-        let home = dirs::home_dir().context("no home folder")?;
+        // Respect the Windows process profile, including isolated CLI invocations. dirs
+        // otherwise asks the Known Folder API, which ignores USERPROFILE overrides.
+        let profile = if cfg!(windows) {
+            std::env::var_os("USERPROFILE")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+        } else {
+            None
+        };
+        let home = profile.or_else(dirs::home_dir).context("no home folder")?;
         let exe = |name: &str| find_in_path(&format!("{name}{}", std::env::consts::EXE_SUFFIX));
         let folder = |var: &str, default: &str| {
             std::env::var_os(var)

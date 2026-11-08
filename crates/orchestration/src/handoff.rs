@@ -39,6 +39,29 @@ mod imp {
     use std::path::Path;
     use std::time::Duration;
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn peer_is_us(stream: &UnixStream) -> bool {
+        use std::os::unix::io::AsRawFd;
+        let mut credentials = std::mem::MaybeUninit::<libc::ucred>::uninit();
+        let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+        // SAFETY: the socket is live, and the buffer and length match ucred.
+        let rc = unsafe {
+            libc::getsockopt(
+                stream.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_PEERCRED,
+                credentials.as_mut_ptr().cast(),
+                &mut len,
+            )
+        };
+        if rc != 0 || len as usize != std::mem::size_of::<libc::ucred>() {
+            return false;
+        }
+        // SAFETY: getsockopt succeeded and filled the complete credentials structure.
+        unsafe { credentials.assume_init().uid == libc::getuid() }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     fn peer_is_us(stream: &UnixStream) -> bool {
         use std::os::unix::io::AsRawFd;
         let (mut uid, mut gid) = (0, 0);

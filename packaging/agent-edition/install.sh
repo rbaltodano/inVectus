@@ -7,7 +7,7 @@
 #   --prefix DIR      install into DIR/bin (default: ~/.local)
 #   --model           download the default embedding model (about 134 MB from Hugging Face,
 #                     checksum-verified); asks first unless --yes
-#   --connect CLIENT  register with claude-code, claude-desktop or cursor; shows the change
+#   --connect CLIENT  claude-code, claude-desktop, codex, cursor or grok; shows the change
 #                     and asks first unless --yes
 set -eu
 

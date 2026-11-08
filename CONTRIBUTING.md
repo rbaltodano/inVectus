@@ -31,8 +31,8 @@ Run the relevant [local checks](docs/development.md#local-verification). State w
 real-model tests were skipped or a platform was not exercised. Do not equate a
 synthetic demonstration with a relevance or scalability evaluation.
 
-Both workflows are manual-only. Keep their triggers unchanged. While the repository
-is private, do not dispatch, re-run or schedule CI. See [AGENTS.md](AGENTS.md) for
+Both workflows are manual-only. Keep their triggers unchanged. Dispatch `build.yml`
+only at the owner's request; the multimodal workflow also needs download approval. See [AGENTS.md](AGENTS.md) for
 repository rules, including downloads, data and local commits.
 
 Original contributions are under the repository's [MIT license](LICENSE).

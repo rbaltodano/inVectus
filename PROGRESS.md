@@ -2593,3 +2593,48 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   primary button's plus icon and the search chevron are filtered to match.
 - Checks: frontend build, 34 UI tests, app clippy. Not checked visually in the native window
   or a browser.
+
+## 2026-11-08 — Beta build fixes and release preparation
+
+- Prepared fixes for the three failures in the previously inspected manual CI run
+  `42146609686`: Tauri's macOS deployment minimum is explicitly 10.15 instead of its
+  10.13 default (llama.cpp uses C++ filesystem APIs); Linux/Android use `SO_PEERCRED`
+  instead of the BSD/macOS-only `getpeereid`, retaining the same-user check and refusing
+  failed/incomplete credential reads; Windows connection setup respects `USERPROFILE`,
+  so the CLI integration test can use a disposable profile rather than the OS account's
+  real client configuration. The test also isolates APPDATA, CODEX_HOME and GROK_HOME.
+- `connect bundle` now writes ZIP archives in Rust, streams the binary, preserves its
+  executable permissions, chooses `invectus.exe` on Windows and replaces the output only
+  after archive completion. No system `zip` or `unzip` dependency. The integration test
+  reads the manifest, validates the platform entry and permissions, and checks the entire
+  archived executable against the built CLI. Added locked ZIP/compression dependencies.
+- Added `scripts/collect-release-notices.mjs`: offline source-license text collection with
+  versions and file hashes, conservative across Rust build/test/platform dependencies and
+  non-dev npm packages. Generated files stay under `target/release-notices/`. First local
+  inventory: **829 packages, 61 license metadata/file review entries**, about 7 MB of
+  notices. This does **not** complete binary-distribution review: prebuilt ONNX Runtime,
+  native dependencies and the flagged source packages still need review.
+- Added `docs/beta-release.md`: the existing consent-based embedding-model setup, manual
+  upgrade procedure, artifact/signing gates, client checks and clean-machine acceptance.
+  Updated CI guidance that still referred to the former private repository. BGE remains
+  provisional; P2 already compared calibration/title retrieval, while the default-model
+  spec conflict and broader relevance evaluation remain open. No model default changed.
+- Validation on arm64 macOS 27.0.1: **130 workspace release tests passed**, including the
+  connection/archive integration test and private socket tests; workspace/all-targets
+  release clippy with warnings denied, formatting, all **34 UI tests**, frontend build,
+  notice collection, JS/shell syntax and whitespace checks passed. Existing pinned BGE
+  fixtures were present; no new LLM or retrieval-quality evaluation was performed.
+- The normal `npm run tauri build -- --bundles app --ci` succeeded, including its CLI
+  pre-build. The resulting macOS app is 700.28 MiB. Its Info.plist records minimum 10.15;
+  the packaged CLI exactly matches the release binary and runs `--version`. `otool -L`
+  reports only system libraries/frameworks for both executables (20 for the app, 11 for
+  the CLI), with no development-library paths. The pre-existing large unwind-table linker
+  warning remains. This is build/link verification, not a fresh-machine or native UI test.
+- Freed about 4 GiB by removing the 26 completed workspace test executables after their
+  successful run, to leave room for packaging; test logs remain under `.spike-data/`.
+- Read-only keychain inspection found an Apple Development identity but no Developer ID
+  Application identity. Distribution signing/notarization remains an owner setup step.
+- No CI run, push, model/dataset download, Developer ID signing/notarization or client login.
+  Windows/Linux execution, older-macOS compatibility, clean-machine installation and
+  notarization remain unverified. The 10.15 deployment setting is a compilation minimum,
+  not a claim of end-to-end support on that OS.

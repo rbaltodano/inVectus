@@ -704,28 +704,28 @@ fn cmd_connect(c: ConnectCommand) -> Result<()> {
         ConnectCommand::Bundle { out } => {
             let version = invectus_core::VERSION;
             let out = out.unwrap_or_else(|| PathBuf::from(format!("invectus-{version}.mcpb")));
-            let staging = tempfile::tempdir()?;
-            let server = staging.path().join("server");
-            std::fs::create_dir_all(&server)?;
             let bin = connect::server_binary()?;
-            std::fs::copy(&bin, server.join(bin.file_name().unwrap()))?;
-            std::fs::write(
-                staging.path().join("manifest.json"),
-                serde_json::to_string_pretty(&connect::mcpb_manifest(version))?,
-            )?;
+            let manifest = connect::mcpb_manifest(version);
             let out = std::path::absolute(&out)?;
-            let _ = std::fs::remove_file(&out);
-            // The system zip keeps the binary's executable bit.
-            let status = std::process::Command::new("zip")
-                .current_dir(staging.path())
-                .args(["-q", "-r", "-X"])
-                .arg(&out)
-                .args(["manifest.json", "server"])
-                .status()
-                .context("running zip (needed to build the bundle)")?;
-            if !status.success() {
-                bail!("zip failed");
+            let mut staging = tempfile::NamedTempFile::new_in(out.parent().unwrap())?;
+            {
+                use std::io::Write;
+                use zip::write::SimpleFileOptions;
+                let mut archive = zip::ZipWriter::new(staging.as_file_mut());
+                let options = SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated);
+                archive.start_file("manifest.json", options.unix_permissions(0o644))?;
+                archive.write_all(serde_json::to_string_pretty(&manifest)?.as_bytes())?;
+                archive.start_file(
+                    manifest["server"]["entry_point"].as_str().unwrap(),
+                    options.unix_permissions(0o755),
+                )?;
+                std::io::copy(&mut std::fs::File::open(&bin)?, &mut archive)?;
+                archive.finish()?;
             }
+            staging
+                .persist(&out)
+                .context("saving the extension bundle")?;
             println!(
                 "wrote {} ({:.1} MB); open it with Claude Desktop to install",
                 out.display(),

@@ -23,6 +23,9 @@ The exact Rust and JavaScript dependency versions are recorded in `Cargo.lock`,
 `spikes/Cargo.lock` and `package-lock.json`. Their licenses are specified by their
 respective upstream packages. The notices above cover the vendored source and
 fonts/icons included here; they are not a complete binary-distribution license inventory.
+An offline [source notice collector](scripts/collect-release-notices.mjs) prepares a
+conservative license-text bundle and review list; see the
+[binary release review](docs/beta-release.md#dependency-notice-review) for its limits.
 
 No embedding or language model weights are included in this repository or the demo.
 Model downloads and installations are explicit, pinned and checksum-verified. Review

@@ -127,7 +127,11 @@ Passing model-free tests is not evidence that inference was exercised. Local
 checks do not establish Windows/Linux support.
 
 Both GitHub workflows are `workflow_dispatch` only. Keep them manual-only and
-follow [AGENTS.md](../AGENTS.md): do not dispatch any CI while the repository is private.
+follow [AGENTS.md](../AGENTS.md): dispatch `build.yml` only on the owner's request;
+the multimodal workflow also needs approval of its downloads.
+
+See the [beta release checklist](beta-release.md) for distribution artifacts, dependency
+notices, signing and clean-machine acceptance.
 
 ## Research and vendored code
 

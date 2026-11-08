@@ -70,3 +70,6 @@ Cross-platform validation, clean-machine setup verification, complete binary dep
 notices, signed/notarized installers, performance budgets and broader human-judged
 relevance evaluation remain separate release milestones. None should block presenting
 the current app honestly as a working prototype.
+
+Track binary distribution preparation and clean-machine acceptance in the
+[beta release checklist](beta-release.md).

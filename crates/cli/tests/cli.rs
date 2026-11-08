@@ -740,6 +740,10 @@ fn connect_writes_only_when_asked_and_bundles() {
         Command::new(env!("CARGO_BIN_EXE_invectus"))
             .args(args)
             .env("HOME", home.path())
+            .env("USERPROFILE", home.path())
+            .env("APPDATA", home.path().join("AppData/Roaming"))
+            .env("CODEX_HOME", home.path().join(".codex"))
+            .env("GROK_HOME", home.path().join(".grok"))
             .env("PATH", "/usr/bin:/bin")
             .output()
             .unwrap()
@@ -789,15 +793,21 @@ fn connect_writes_only_when_asked_and_bundles() {
         "--out",
         bundle.to_str().unwrap(),
     ]));
-    let list = Command::new("unzip")
-        .arg("-l")
-        .arg(&bundle)
-        .output()
-        .unwrap();
-    let list = String::from_utf8_lossy(&list.stdout);
-    assert!(
-        list.contains("manifest.json") && list.contains("server/invectus"),
-        "{list}"
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(&bundle).unwrap()).unwrap();
+    let manifest: serde_json::Value =
+        serde_json::from_reader(archive.by_name("manifest.json").unwrap()).unwrap();
+    let entry = manifest["server"]["entry_point"].as_str().unwrap();
+    assert_eq!(
+        entry,
+        format!("server/invectus{}", std::env::consts::EXE_SUFFIX)
+    );
+    let mut binary = archive.by_name(entry).unwrap();
+    assert_eq!(binary.unix_mode().unwrap() & 0o777, 0o755);
+    let mut contents = Vec::new();
+    std::io::Read::read_to_end(&mut binary, &mut contents).unwrap();
+    assert_eq!(
+        contents,
+        std::fs::read(env!("CARGO_BIN_EXE_invectus")).unwrap()
     );
 }
 

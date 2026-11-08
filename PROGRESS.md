@@ -2638,3 +2638,11 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   Windows/Linux execution, older-macOS compatibility, clean-machine installation and
   notarization remain unverified. The 10.15 deployment setting is a compilation minimum,
   not a claim of end-to-end support on that OS.
+
+## 2026-11-08 — Owner-requested push and CI
+
+- Pushed `main` through `3085e8b9a1d03d8ab14f47806448eabaec2b782d` and manually
+  dispatched `build.yml` on that commit at the owner's request.
+- Run [42532458660](https://github.com/rbaltodano/inVectus/actions/runs/42532458660)
+  has started its desktop and spike builds on macOS, Windows and Linux. Results are
+  pending; no additional platform verification is claimed. `multimodal.yml` was not run.

@@ -32,8 +32,8 @@ Do not advertise automatic updates or automatic project migration/rollback.
   version, OS/architecture, passing checks, and any skipped model-dependent tests.
 - With owner authorization, push and manually dispatch `build.yml`. Record the run and
   commit in PROGRESS.md. Keep both workflows manual-only. Do not claim Windows/Linux until
-  their CI and installer smoke checks pass. The last inspected run, `42146609686`, failed
-  on all three systems; the local fixes still need a new run.
+  their CI and installer smoke checks pass. Earlier run `42146609686` failed
+  on all three systems. Follow-up run status and its tested commit are recorded in PROGRESS.md.
 - Build the actual distribution artifact. Verify the bundled `invectus` CLI runs from
   inside it and that Connect an AI agent registers that installed path. Current Tauri
   config bundles the CLI into the macOS app; Windows/Linux packaging still needs validation.

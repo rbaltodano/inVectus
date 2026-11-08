@@ -12,6 +12,7 @@ import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
 import WorkspaceSplit from "./WorkspaceSplit";
 import Settings from "./screens/Settings";
+import StarPrompt from "./StarPrompt";
 import { ArrowLeft, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import "./App.css";
@@ -198,6 +199,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
       {route.view === "project" && project && <Workspace key={project.root} project={project} setProject={setProject} refresh={refresh}
         initialStack={stack} goRoute={setRoute} onRename={(name) => renameProject(project.root, name)} />}
     </main>
+    <StarPrompt />
   </div>;
 }
 

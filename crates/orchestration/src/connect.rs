@@ -202,12 +202,21 @@ impl Env {
     }
 }
 
-fn find_in_path(name: &str) -> Option<PathBuf> {
-    std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths)
-            .map(|p| p.join(name))
-            .find(|p| p.is_file())
-    })
+/// A command on `PATH`, else in the usual install folders: an app opened from the Finder or
+/// Dock gets a minimal `PATH` without Homebrew's or `~/.local/bin`.
+pub(crate) fn find_in_path(name: &str) -> Option<PathBuf> {
+    let home = dirs::home_dir();
+    let usual = ["/opt/homebrew/bin", "/usr/local/bin"]
+        .into_iter()
+        .map(PathBuf::from)
+        .chain(home.map(|h| h.join(".local/bin")));
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .chain(usual.filter(|_| cfg!(unix)))
+        .map(|p| p.join(name))
+        .find(|p| p.is_file())
 }
 
 fn read_config(path: &Path) -> Result<Value> {
@@ -542,9 +551,20 @@ fn run_with_timeout(
     args: &[&str],
     timeout: std::time::Duration,
 ) -> Result<std::process::Output> {
+    run_with_timeout_env(program, args, &[], timeout)
+}
+
+/// Run a program with extra environment variables, killing it after `timeout`.
+pub(crate) fn run_with_timeout_env(
+    program: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+    timeout: std::time::Duration,
+) -> Result<std::process::Output> {
     use std::process::Stdio;
     let mut child = std::process::Command::new(program)
         .args(args)
+        .envs(env.iter().copied())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

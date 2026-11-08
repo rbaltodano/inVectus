@@ -765,3 +765,13 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .agent-status ol { list-style: none; padding: 0; display: grid; gap: 8px; }
 .agent-status li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
 .agent-status li p { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
+
+/* GitHub star prompt: bottom-right card, above the content. */
+.star-prompt { position: fixed; right: 16px; bottom: 16px; z-index: 20; width: 320px; max-width: calc(100vw - 32px); display: flex; gap: 12px; align-items: flex-start; padding: 12px 12px 12px 16px; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); animation: star-prompt-in 160ms ease-out; }
+.star-prompt-icon { flex: none; margin-top: 2px; color: #e3b341; }
+.star-prompt-body { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.star-prompt-actions { justify-content: flex-end; margin-top: 8px; }
+.star-prompt-close { flex: none; border: none; background: none; color: var(--text-2); padding: 2px; min-height: 0; cursor: pointer; border-radius: var(--r); }
+.star-prompt-close:hover { color: var(--ink); background: var(--surface-2); }
+@keyframes star-prompt-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .star-prompt { animation: none; } }

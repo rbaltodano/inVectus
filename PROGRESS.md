@@ -2533,3 +2533,20 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   2. Product questions (target product §12): bundle the embedding model in installers or
      fetch it on first run with consent; whether agent suggestions may ever become decisions
      automatically; pricing and licensing between the two editions.
+
+## 2026-11-07 — GitHub star prompt
+
+- After the 5th successful search or idea check, and 30 s without input, a bottom-right card
+  asks once per launch: "Enjoying inVectus? Give it a star on GitHub". Dismissing or starring
+  ends it for good (`star-prompt:*` in local storage; no storage → never asks).
+- **Star on GitHub** stars in place through the person's own GitHub CLI login:
+  `gh api --method PUT user/starred/rbaltodano/inVectus` (`GH_PROMPT_DISABLED=1`, 20 s
+  timeout); inVectus never reads or stores a token. No network before the click (no
+  "already starred" pre-check); offline mode refuses it. Without `gh`, a signed-out `gh`, or
+  a refusal, the button becomes **Open GitHub** (system browser).
+- CLI lookup (`connect::find_in_path`) also searches `/opt/homebrew/bin`, `/usr/local/bin`
+  and `~/.local/bin` on Unix: an app opened from the Finder gets a minimal `PATH`. This also
+  affects finding `claude`/`codex` for Connect an AI agent.
+- Checks: 20 orchestration tests (stand-in `gh`), 34 UI tests, frontend build, clippy for
+  orchestration and the app. The owner's `gh` has the `repo` scope; the repository was not
+  starred, and the real star was not pressed. The card was not checked in the native window.

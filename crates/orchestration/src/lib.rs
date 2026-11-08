@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod connect;
+pub mod github;
 pub mod handoff;
 pub mod jobs;
 mod pipeline;

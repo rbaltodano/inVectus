@@ -567,6 +567,12 @@ async fn connect_account(client: String) -> CmdResult<Option<orch::connect::Acco
     .await
 }
 
+/// Star inVectus on GitHub through the person's `gh` login, after they pressed Star.
+#[tauri::command]
+async fn star_repository() -> CmdResult<orch::github::StarOutcome> {
+    off_thread(|| orch::github::star().map_err(err)).await
+}
+
 /// Open an http(s) link in the system browser (the webview does not follow external links).
 #[tauri::command]
 fn open_url(url: String) -> CmdResult<()> {
@@ -652,6 +658,7 @@ pub fn run() {
             connect_remove,
             connect_status,
             connect_account,
+            star_repository,
             preview_import,
             import_collection,
             reimport_collection,

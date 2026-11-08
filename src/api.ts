@@ -172,6 +172,7 @@ export const api = {
   connectApply: (client: AgentClient) => invoke<string>("connect_apply", { client }),
   connectRemove: (client: AgentClient) => invoke<string>("connect_remove", { client }),
   connectStatus: () => invoke<ConnectStatus[]>("connect_status"),
+  starRepository: () => invoke<"starred" | "unavailable">("star_repository"),
   connectAccount: (client: AgentClient) => invoke<AgentAccount | null>("connect_account", { client }),
   defaultWeights: () => invoke<Weights>("default_gap_weights"),
   exportGaps: (t: TableRef, format: "csv" | "markdown") => invoke<string>("export_gaps", { form: t, format }),

@@ -10,6 +10,7 @@ import SavedPage from "./Saved";
 import GapDetailView from "./GapDetail";
 import { assessmentCopy } from "../search-presentation";
 import { gapCode } from "../DataCircle";
+import { recordSearch } from "../StarPrompt";
 import LineArt from "../LineArt";
 import { weightsKey } from "./Settings";
 import { ArrowLeft } from "lucide-react";
@@ -110,6 +111,7 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
       setCheck(undefined); setPlain(undefined);
       if (table.calibration) setCheck(await api.check(tref, query, role, false));
       else setPlain(await api.search(tref, query, role, true));
+      recordSearch();
     });
   };
   const go = (e: FormEvent) => { e.preventDefault(); search(); };

@@ -514,30 +514,48 @@ async fn export_gaps(
     off_thread(move || orch::export_gaps(&session, form, &format)).await
 }
 
-/// What connecting an agent client would change (Settings → Connect an AI agent). Reads only.
+/// The clients Settings lists.
 #[tauri::command]
-fn connect_plan(client: String) -> CmdResult<orch::connect::ConnectPlan> {
+fn connect_clients() -> CmdResult<Vec<orch::connect::ClientInfo>> {
     use orch::connect;
+    Ok(connect::catalog(&connect::Env::system().map_err(err)?))
+}
+
+/// What connecting an agent client would change (Settings → Connect an AI agent). Reads only.
+/// `custom` takes the client's JSON configuration file and the key holding its servers.
+#[tauri::command]
+fn connect_plan(
+    client: String,
+    file: Option<String>,
+    key: Option<String>,
+) -> CmdResult<orch::connect::ConnectPlan> {
+    use orch::connect;
+    let binary = connect::server_binary().map_err(err)?;
+    if client == connect::CUSTOM {
+        let file = file.ok_or_else(|| "give the client's configuration file".to_string())?;
+        let key = key.unwrap_or_else(|| "mcpServers".into());
+        return connect::plan_custom(std::path::Path::new(&file), &key, &binary).map_err(err);
+    }
     let env = connect::Env::system().map_err(err)?;
-    connect::plan(
-        connect::Client::parse(&client).map_err(err)?,
-        &connect::server_binary().map_err(err)?,
-        &env,
-    )
-    .map_err(err)
+    connect::plan(connect::Client::parse(&client).map_err(err)?, &binary, &env).map_err(err)
 }
 
 /// Connect a client after the person agreed: the plan is recomputed here, never taken from
 /// the window.
 #[tauri::command]
-fn connect_apply(client: String) -> CmdResult<String> {
-    let plan = connect_plan(client)?;
+fn connect_apply(client: String, file: Option<String>, key: Option<String>) -> CmdResult<String> {
+    let plan = connect_plan(client, file, key)?;
     orch::connect::apply(&plan).map_err(err)
 }
 
 #[tauri::command]
-fn connect_remove(client: String) -> CmdResult<String> {
+fn connect_remove(client: String, file: Option<String>, key: Option<String>) -> CmdResult<String> {
     use orch::connect;
+    if client == connect::CUSTOM {
+        let file = file.ok_or_else(|| "give the client's configuration file".to_string())?;
+        let key = key.unwrap_or_else(|| "mcpServers".into());
+        return connect::disconnect_custom(std::path::Path::new(&file), &key).map_err(err);
+    }
     let env = connect::Env::system().map_err(err)?;
     connect::disconnect(connect::Client::parse(&client).map_err(err)?, &env).map_err(err)
 }
@@ -653,6 +671,7 @@ pub fn run() {
             default_gap_weights,
             export_gaps,
             open_url,
+            connect_clients,
             connect_plan,
             connect_apply,
             connect_remove,

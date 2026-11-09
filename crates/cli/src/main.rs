@@ -132,9 +132,15 @@ enum Command {
 
 #[derive(Subcommand)]
 enum ConnectCommand {
-    /// Register with a client: claude-code, claude-desktop, codex, cursor or grok.
+    /// Register with a client (`invectus connect clients` lists them), or `custom` with --file.
     Add {
         client: String,
+        /// For `custom`: the client's JSON configuration file (full path).
+        #[arg(long)]
+        file: Option<PathBuf>,
+        /// For `custom`: the key that holds its MCP servers.
+        #[arg(long, default_value = "mcpServers")]
+        key: String,
         /// Make the change (otherwise only show it).
         #[arg(long)]
         yes: bool,
@@ -145,7 +151,16 @@ enum ConnectCommand {
     Remove {
         client: String,
         #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long, default_value = "mcpServers")]
+        key: String,
+        #[arg(long)]
         yes: bool,
+    },
+    /// The clients inVectus can connect.
+    Clients {
+        #[arg(long)]
+        json: bool,
     },
     /// Which clients are connected, and to which binary.
     Status {
@@ -647,9 +662,20 @@ fn cmd_connect(c: ConnectCommand) -> Result<()> {
     use invectus_orchestration::connect;
     let env = connect::Env::system()?;
     match c {
-        ConnectCommand::Add { client, yes, json } => {
-            let client = connect::Client::parse(&client)?;
-            let plan = connect::plan(client, &connect::server_binary()?, &env)?;
+        ConnectCommand::Add {
+            client,
+            file,
+            key,
+            yes,
+            json,
+        } => {
+            let bin = connect::server_binary()?;
+            let plan = if client == connect::CUSTOM {
+                let file = file.context("`custom` needs --file <client's JSON config>")?;
+                connect::plan_custom(&file, &key, &bin)?
+            } else {
+                connect::plan(connect::Client::parse(&client)?, &bin, &env)?
+            };
             if json && !yes {
                 return print_json(&plan);
             }
@@ -665,16 +691,47 @@ fn cmd_connect(c: ConnectCommand) -> Result<()> {
                 println!("nothing changed; run again with --yes to apply");
             }
         }
-        ConnectCommand::Remove { client, yes } => {
-            let client = connect::Client::parse(&client)?;
-            if yes {
-                println!("{}", connect::disconnect(client, &env)?);
+        ConnectCommand::Remove {
+            client,
+            file,
+            key,
+            yes,
+        } => {
+            let (name, file) = if client == connect::CUSTOM {
+                let file = file.context("`custom` needs --file <client's JSON config>")?;
+                (file.display().to_string(), Some(file))
             } else {
+                (
+                    connect::Client::parse(&client)?.display_name().to_string(),
+                    None,
+                )
+            };
+            if !yes {
+                println!("would remove the invectus entry from {name}; run again with --yes");
+            } else if let Some(file) = file {
+                println!("{}", connect::disconnect_custom(&file, &key)?);
+            } else {
+                let client = connect::Client::parse(&client)?;
+                println!("{}", connect::disconnect(client, &env)?);
+            }
+        }
+        ConnectCommand::Clients { json } => {
+            let clients = connect::catalog(&env);
+            if json {
+                return print_json(&clients);
+            }
+            for c in clients {
                 println!(
-                    "would remove the invectus entry from {}; run again with --yes",
-                    client.display_name()
+                    "{:<15} {:<15} {}{}",
+                    c.id,
+                    c.display_name,
+                    c.config_file
+                        .as_deref()
+                        .unwrap_or("(its own `mcp add` command)"),
+                    if c.checked { "" } else { "  [unverified]" }
                 );
             }
+            println!("custom          any other client: --file <JSON config> [--key mcpServers]");
         }
         ConnectCommand::Status { json } => {
             let mut s = connect::status(connect::server_binary().ok().as_deref(), &env);

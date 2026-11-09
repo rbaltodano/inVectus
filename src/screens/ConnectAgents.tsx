@@ -1,22 +1,16 @@
-// Settings → Connect an AI agent (target product §5.1, A6). Each client shows whether it is
-// connected; connecting shows the exact change first (the file and entry, or the command) and
+// Settings → Connect an AI agent (target product §5.1, A6). The clients come from the backend's
+// catalog (`connect_clients`, after T3 Code's provider registry): featured and detected clients
+// first, the rest under "More clients", and an "Other client" entry for any client that reads a
+// JSON file. Connecting shows the exact change first (the file and entry, or the command) and
 // makes it only after "Make this change". Below, the agents' recent calls through this app.
 import { useEffect, useState } from "react";
-import { api, inTauri, type AgentAccount, type AgentClient, type ConnectPlan, type ConnectStatus } from "../api";
+import { api, inTauri, type AgentAccount, type ClientInfo, type ConnectPlan, type ConnectStatus, type CustomClient } from "../api";
 import { ErrorLine, useAction } from "../App";
 import { ago, describe, useAgentActivity } from "../agents";
-import { clientName } from "../agentIdentity";
-
-const CLIENTS: { id: AgentClient; name: string; how: string }[] = [
-  { id: "claude-code", name: "Claude Code", how: "Registers inVectus with Claude Code's own `claude mcp add` command." },
-  { id: "claude-desktop", name: "Claude Desktop", how: "Adds inVectus to Claude Desktop's configuration file." },
-  { id: "codex", name: "Codex", how: "Registers inVectus with Codex's own `codex mcp add` command (saved in ~/.codex/config.toml)." },
-  { id: "cursor", name: "Cursor", how: "Adds inVectus to Cursor's ~/.cursor/mcp.json." },
-  { id: "grok", name: "Grok Build", how: "Registers inVectus with Grok Build's own `grok mcp add` command (saved in ~/.grok/config.toml)." },
-];
-
-// Clients whose CLI can say who is signed in. The client keeps the sign-in.
-const HAS_ACCOUNT: AgentClient[] = ["claude-code", "codex", "grok"];
+import AgentIcon from "../AgentIcon";
+import { clientName, registerClients } from "../agentIdentity";
+/** The id the backend takes for a client that is not listed. */
+const CUSTOM_ID = "custom";
 
 function accountText(a: AgentAccount | null | undefined): string | null {
   if (!a) return null;
@@ -33,49 +27,93 @@ function statusText(s: ConnectStatus | undefined): string {
 }
 
 export default function ConnectAgents() {
+  const [clients, setClients] = useState<ClientInfo[]>([]);
   const [status, setStatus] = useState<ConnectStatus[]>([]);
   const [plan, setPlan] = useState<ConnectPlan>();
+  const [planCustom, setPlanCustom] = useState<CustomClient>();
+  const [custom, setCustom] = useState<CustomClient>({ file: "", key: "mcpServers" });
   const [done, setDone] = useState<string>();
   const [copied, setCopied] = useState(false);
-  const [accounts, setAccounts] = useState<Partial<Record<AgentClient, AgentAccount | null>>>({});
+  const [accounts, setAccounts] = useState<Record<string, AgentAccount | null>>({});
   const action = useAction();
   const activity = useAgentActivity();
   const reload = () => { if (inTauri) api.connectStatus().then(setStatus).catch(() => undefined); };
-  // Each CLI takes about a second to answer, so accounts load after the connection status.
-  const checkAccounts = () => {
+  useEffect(() => {
     if (!inTauri) return;
-    for (const c of HAS_ACCOUNT) api.connectAccount(c).then((a) => setAccounts((m) => ({ ...m, [c]: a }))).catch(() => undefined);
-  };
-  useEffect(() => { reload(); checkAccounts(); }, []);
+    reload();
+    api.connectClients().then((list) => {
+      registerClients(list);
+      setClients(list);
+      // Each CLI takes about a second to answer, so accounts load after the connection status.
+      for (const c of list.filter((c) => c.has_account)) {
+        api.connectAccount(c.id).then((a) => setAccounts((m) => ({ ...m, [c.id]: a }))).catch(() => undefined);
+      }
+    }).catch(() => undefined);
+  }, []);
 
-  const open = (client: AgentClient) => action.run(async () => { setDone(undefined); setCopied(false); setPlan(await api.connectPlan(client)); });
-  const apply = () => action.run(async () => { setDone(await api.connectApply(plan!.client)); setPlan(undefined); reload(); });
-  const remove = (client: AgentClient) => action.run(async () => { setDone(await api.connectRemove(client)); setPlan(undefined); reload(); });
+  const open = (client: string, c?: CustomClient) => action.run(async () => {
+    setDone(undefined); setCopied(false); setPlanCustom(c); setPlan(await api.connectPlan(client, c));
+  });
+  const apply = () => action.run(async () => { setDone(await api.connectApply(plan!.client, planCustom)); setPlan(undefined); reload(); });
+  const remove = (client: string, c?: CustomClient) => action.run(async () => { setDone(await api.connectRemove(client, c)); setPlan(undefined); reload(); });
   const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); setCopied(true); } catch { /* clipboard unavailable */ } };
   const canApply = plan && !plan.up_to_date && (plan.method === "file" || !!plan.command);
+  const customReady = custom.file.trim() !== "" && custom.key.trim() !== "";
+  const customInput = { file: custom.file.trim(), key: custom.key.trim() };
+
+  const statusOf = (id: string) => status.find((x) => x.client === id);
+  // Featured clients, and any other client found on this computer or connected, show first.
+  const shown = (c: ClientInfo) => { const s = statusOf(c.id); return c.featured || !!s?.client_found || !!s?.connected; };
+  const main = clients.filter(shown);
+  const more = clients.filter((c) => !shown(c));
+  const how = plan?.client === CUSTOM_ID
+    ? "Adds inVectus to the file you named."
+    : clients.find((c) => c.id === plan?.client)?.how;
+
+  const row = (c: ClientInfo) => {
+    const s = statusOf(c.id);
+    const connected = s?.connected && s.matches_this_install;
+    const account = s?.client_found ? accountText(accounts[c.id]) : null;
+    return <div key={c.id} className="spread setting-row">
+      <div className="connect-client">
+        <span className="connect-client-mark"><AgentIcon client={c.id} size={18} /></span>
+        <div><b>{c.display_name}</b>{!c.checked && <span className="tag connect-unverified" title="No session has been checked through this client yet">Unverified</span>}
+          <div className="muted small"><span className="settings-agent-status" data-connected={connected}>{statusText(s)}</span>{s?.connected && !s.matches_this_install && s.binary ? `: ${s.binary}` : ""}</div>
+          {account && <div className="dim small">{account}</div>}</div>
+      </div>
+      <div className="row">
+        {s?.connected && <button type="button" className="text-btn" disabled={action.busy} onClick={() => remove(c.id)}>Disconnect</button>}
+        {!connected && <button type="button" className="btn small" disabled={action.busy} onClick={() => open(c.id)}>{s?.connected ? "Use this install…" : "Connect…"}</button>}
+      </div>
+    </div>;
+  };
 
   return <section aria-labelledby="s-agents" className="panel stack gap">
     <h3 id="s-agents">Connect an AI agent</h3>
     <div className="muted small">Connect your clients to search collections, inspect evidence and suggest decisions.</div>
-    {CLIENTS.map((c) => {
-      const s = status.find((x) => x.client === c.id);
-      const connected = s?.connected && s.matches_this_install;
-      const account = s?.client_found ? accountText(accounts[c.id]) : null;
-      return <div key={c.id} className="spread setting-row">
-        <div><b>{c.name}</b>
-          <div className="muted small"><span className="settings-agent-status" data-connected={connected}>{statusText(s)}</span>{s?.connected && !s.matches_this_install && s.binary ? `: ${s.binary}` : ""}</div>
-          {account && <div className="dim small">{account}</div>}</div>
-        <div className="row">
-          {s?.connected && <button type="button" className="text-btn" disabled={action.busy} onClick={() => remove(c.id)}>Disconnect</button>}
-          {!connected && <button type="button" className="btn small" disabled={action.busy} onClick={() => open(c.id)}>{s?.connected ? "Use this install…" : "Connect…"}</button>}
+    {main.map(row)}
+    <details className="connect-more">
+      <summary>More clients{more.length ? ` (${more.length})` : ""}</summary>
+      {more.map(row)}
+      <div className="setting-row stack gap-s">
+        <div className="connect-client">
+          <span className="connect-client-mark"><AgentIcon client={null} size={18} /></span>
+          <div><b>Other client</b>
+            <div className="muted small">Any client that reads MCP servers from a JSON file. The entry is <code>{"{ \"command\": …, \"args\": [\"mcp\"] }"}</code> under the key you name.</div></div>
         </div>
-      </div>;
-    })}
+        <div className="row wrap connect-custom">
+          <input aria-label="Client's configuration file (full path)" placeholder="/full/path/to/mcp.json" value={custom.file} onChange={(e) => setCustom({ ...custom, file: e.target.value })} />
+          <input aria-label="Key holding its servers" placeholder="mcpServers" value={custom.key} onChange={(e) => setCustom({ ...custom, key: e.target.value })} />
+          <button type="button" className="btn small" disabled={action.busy || !customReady} onClick={() => open(CUSTOM_ID, customInput)}>Connect…</button>
+          <button type="button" className="text-btn" disabled={action.busy || !customReady} onClick={() => remove(CUSTOM_ID, customInput)}>Disconnect</button>
+        </div>
+      </div>
+    </details>
     {plan && <div className="connect-plan stack gap-s" role="dialog" aria-label={`Connect ${plan.display_name}`}>
       <div className="label">Connect {plan.display_name}</div>
-      <div className="muted small">{CLIENTS.find((c) => c.id === plan.client)?.how} Nothing has changed yet.</div>
+      <div className="muted small">{how} Nothing has changed yet.</div>
       {plan.config_file && <div className="small">File: <code className="path">{plan.config_file}</code></div>}
-      <pre className="connect-code">{plan.method === "file" ? JSON.stringify({ mcpServers: { invectus: plan.entry } }, null, 2) : plan.manual}</pre>
+      <pre className="connect-code">{plan.method === "file" ? JSON.stringify({ [plan.config_key ?? "mcpServers"]: { invectus: plan.entry } }, null, 2) : plan.manual}</pre>
       {plan.method === "file" && <div className="dim small">Other servers and settings in the file are kept; the old file is saved beside it as a backup.</div>}
       {plan.notes.map((n) => <div key={n} className="dim small">Note: {n}</div>)}
       <div className="row wrap">
@@ -89,9 +127,10 @@ export default function ConnectAgents() {
     <details className="settings-agent-about">
       <summary>How connections work</summary>
       <div className="muted small">Lets an agent such as Claude, Codex or Grok use inVectus through MCP: search, verdicts, gaps, descriptions and suggestions. It runs on this computer over stdio and opens no network port. While this app is open, the agent works in the project you have open here, and its suggestions wait for your decision.</div>
-      <div className="muted small">The agent runs on your own Claude, ChatGPT or Grok plan (or API key), signed in through its own app. inVectus never sees the sign-in; it only asks the client who is signed in.</div>
+      <div className="muted small">The agent runs on your own plan or API key, signed in through its own app. inVectus never sees the sign-in; for Claude Code, Codex and Grok Build it only asks the client who is signed in.</div>
+      <div className="muted small">Clients marked Unverified are set up from their documentation; no session has been checked through them yet.</div>
     </details>
-    <div className="muted small">Or by hand: <code>invectus connect add claude-code</code> (or <code>codex</code>, <code>grok</code>) shows the change, and <code>--yes</code> makes it. Claude Desktop can also install <code>invectus connect bundle</code>'s .mcpb file.</div>
+    <div className="muted small">Or by hand: <code>invectus connect clients</code> lists them, and <code>invectus connect add codex</code> (or any listed id) shows the change; <code>--yes</code> makes it. Claude Desktop can also install <code>invectus connect bundle</code>'s .mcpb file.</div>
 
     <div className="label agent-activity-head">Recent agent activity</div>
     {activity.length === 0 && <div className="dim small">No agent has worked through this app since it opened.</div>}

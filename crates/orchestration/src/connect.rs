@@ -4,6 +4,11 @@
 //! atomically; Claude Code, Codex and Grok Build are configured through their own `mcp add`
 //! commands.
 //!
+//! Every client is one entry in [`CLIENTS`] (after T3 Code's provider registry,
+//! `docs/agent-clients-plan.md`): its name, how it is configured, and how to ask who is signed
+//! in. Adding a client that takes a JSON file or an `mcp add` command is a new entry, not new
+//! code. A client not listed can still be connected through [`plan_custom`].
+//!
 //! Sign-in is left to each client: inVectus never reads, stores or sends a token.
 //! [`account`] asks the client's own CLI who is signed in (`claude auth status`, `codex login
 //! status`, `grok models`), so the Settings screen can say whether the agent runs on a Claude or
@@ -12,79 +17,371 @@
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// The server's name in every client's configuration.
 pub const SERVER_NAME: &str = "invectus";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Client {
-    ClaudeCode,
-    ClaudeDesktop,
+/// The id plans and requests use for a client that is not in [`CLIENTS`].
+pub const CUSTOM: &str = "custom";
+
+/// Where a client keeps a file.
+#[derive(Clone, Copy, Debug)]
+pub enum ConfigPath {
+    /// Under the home folder on every system.
+    Home(&'static str),
+    /// In the per-user application settings folder: `~/Library/Application Support` on macOS,
+    /// `%APPDATA%` on Windows, `~/.config` on Linux.
+    AppConfig(&'static str),
+}
+
+/// The shape of the invectus entry a JSON client takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shape {
+    /// `{ "command": …, "args": ["mcp"] }`
+    Standard,
+    /// VS Code: `{ "type": "stdio", "command": …, "args": ["mcp"] }`
+    Stdio,
+}
+
+/// How a client is configured.
+#[derive(Clone, Copy, Debug)]
+pub enum Method {
+    /// Merge the entry under `key` in a JSON file.
+    JsonFile {
+        path: ConfigPath,
+        key: &'static str,
+        shape: Shape,
+    },
+    /// Run the client's own `mcp add` and `mcp remove`.
+    Cli(CliSpec),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CliSpec {
+    /// The program's name, without `.exe`.
+    pub program: &'static str,
+    /// The client's settings folder: an environment variable that overrides it, and the default
+    /// under the home folder.
+    pub home: Option<(&'static str, &'static str)>,
+    /// Also look for the program in `<settings folder>/bin`. Grok's installer links `grok` into
+    /// `~/.local/bin` only when that is on PATH; otherwise it is reached through the PATH line it
+    /// adds to the shell profile, which an app opened from the Finder does not read.
+    pub bin_in_home: bool,
+    /// Arguments after `mcp add` / `mcp remove`, before the server name.
+    pub scope: &'static [&'static str],
+    /// Where the client records the entry, read without running it.
+    pub registered: Registered,
+    /// `mcp add` replaces an existing entry, so the plan shows the current one.
+    pub replaces: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Registered {
+    /// A JSON file under the home folder, entry under `key`.
+    Json {
+        file: &'static str,
+        key: &'static str,
+    },
+    /// A TOML file in the client's settings folder, entry under `table`. With
+    /// `honour_enabled`, `enabled = false` counts as not connected and the key is ignored
+    /// otherwise.
+    Toml {
+        file: &'static str,
+        table: &'static str,
+        honour_enabled: bool,
+    },
+}
+
+/// Which CLI command says who is signed in, and how to read its answer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccountProbe {
+    Claude,
     Codex,
-    Cursor,
     Grok,
 }
 
+impl AccountProbe {
+    fn args(self) -> &'static [&'static str] {
+        match self {
+            AccountProbe::Claude => &["auth", "status"],
+            AccountProbe::Codex => &["login", "status"],
+            AccountProbe::Grok => &["models"],
+        }
+    }
+
+    fn read(self, out: &std::process::Output) -> Account {
+        let text = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        match self {
+            AccountProbe::Claude => claude_account(&out.stdout),
+            AccountProbe::Codex => codex_account(&text),
+            AccountProbe::Grok => grok_account(&text, out.status.success()),
+        }
+    }
+}
+
+/// One agent client.
+#[derive(Debug)]
+pub struct ClientSpec {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    /// Names the client gives in the MCP handshake; one ending in `*` is a prefix.
+    pub aliases: &'static [&'static str],
+    /// Shown first in Settings.
+    pub featured: bool,
+    /// A real session has used `invectus mcp` through this client (see PROGRESS.md). Unchecked
+    /// clients are labelled in Settings.
+    pub checked: bool,
+    /// One sentence for Settings: what connecting does.
+    pub how: &'static str,
+    pub method: Method,
+    pub account: Option<AccountProbe>,
+    /// Added to the plan's notes.
+    pub note: Option<&'static str>,
+}
+
+/// Every client inVectus can connect, in display order. Paths and entry shapes of unchecked
+/// clients come from their documentation (2026-11-09) and need a real session to confirm.
+pub static CLIENTS: &[ClientSpec] = &[
+    ClientSpec {
+        id: "claude-code",
+        display_name: "Claude Code",
+        aliases: &["claude-code"],
+        featured: true,
+        checked: true,
+        how: "Registers inVectus with Claude Code's own `claude mcp add` command.",
+        method: Method::Cli(CliSpec {
+            program: "claude",
+            home: None,
+            bin_in_home: false,
+            scope: &["--scope", "user"],
+            registered: Registered::Json {
+                file: ".claude.json",
+                key: "mcpServers",
+            },
+            // Claude Code has always been planned as new.
+            replaces: false,
+        }),
+        account: Some(AccountProbe::Claude),
+        note: None,
+    },
+    ClientSpec {
+        id: "claude-desktop",
+        display_name: "Claude Desktop",
+        aliases: &["claude-desktop"],
+        featured: true,
+        checked: false,
+        how: "Adds inVectus to Claude Desktop's configuration file.",
+        method: Method::JsonFile {
+            path: ConfigPath::AppConfig("Claude/claude_desktop_config.json"),
+            key: "mcpServers",
+            shape: Shape::Standard,
+        },
+        account: None,
+        note: Some("restart Claude Desktop to load the server"),
+    },
+    ClientSpec {
+        id: "codex",
+        display_name: "Codex",
+        aliases: &["codex", "codex-mcp-client"],
+        featured: true,
+        checked: true,
+        how: "Registers inVectus with Codex's own `codex mcp add` command (saved in \
+              ~/.codex/config.toml).",
+        method: Method::Cli(CliSpec {
+            program: "codex",
+            home: Some(("CODEX_HOME", ".codex")),
+            bin_in_home: false,
+            scope: &[],
+            registered: Registered::Toml {
+                file: "config.toml",
+                table: "mcp_servers",
+                honour_enabled: false,
+            },
+            replaces: true,
+        }),
+        account: Some(AccountProbe::Codex),
+        note: None,
+    },
+    ClientSpec {
+        id: "cursor",
+        display_name: "Cursor",
+        aliases: &["cursor"],
+        featured: true,
+        checked: false,
+        how: "Adds inVectus to Cursor's ~/.cursor/mcp.json.",
+        method: Method::JsonFile {
+            path: ConfigPath::Home(".cursor/mcp.json"),
+            key: "mcpServers",
+            shape: Shape::Standard,
+        },
+        account: None,
+        note: None,
+    },
+    ClientSpec {
+        id: "grok",
+        display_name: "Grok Build",
+        aliases: &["grok", "grok-shell-*"],
+        featured: true,
+        checked: false,
+        how: "Registers inVectus with Grok Build's own `grok mcp add` command (saved in \
+              ~/.grok/config.toml).",
+        method: Method::Cli(CliSpec {
+            program: "grok",
+            home: Some(("GROK_HOME", ".grok")),
+            bin_in_home: true,
+            scope: &["--scope", "user"],
+            // Grok also loads servers from `~/.claude.json`, but its own entry takes
+            // precedence, so only that one is read.
+            registered: Registered::Toml {
+                file: "config.toml",
+                table: "mcp_servers",
+                honour_enabled: true,
+            },
+            replaces: true,
+        }),
+        account: Some(AccountProbe::Grok),
+        note: None,
+    },
+    ClientSpec {
+        id: "gemini-cli",
+        display_name: "Gemini CLI",
+        aliases: &["gemini-cli"],
+        featured: false,
+        checked: false,
+        how: "Adds inVectus to Gemini CLI's user settings, ~/.gemini/settings.json.",
+        method: Method::JsonFile {
+            path: ConfigPath::Home(".gemini/settings.json"),
+            key: "mcpServers",
+            shape: Shape::Standard,
+        },
+        account: None,
+        note: None,
+    },
+    ClientSpec {
+        id: "kiro",
+        display_name: "Kiro",
+        aliases: &["kiro"],
+        featured: false,
+        checked: false,
+        how: "Adds inVectus to Kiro's user MCP settings, ~/.kiro/settings/mcp.json.",
+        method: Method::JsonFile {
+            path: ConfigPath::Home(".kiro/settings/mcp.json"),
+            key: "mcpServers",
+            shape: Shape::Standard,
+        },
+        account: None,
+        note: None,
+    },
+    ClientSpec {
+        id: "lm-studio",
+        display_name: "LM Studio",
+        aliases: &["lm-studio", "lmstudio"],
+        featured: false,
+        checked: false,
+        how: "Adds inVectus to LM Studio's ~/.lmstudio/mcp.json.",
+        method: Method::JsonFile {
+            path: ConfigPath::Home(".lmstudio/mcp.json"),
+            key: "mcpServers",
+            shape: Shape::Standard,
+        },
+        account: None,
+        note: None,
+    },
+    ClientSpec {
+        id: "vscode",
+        display_name: "VS Code",
+        aliases: &["vscode", "visual studio code"],
+        featured: false,
+        checked: false,
+        how: "Adds inVectus to VS Code's user MCP configuration (mcp.json in the user settings \
+              folder), for agent mode.",
+        method: Method::JsonFile {
+            path: ConfigPath::AppConfig("Code/User/mcp.json"),
+            key: "servers",
+            shape: Shape::Stdio,
+        },
+        account: None,
+        note: Some("VS Code asks you to trust the server the first time it starts"),
+    },
+];
+
+/// A client from [`CLIENTS`].
+#[derive(Clone, Copy)]
+pub struct Client(&'static ClientSpec);
+
+impl PartialEq for Client {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.id == other.0.id
+    }
+}
+impl Eq for Client {}
+
+impl std::fmt::Debug for Client {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.id)
+    }
+}
+
+impl Serialize for Client {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        s.serialize_str(self.0.id)
+    }
+}
+
 impl Client {
-    pub const ALL: [Client; 5] = [
-        Client::ClaudeCode,
-        Client::ClaudeDesktop,
-        Client::Codex,
-        Client::Cursor,
-        Client::Grok,
-    ];
+    pub fn all() -> impl Iterator<Item = Client> {
+        CLIENTS.iter().map(Client)
+    }
 
     pub fn parse(s: &str) -> Result<Self> {
-        Ok(match s {
-            "claude-code" => Client::ClaudeCode,
-            "claude-desktop" => Client::ClaudeDesktop,
-            "codex" => Client::Codex,
-            "cursor" => Client::Cursor,
-            "grok" => Client::Grok,
-            other => {
-                bail!("unknown client {other:?} (claude-code, claude-desktop, codex, cursor, grok)")
-            }
+        Self::all().find(|c| c.as_str() == s).with_context(|| {
+            let ids: Vec<_> = Self::all().map(|c| c.as_str()).collect();
+            format!("unknown client {s:?} ({})", ids.join(", "))
         })
     }
 
+    /// The client a handshake name belongs to, by its aliases (case-insensitive).
+    pub fn from_handshake(name: &str) -> Option<Self> {
+        let name = name.trim().to_ascii_lowercase();
+        Self::all().find(|c| {
+            c.0.aliases.iter().any(|a| match a.strip_suffix('*') {
+                Some(prefix) => name.starts_with(prefix),
+                None => name == *a,
+            })
+        })
+    }
+
+    pub fn spec(self) -> &'static ClientSpec {
+        self.0
+    }
+
     pub fn as_str(self) -> &'static str {
-        match self {
-            Client::ClaudeCode => "claude-code",
-            Client::ClaudeDesktop => "claude-desktop",
-            Client::Codex => "codex",
-            Client::Cursor => "cursor",
-            Client::Grok => "grok",
-        }
+        self.0.id
     }
 
     pub fn display_name(self) -> &'static str {
-        match self {
-            Client::ClaudeCode => "Claude Code",
-            Client::ClaudeDesktop => "Claude Desktop",
-            Client::Codex => "Codex",
-            Client::Cursor => "Cursor",
-            Client::Grok => "Grok Build",
+        self.0.display_name
+    }
+
+    fn cli(self) -> Option<&'static CliSpec> {
+        match &self.0.method {
+            Method::Cli(c) => Some(c),
+            Method::JsonFile { .. } => None,
         }
     }
 
-    /// The JSON file this client reads MCP servers from, under `home` (and `appdata` on
-    /// Windows). `None` for Claude Code, Codex and Grok Build, which are configured by command.
-    pub fn config_file(self, home: &Path, appdata: Option<&Path>) -> Option<PathBuf> {
-        match self {
-            Client::ClaudeCode | Client::Codex | Client::Grok => None,
-            Client::Cursor => Some(home.join(".cursor").join("mcp.json")),
-            Client::ClaudeDesktop => Some(if cfg!(target_os = "macos") {
-                home.join("Library/Application Support/Claude/claude_desktop_config.json")
-            } else if cfg!(windows) {
-                appdata
-                    .map(Path::to_path_buf)
-                    .unwrap_or_else(|| home.join("AppData/Roaming"))
-                    .join("Claude/claude_desktop_config.json")
-            } else {
-                home.join(".config/Claude/claude_desktop_config.json")
-            }),
+    /// The JSON file this client reads MCP servers from, with its key and entry shape. `None`
+    /// for clients configured by command.
+    pub fn config_file(self, env: &Env) -> Option<(PathBuf, &'static str, Shape)> {
+        match self.0.method {
+            Method::JsonFile { path, key, shape } => Some((env.resolve(path), key, shape)),
+            Method::Cli(_) => None,
         }
     }
 }
@@ -113,20 +410,31 @@ pub fn server_binary() -> Result<PathBuf> {
     Ok(std::fs::canonicalize(&candidate).unwrap_or(candidate))
 }
 
-/// The server entry every JSON client takes.
+/// The server entry every standard JSON client takes.
 pub fn server_entry(binary: &Path) -> Value {
-    json!({ "command": binary.display().to_string(), "args": ["mcp"] })
+    entry_for(Shape::Standard, binary)
+}
+
+fn entry_for(shape: Shape, binary: &Path) -> Value {
+    let command = binary.display().to_string();
+    match shape {
+        Shape::Standard => json!({ "command": command, "args": ["mcp"] }),
+        Shape::Stdio => json!({ "type": "stdio", "command": command, "args": ["mcp"] }),
+    }
 }
 
 /// What connecting a client would do. `apply` performs exactly this.
 #[derive(Clone, Debug, Serialize)]
 pub struct ConnectPlan {
-    pub client: Client,
+    /// A client id, or [`CUSTOM`].
+    pub client: String,
     pub display_name: String,
     pub binary: String,
     /// `file` (merge into `config_file`) or `command` (run `command`).
     pub method: String,
     pub config_file: Option<String>,
+    /// The key in `config_file` that holds the servers.
+    pub config_key: Option<String>,
     /// The entry as it is now, if any.
     pub current: Option<Value>,
     /// The entry after connecting.
@@ -143,7 +451,8 @@ pub struct ConnectPlan {
 pub struct ConnectStatus {
     pub client: Client,
     pub display_name: String,
-    /// The client's config file exists (or, for Claude Code, its `claude` command was found).
+    /// The client's config file or its folder exists (or, for a command-configured client, its
+    /// command was found).
     pub client_found: bool,
     pub connected: bool,
     /// The registered binary, when connected; it may be a different install than this one.
@@ -154,24 +463,63 @@ pub struct ConnectStatus {
     pub account: Option<Account>,
 }
 
+/// A client as Settings lists it.
+#[derive(Clone, Debug, Serialize)]
+pub struct ClientInfo {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub featured: bool,
+    pub checked: bool,
+    pub how: &'static str,
+    /// `file` or `command`.
+    pub method: &'static str,
+    /// The file a `file` client is configured in, on this computer.
+    pub config_file: Option<String>,
+    /// [`account`] can say who is signed in.
+    pub has_account: bool,
+}
+
+/// Every client, for Settings.
+pub fn catalog(env: &Env) -> Vec<ClientInfo> {
+    Client::all()
+        .map(|c| ClientInfo {
+            id: c.0.id,
+            display_name: c.0.display_name,
+            aliases: c.0.aliases,
+            featured: c.0.featured,
+            checked: c.0.checked,
+            how: c.0.how,
+            method: if c.cli().is_some() { "command" } else { "file" },
+            config_file: c.config_file(env).map(|(p, ..)| p.display().to_string()),
+            has_account: c.0.account.is_some(),
+        })
+        .collect()
+}
+
 /// Where to look: the user's home and, on Windows, `%APPDATA%`. Tests pass a temporary home.
 #[derive(Clone, Debug)]
 pub struct Env {
     pub home: PathBuf,
     pub appdata: Option<PathBuf>,
-    /// The `claude` executable for Claude Code, if found.
-    pub claude: Option<PathBuf>,
-    /// The `codex` executable, if found.
-    pub codex: Option<PathBuf>,
-    /// Codex's settings folder: `$CODEX_HOME`, else `~/.codex`.
-    pub codex_home: PathBuf,
-    /// The `grok` executable for Grok Build, if found.
-    pub grok: Option<PathBuf>,
-    /// Grok Build's settings folder: `$GROK_HOME`, else `~/.grok`.
-    pub grok_home: PathBuf,
+    /// Client CLIs found, by program name.
+    pub programs: BTreeMap<&'static str, PathBuf>,
+    /// Client settings folders, by program name; a client without one here uses its default
+    /// under `home`.
+    pub cli_homes: BTreeMap<&'static str, PathBuf>,
 }
 
 impl Env {
+    /// Nothing found yet: only the home folder (and `AppData/Roaming` under it, for Windows).
+    pub fn bare(home: &Path) -> Self {
+        Self {
+            home: home.to_path_buf(),
+            appdata: Some(home.join("AppData/Roaming")),
+            programs: BTreeMap::new(),
+            cli_homes: BTreeMap::new(),
+        }
+    }
+
     pub fn system() -> Result<Self> {
         // Respect the Windows process profile, including isolated CLI invocations. dirs
         // otherwise asks the Known Folder API, which ignores USERPROFILE overrides.
@@ -183,75 +531,88 @@ impl Env {
             None
         };
         let home = profile.or_else(dirs::home_dir).context("no home folder")?;
-        let exe = |name: &str| find_in_path(&format!("{name}{}", std::env::consts::EXE_SUFFIX));
-        let folder = |var: &str, default: &str| {
-            std::env::var_os(var)
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home.join(default))
-        };
-        let grok_home = folder("GROK_HOME", ".grok");
-        // Grok's installer links `grok` into `~/.local/bin` only when that is on PATH; otherwise
-        // it is reached through the PATH line it adds to the shell profile, which an app opened
-        // from the Finder does not read.
-        let grok = exe("grok").or_else(|| {
-            let own = grok_home
-                .join("bin")
-                .join(format!("grok{}", std::env::consts::EXE_SUFFIX));
-            own.is_file().then_some(own)
-        });
-        Ok(Self {
-            codex_home: folder("CODEX_HOME", ".codex"),
+        let mut env = Self {
             appdata: std::env::var_os("APPDATA").map(PathBuf::from),
-            claude: exe("claude"),
-            codex: exe("codex"),
-            grok,
-            grok_home,
-            home,
-        })
+            ..Self::bare(&home)
+        };
+        for cli in Client::all().filter_map(Client::cli) {
+            let exe = format!("{}{}", cli.program, std::env::consts::EXE_SUFFIX);
+            if let Some((var, _)) = cli.home
+                && let Some(dir) = std::env::var_os(var).filter(|v| !v.is_empty())
+            {
+                env.cli_homes.insert(cli.program, PathBuf::from(dir));
+            }
+            let own = || {
+                let p = env.cli_home(cli)?.join("bin").join(&exe);
+                p.is_file().then_some(p)
+            };
+            let found = find_in_path(&exe).or_else(|| if cli.bin_in_home { own() } else { None });
+            if let Some(path) = found {
+                env.programs.insert(cli.program, path);
+            }
+        }
+        Ok(env)
+    }
+
+    fn resolve(&self, path: ConfigPath) -> PathBuf {
+        match path {
+            ConfigPath::Home(rel) => self.home.join(rel),
+            ConfigPath::AppConfig(rel) => {
+                let base = if cfg!(target_os = "macos") {
+                    self.home.join("Library/Application Support")
+                } else if cfg!(windows) {
+                    self.appdata
+                        .clone()
+                        .unwrap_or_else(|| self.home.join("AppData/Roaming"))
+                } else {
+                    self.home.join(".config")
+                };
+                base.join(rel)
+            }
+        }
+    }
+
+    fn cli_home(&self, cli: &CliSpec) -> Option<PathBuf> {
+        let (_, default) = cli.home?;
+        Some(
+            self.cli_homes
+                .get(cli.program)
+                .cloned()
+                .unwrap_or_else(|| self.home.join(default)),
+        )
     }
 
     /// The CLI that configures a command-configured client.
-    fn cli(&self, client: Client) -> Option<&PathBuf> {
-        match client {
-            Client::ClaudeCode => self.claude.as_ref(),
-            Client::Codex => self.codex.as_ref(),
-            Client::Grok => self.grok.as_ref(),
-            Client::ClaudeDesktop | Client::Cursor => None,
-        }
+    fn program(&self, cli: &CliSpec) -> Option<&PathBuf> {
+        self.programs.get(cli.program)
     }
 
     /// The invectus entry a command-configured client has now, read from its own files
     /// (`~/.claude.json`, `$CODEX_HOME/config.toml`, `$GROK_HOME/config.toml`) without running
     /// it.
-    fn registered(&self, client: Client) -> Option<Value> {
-        match client {
-            Client::ClaudeCode => read_config(&self.home.join(".claude.json"))
+    fn registered(&self, cli: &CliSpec) -> Option<Value> {
+        match cli.registered {
+            Registered::Json { file, key } => read_config(&self.home.join(file))
                 .ok()
-                .and_then(|c| c["mcpServers"].get(SERVER_NAME).cloned()),
-            Client::Codex => {
-                let raw = std::fs::read_to_string(self.codex_home.join("config.toml")).ok()?;
+                .and_then(|c| c[key].get(SERVER_NAME).cloned()),
+            Registered::Toml {
+                file,
+                table,
+                honour_enabled,
+            } => {
+                let raw = std::fs::read_to_string(self.cli_home(cli)?.join(file)).ok()?;
                 let config: toml::Table = raw.parse().ok()?;
-                let entry = config.get("mcp_servers")?.get(SERVER_NAME)?;
-                serde_json::to_value(entry).ok()
-            }
-            // Grok writes `enabled = true` beside the command. A disabled entry counts as not
-            // connected: `grok mcp add` enables it again. Grok also loads servers from
-            // `~/.claude.json`, but its own entry takes precedence, so only that one is read.
-            Client::Grok => {
-                let raw = std::fs::read_to_string(self.grok_home.join("config.toml")).ok()?;
-                let config: toml::Table = raw.parse().ok()?;
-                let mut entry = config.get("mcp_servers")?.get(SERVER_NAME)?.clone();
-                let table = entry.as_table_mut()?;
-                if table
-                    .remove("enabled")
-                    .is_some_and(|e| e.as_bool() == Some(false))
+                let mut entry = config.get(table)?.get(SERVER_NAME)?.clone();
+                if honour_enabled
+                    && entry
+                        .as_table_mut()?
+                        .remove("enabled")
+                        .is_some_and(|e| e.as_bool() == Some(false))
                 {
                     return None;
                 }
                 serde_json::to_value(entry).ok()
             }
-            Client::ClaudeDesktop | Client::Cursor => None,
         }
     }
 }
@@ -279,7 +640,8 @@ fn read_config(path: &Path) -> Result<Value> {
         Ok(raw) => {
             let v: Value = serde_json::from_slice(&raw).with_context(|| {
                 format!(
-                    "{} is not valid JSON; fix or move it before connecting",
+                    "{} is not valid JSON (comments are not supported); fix or move it before \
+                     connecting",
                     path.display()
                 )
             })?;
@@ -293,76 +655,58 @@ fn read_config(path: &Path) -> Result<Value> {
     }
 }
 
+/// The program an entry runs: `command` as a string, or the first item of a `command` list.
+fn entry_command(entry: &Value) -> Option<String> {
+    match &entry["command"] {
+        Value::String(s) => Some(s.clone()),
+        Value::Array(a) => a.first()?.as_str().map(String::from),
+        _ => None,
+    }
+}
+
 /// `<cli> mcp add …` without the program: Claude Code and Grok Build register for the user (all
 /// projects); Codex's servers are always global. Codex and Grok replace an existing entry.
-fn add_args(client: Client, binary: &Path) -> Vec<String> {
-    let scope: &[&str] = match client {
-        Client::ClaudeCode | Client::Grok => &["--scope", "user"],
-        _ => &[],
-    };
+fn add_args(cli: &CliSpec, binary: &Path) -> Vec<String> {
     ["mcp", "add"]
         .iter()
-        .chain(scope)
+        .chain(cli.scope)
         .chain(&[SERVER_NAME, "--"])
         .map(|s| s.to_string())
         .chain([binary.display().to_string(), "mcp".into()])
         .collect()
 }
 
-fn remove_args(client: Client) -> Vec<&'static str> {
-    match client {
-        Client::ClaudeCode | Client::Grok => vec!["mcp", "remove", "--scope", "user", SERVER_NAME],
-        _ => vec!["mcp", "remove", SERVER_NAME],
-    }
-}
-
-/// The program name each command-configured client's CLI goes by.
-fn cli_name(client: Client) -> &'static str {
-    match client {
-        Client::Codex => "codex",
-        Client::Grok => "grok",
-        _ => "claude",
-    }
+fn remove_args(cli: &CliSpec) -> Vec<&'static str> {
+    ["mcp", "remove"]
+        .iter()
+        .chain(cli.scope)
+        .chain(&[SERVER_NAME])
+        .copied()
+        .collect()
 }
 
 /// Plan connecting `client` to `binary`. Reads only.
 pub fn plan(client: Client, binary: &Path, env: &Env) -> Result<ConnectPlan> {
-    let entry = server_entry(binary);
-    let manual_json =
-        serde_json::to_string_pretty(&json!({ "mcpServers": { SERVER_NAME: entry } }))?;
-    let mut notes = Vec::new();
-    match client.config_file(&env.home, env.appdata.as_deref()) {
-        Some(path) => {
-            let config = read_config(&path)?;
-            let current = config["mcpServers"].get(SERVER_NAME).cloned();
-            if current.is_some() && current.as_ref() != Some(&entry) {
-                notes.push("replaces an existing invectus entry".into());
-            }
-            if !path.exists() {
-                notes.push(format!("creates {}", path.display()));
-            }
-            if client == Client::ClaudeDesktop {
-                notes.push("restart Claude Desktop to load the server".into());
-            }
-            Ok(ConnectPlan {
-                client,
-                display_name: client.display_name().into(),
-                binary: binary.display().to_string(),
-                method: "file".into(),
-                config_file: Some(path.display().to_string()),
-                up_to_date: current.as_ref() == Some(&entry),
-                current,
-                entry,
-                command: None,
-                manual: format!("Add to {}:\n{manual_json}", path.display()),
-                notes,
-            })
+    match client.0.method {
+        Method::JsonFile { path, key, shape } => {
+            let mut plan = plan_file(
+                client.as_str(),
+                client.display_name(),
+                &env.resolve(path),
+                key,
+                shape,
+                binary,
+            )?;
+            plan.notes.extend(client.0.note.map(String::from));
+            Ok(plan)
         }
-        None => {
-            let name = cli_name(client);
-            let args = add_args(client, binary);
+        Method::Cli(ref cli) => {
+            let entry = server_entry(binary);
+            let mut notes = Vec::new();
+            let name = cli.program;
+            let args = add_args(cli, binary);
             let manual = format!("{name} {}", args.join(" "));
-            let command = env.cli(client).map(|c| {
+            let command = env.program(cli).map(|c| {
                 std::iter::once(c.display().to_string())
                     .chain(args)
                     .collect::<Vec<_>>()
@@ -372,21 +716,22 @@ pub fn plan(client: Client, binary: &Path, env: &Env) -> Result<ConnectPlan> {
                     "the {name} command was not found on PATH; run the command shown yourself"
                 ));
             }
-            // Codex and Grok replace an existing entry; Claude Code has always been planned as
-            // new.
-            let current = match client {
-                Client::Codex | Client::Grok => env.registered(client),
-                _ => None,
+            let current = if cli.replaces {
+                env.registered(cli)
+            } else {
+                None
             };
             if current.is_some() && current.as_ref() != Some(&entry) {
                 notes.push("replaces an existing invectus entry".into());
             }
+            notes.extend(client.0.note.map(String::from));
             Ok(ConnectPlan {
-                client,
+                client: client.as_str().into(),
                 display_name: client.display_name().into(),
                 binary: binary.display().to_string(),
                 method: "command".into(),
                 config_file: None,
+                config_key: None,
                 up_to_date: current.as_ref() == Some(&entry),
                 current,
                 entry,
@@ -396,6 +741,73 @@ pub fn plan(client: Client, binary: &Path, env: &Env) -> Result<ConnectPlan> {
             })
         }
     }
+}
+
+/// Check a custom client's file before planning or removing: an absolute path to a `.json`
+/// file, and a plain key.
+fn check_custom(file: &Path, key: &str) -> Result<()> {
+    if !file.is_absolute() {
+        bail!("give the full path to the client's configuration file");
+    }
+    if file
+        .extension()
+        .is_none_or(|e| !e.eq_ignore_ascii_case("json"))
+    {
+        bail!("the configuration file must be a .json file");
+    }
+    if key.is_empty()
+        || !key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        bail!("the key must be a plain name such as mcpServers");
+    }
+    Ok(())
+}
+
+/// Plan connecting a client that is not listed: merge the standard entry under `key` in its
+/// JSON configuration file. Reads only.
+pub fn plan_custom(file: &Path, key: &str, binary: &Path) -> Result<ConnectPlan> {
+    check_custom(file, key)?;
+    let mut plan = plan_file(CUSTOM, "Other client", file, key, Shape::Standard, binary)?;
+    plan.notes
+        .push("check the client's documentation for where it reads MCP servers".into());
+    Ok(plan)
+}
+
+fn plan_file(
+    id: &str,
+    display_name: &str,
+    path: &Path,
+    key: &str,
+    shape: Shape,
+    binary: &Path,
+) -> Result<ConnectPlan> {
+    let entry = entry_for(shape, binary);
+    let manual_json = serde_json::to_string_pretty(&json!({ key: { SERVER_NAME: entry } }))?;
+    let mut notes = Vec::new();
+    let config = read_config(path)?;
+    let current = config[key].get(SERVER_NAME).cloned();
+    if current.is_some() && current.as_ref() != Some(&entry) {
+        notes.push("replaces an existing invectus entry".into());
+    }
+    if !path.exists() {
+        notes.push(format!("creates {}", path.display()));
+    }
+    Ok(ConnectPlan {
+        client: id.into(),
+        display_name: display_name.into(),
+        binary: binary.display().to_string(),
+        method: "file".into(),
+        config_file: Some(path.display().to_string()),
+        config_key: Some(key.into()),
+        up_to_date: current.as_ref() == Some(&entry),
+        current,
+        entry,
+        command: None,
+        manual: format!("Add to {}:\n{manual_json}", path.display()),
+        notes,
+    })
 }
 
 /// Carry out a plan (after the person agreed). JSON configs: other keys and servers are kept,
@@ -408,14 +820,15 @@ pub fn apply(plan: &ConnectPlan) -> Result<String> {
     match (&plan.config_file, &plan.command) {
         (Some(path), _) => {
             let path = PathBuf::from(path);
+            let key = plan.config_key.as_deref().unwrap_or("mcpServers");
             let mut config = read_config(&path)?;
             let servers = config
                 .as_object_mut()
                 .expect("read_config returns an object")
-                .entry("mcpServers")
+                .entry(key)
                 .or_insert_with(|| json!({}));
             let Some(servers) = servers.as_object_mut() else {
-                bail!("`mcpServers` in {} is not an object", path.display());
+                bail!("`{key}` in {} is not an object", path.display());
             };
             servers.insert(SERVER_NAME.into(), plan.entry.clone());
             if let Some(dir) = path.parent() {
@@ -462,31 +875,20 @@ fn backup_path(path: &Path) -> PathBuf {
 
 /// Remove the invectus entry from a client (Claude Code, Codex and Grok: their `mcp remove`).
 pub fn disconnect(client: Client, env: &Env) -> Result<String> {
-    match client.config_file(&env.home, env.appdata.as_deref()) {
-        Some(path) => {
-            let mut config = read_config(&path)?;
-            let removed = config
-                .get_mut("mcpServers")
-                .and_then(Value::as_object_mut)
-                .and_then(|s| s.remove(SERVER_NAME))
-                .is_some();
-            if !removed {
-                return Ok(format!("{} was not connected", client.display_name()));
-            }
-            std::fs::copy(&path, backup_path(&path))?;
-            invectus_core::project::write_json_atomic(&path, &config)?;
-            Ok(format!("disconnected {}", client.display_name()))
+    match client.0.method {
+        Method::JsonFile { path, key, .. } => {
+            disconnect_file(client.display_name(), &env.resolve(path), key)
         }
-        None => {
-            let name = cli_name(client);
-            let args = remove_args(client);
-            let cli = env.cli(client).with_context(|| {
+        Method::Cli(ref cli) => {
+            let name = cli.program;
+            let args = remove_args(cli);
+            let program = env.program(cli).with_context(|| {
                 format!(
                     "the {name} command was not found; run `{name} {}`",
                     args.join(" ")
                 )
             })?;
-            let out = std::process::Command::new(cli).args(&args).output()?;
+            let out = std::process::Command::new(program).args(&args).output()?;
             if !out.status.success() {
                 bail!(
                     "{name} mcp remove failed: {}",
@@ -498,25 +900,45 @@ pub fn disconnect(client: Client, env: &Env) -> Result<String> {
     }
 }
 
+/// Remove the invectus entry from a client that is not listed.
+pub fn disconnect_custom(file: &Path, key: &str) -> Result<String> {
+    check_custom(file, key)?;
+    disconnect_file("Other client", file, key)
+}
+
+fn disconnect_file(display_name: &str, path: &Path, key: &str) -> Result<String> {
+    let mut config = read_config(path)?;
+    let removed = config
+        .get_mut(key)
+        .and_then(Value::as_object_mut)
+        .and_then(|s| s.remove(SERVER_NAME))
+        .is_some();
+    if !removed {
+        return Ok(format!("{display_name} was not connected"));
+    }
+    std::fs::copy(path, backup_path(path))?;
+    invectus_core::project::write_json_atomic(path, &config)?;
+    Ok(format!("disconnected {display_name}"))
+}
+
 /// Whether each client is connected, and to which binary. Reads only; the command-configured
 /// clients are read from their own config files without running them.
 pub fn status(binary: Option<&Path>, env: &Env) -> Vec<ConnectStatus> {
-    Client::ALL
-        .iter()
-        .map(|&client| {
-            let (found, entry) = match client.config_file(&env.home, env.appdata.as_deref()) {
-                Some(path) => (
-                    path.exists(),
-                    read_config(&path)
-                        .ok()
-                        .and_then(|c| c["mcpServers"].get(SERVER_NAME).cloned()),
-                ),
-                None => (env.cli(client).is_some(), env.registered(client)),
+    Client::all()
+        .map(|client| {
+            let (found, entry) = match client.0.method {
+                Method::JsonFile { path, key, .. } => {
+                    let path = env.resolve(path);
+                    (
+                        path.exists() || path.parent().is_some_and(Path::is_dir),
+                        read_config(&path)
+                            .ok()
+                            .and_then(|c| c[key].get(SERVER_NAME).cloned()),
+                    )
+                }
+                Method::Cli(ref cli) => (env.program(cli).is_some(), env.registered(cli)),
             };
-            let registered = entry
-                .as_ref()
-                .and_then(|e| e["command"].as_str())
-                .map(String::from);
+            let registered = entry.as_ref().and_then(entry_command);
             ConnectStatus {
                 client,
                 display_name: client.display_name().into(),
@@ -570,14 +992,11 @@ const ACCOUNT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 /// `None` for clients without a CLI to ask (Claude Desktop, Cursor). Not run while offline:
 /// whether the CLIs touch the network for this is theirs to decide.
 pub fn account(client: Client, env: &Env) -> Option<Account> {
-    let args: &[&str] = match client {
-        Client::ClaudeCode => &["auth", "status"],
-        Client::Codex => &["login", "status"],
-        Client::Grok => &["models"],
-        Client::ClaudeDesktop | Client::Cursor => return None,
-    };
-    let name = cli_name(client);
-    let Some(cli) = env.cli(client) else {
+    let probe = client.spec().account?;
+    let cli = client.cli()?;
+    let args = probe.args();
+    let name = cli.program;
+    let Some(program) = env.program(cli) else {
         return Some(Account::unknown(format!(
             "the {name} command was not found on PATH"
         )));
@@ -585,24 +1004,9 @@ pub fn account(client: Client, env: &Env) -> Option<Account> {
     if invectus_core::net::offline() {
         return Some(Account::unknown("not checked while offline"));
     }
-    let out = match run_with_timeout(cli, args, ACCOUNT_TIMEOUT) {
-        Ok(out) => out,
-        Err(e) => {
-            return Some(Account::unknown(format!(
-                "`{name} {}` failed: {e:#}",
-                args.join(" ")
-            )));
-        }
-    };
-    let text = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    Some(match client {
-        Client::ClaudeCode => claude_account(&out.stdout),
-        Client::Grok => grok_account(&text, out.status.success()),
-        _ => codex_account(&text),
+    Some(match run_with_timeout(program, args, ACCOUNT_TIMEOUT) {
+        Ok(out) => probe.read(&out),
+        Err(e) => Account::unknown(format!("`{name} {}` failed: {e:#}", args.join(" "))),
     })
 }
 
@@ -776,15 +1180,15 @@ mod tests {
     use super::*;
 
     fn env(home: &Path, claude: Option<PathBuf>) -> Env {
-        Env {
-            home: home.to_path_buf(),
-            appdata: Some(home.join("AppData/Roaming")),
-            claude,
-            codex: None,
-            codex_home: home.join(".codex"),
-            grok: None,
-            grok_home: home.join(".grok"),
+        let mut e = Env::bare(home);
+        if let Some(c) = claude {
+            e.programs.insert("claude", c);
         }
+        e
+    }
+
+    fn client(id: &str) -> Client {
+        Client::parse(id).unwrap()
     }
 
     /// A stand-in CLI: a shell script that logs its arguments to `<name>.log`, prints
@@ -811,7 +1215,7 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let bin = home.path().join("invectus");
         let mut e = env(home.path(), None);
-        let p = plan(Client::Codex, &bin, &e).unwrap();
+        let p = plan(client("codex"), &bin, &e).unwrap();
         assert_eq!(p.method, "command");
         assert_eq!(
             p.manual,
@@ -820,9 +1224,10 @@ mod tests {
         assert!(p.command.is_none() && !p.up_to_date);
         assert!(!status(Some(&bin), &e)[2].client_found);
         // Status and plans read the entry Codex wrote, without running it.
-        std::fs::create_dir_all(&e.codex_home).unwrap();
+        let codex_home = home.path().join(".codex");
+        std::fs::create_dir_all(&codex_home).unwrap();
         std::fs::write(
-            e.codex_home.join("config.toml"),
+            codex_home.join("config.toml"),
             format!(
                 "model = \"x\"\n[mcp_servers.invectus]\ncommand = \"{}\"\nargs = [\"mcp\"]\n",
                 bin.display()
@@ -830,16 +1235,17 @@ mod tests {
         )
         .unwrap();
         let s = status(Some(&bin), &e);
-        assert_eq!(s[2].client, Client::Codex);
+        assert_eq!(s[2].client, client("codex"));
         assert!(s[2].connected && s[2].matches_this_install);
-        assert!(plan(Client::Codex, &bin, &e).unwrap().up_to_date);
-        let other = plan(Client::Codex, Path::new("/elsewhere/invectus"), &e).unwrap();
+        assert!(plan(client("codex"), &bin, &e).unwrap().up_to_date);
+        let other = plan(client("codex"), Path::new("/elsewhere/invectus"), &e).unwrap();
         assert!(!other.up_to_date && other.notes.iter().any(|n| n.contains("replaces")));
         #[cfg(unix)]
         {
-            e.codex = Some(fake_cli(home.path(), "codex", "", 0));
-            apply(&plan(Client::Codex, Path::new("/elsewhere/invectus"), &e).unwrap()).unwrap();
-            disconnect(Client::Codex, &e).unwrap();
+            e.programs
+                .insert("codex", fake_cli(home.path(), "codex", "", 0));
+            apply(&plan(client("codex"), Path::new("/elsewhere/invectus"), &e).unwrap()).unwrap();
+            disconnect(client("codex"), &e).unwrap();
             let log = std::fs::read_to_string(home.path().join("codex.log")).unwrap();
             assert_eq!(
                 log,
@@ -853,7 +1259,7 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let bin = home.path().join("invectus");
         let mut e = env(home.path(), None);
-        let p = plan(Client::Grok, &bin, &e).unwrap();
+        let p = plan(client("grok"), &bin, &e).unwrap();
         assert_eq!(p.method, "command");
         assert_eq!(
             p.manual,
@@ -872,10 +1278,11 @@ mod tests {
         .unwrap();
         assert!(!status(Some(&bin), &e)[4].connected);
         // The entry as `grok mcp add` writes it, with `enabled`.
-        std::fs::create_dir_all(&e.grok_home).unwrap();
+        let grok_home = home.path().join(".grok");
+        std::fs::create_dir_all(&grok_home).unwrap();
         let write = |enabled: bool| {
             std::fs::write(
-                e.grok_home.join("config.toml"),
+                grok_home.join("config.toml"),
                 format!(
                     "[cli]\ninstaller = \"internal\"\n\n[mcp_servers.invectus]\n\
                      command = \"{}\"\nargs = [\"mcp\"]\nenabled = {enabled}\n",
@@ -886,20 +1293,21 @@ mod tests {
         };
         write(true);
         let s = status(Some(&bin), &e);
-        assert_eq!(s[4].client, Client::Grok);
+        assert_eq!(s[4].client, client("grok"));
         assert!(s[4].connected && s[4].matches_this_install);
-        assert!(plan(Client::Grok, &bin, &e).unwrap().up_to_date);
-        let other = plan(Client::Grok, Path::new("/elsewhere/invectus"), &e).unwrap();
+        assert!(plan(client("grok"), &bin, &e).unwrap().up_to_date);
+        let other = plan(client("grok"), Path::new("/elsewhere/invectus"), &e).unwrap();
         assert!(!other.up_to_date && other.notes.iter().any(|n| n.contains("replaces")));
         // Disabled in Grok: not connected, and adding again enables it.
         write(false);
         assert!(!status(Some(&bin), &e)[4].connected);
-        assert!(!plan(Client::Grok, &bin, &e).unwrap().up_to_date);
+        assert!(!plan(client("grok"), &bin, &e).unwrap().up_to_date);
         #[cfg(unix)]
         {
-            e.grok = Some(fake_cli(home.path(), "grok", "", 0));
-            apply(&plan(Client::Grok, Path::new("/elsewhere/invectus"), &e).unwrap()).unwrap();
-            disconnect(Client::Grok, &e).unwrap();
+            e.programs
+                .insert("grok", fake_cli(home.path(), "grok", "", 0));
+            apply(&plan(client("grok"), Path::new("/elsewhere/invectus"), &e).unwrap()).unwrap();
+            disconnect(client("grok"), &e).unwrap();
             let log = std::fs::read_to_string(home.path().join("grok.log")).unwrap();
             assert_eq!(
                 log,
@@ -985,18 +1393,22 @@ mod tests {
     fn account_runs_the_clients_own_cli() {
         let home = tempfile::tempdir().unwrap();
         let mut e = env(home.path(), None);
-        assert_eq!(account(Client::Cursor, &e), None);
-        assert_eq!(account(Client::Codex, &e).unwrap().status, "unknown");
-        e.claude = Some(fake_cli(
-            home.path(),
+        assert_eq!(account(client("cursor"), &e), None);
+        assert_eq!(account(client("codex"), &e).unwrap().status, "unknown");
+        e.programs.insert(
             "claude",
-            r#"{"loggedIn": true, "authMethod": "claude.ai", "subscriptionType": "max"}"#,
-            0,
-        ));
-        e.codex = Some(fake_cli(home.path(), "codex", "Not logged in", 1));
-        let c = account(Client::ClaudeCode, &e).unwrap();
-        assert_eq!(c.label.as_deref(), Some("Claude Max subscription"));
-        assert_eq!(account(Client::Codex, &e).unwrap().status, "signed-out");
+            fake_cli(
+                home.path(),
+                "claude",
+                r#"{"loggedIn": true, "authMethod": "claude.ai", "subscriptionType": "max"}"#,
+                0,
+            ),
+        );
+        e.programs
+            .insert("codex", fake_cli(home.path(), "codex", "Not logged in", 1));
+        let claude = account(client("claude-code"), &e).unwrap();
+        assert_eq!(claude.label.as_deref(), Some("Claude Max subscription"));
+        assert_eq!(account(client("codex"), &e).unwrap().status, "signed-out");
         assert_eq!(
             std::fs::read_to_string(home.path().join("claude.log")).unwrap(),
             "auth status\n"
@@ -1026,7 +1438,7 @@ mod tests {
         )
         .unwrap();
 
-        let p = plan(Client::Cursor, &bin, &e).unwrap();
+        let p = plan(client("cursor"), &bin, &e).unwrap();
         assert_eq!(p.method, "file");
         assert!(!p.up_to_date && p.current.is_none());
         // Planning writes nothing.
@@ -1042,16 +1454,16 @@ mod tests {
         assert_eq!(c["mcpServers"]["invectus"], server_entry(&bin));
         assert!(backup_path(&cursor).exists());
 
-        let again = plan(Client::Cursor, &bin, &e).unwrap();
+        let again = plan(client("cursor"), &bin, &e).unwrap();
         assert!(again.up_to_date);
         let s = status(Some(&bin), &e);
-        let cs = s.iter().find(|s| s.client == Client::Cursor).unwrap();
+        let cs = s.iter().find(|s| s.client == client("cursor")).unwrap();
         assert!(cs.connected && cs.matches_this_install);
         // Another install's binary replaces the entry, with a note.
-        let other = plan(Client::Cursor, Path::new("/elsewhere/invectus"), &e).unwrap();
+        let other = plan(client("cursor"), Path::new("/elsewhere/invectus"), &e).unwrap();
         assert!(other.notes.iter().any(|n| n.contains("replaces")));
 
-        disconnect(Client::Cursor, &e).unwrap();
+        disconnect(client("cursor"), &e).unwrap();
         let c: Value = serde_json::from_str(&std::fs::read_to_string(&cursor).unwrap()).unwrap();
         assert!(c["mcpServers"].get("invectus").is_none());
         assert_eq!(c["mcpServers"]["other"]["command"], "x");
@@ -1062,13 +1474,13 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let e = env(home.path(), None);
         let bin = home.path().join("invectus");
-        let p = plan(Client::ClaudeDesktop, &bin, &e).unwrap();
+        let p = plan(client("claude-desktop"), &bin, &e).unwrap();
         assert!(p.notes.iter().any(|n| n.contains("creates")));
         apply(&p).unwrap();
         let path = PathBuf::from(p.config_file.unwrap());
         assert!(path.exists());
         std::fs::write(&path, "{ not json").unwrap();
-        let err = plan(Client::ClaudeDesktop, &bin, &e)
+        let err = plan(client("claude-desktop"), &bin, &e)
             .unwrap_err()
             .to_string();
         assert!(err.contains("not valid JSON"), "{err}");
@@ -1083,7 +1495,7 @@ mod tests {
     fn claude_code_uses_its_own_command() {
         let home = tempfile::tempdir().unwrap();
         let bin = home.path().join("invectus");
-        let p = plan(Client::ClaudeCode, &bin, &env(home.path(), None)).unwrap();
+        let p = plan(client("claude-code"), &bin, &env(home.path(), None)).unwrap();
         assert_eq!(p.method, "command");
         assert!(
             p.command.is_none()
@@ -1103,7 +1515,7 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-            let p = plan(Client::ClaudeCode, &bin, &env(home.path(), Some(fake))).unwrap();
+            let p = plan(client("claude-code"), &bin, &env(home.path(), Some(fake))).unwrap();
             apply(&p).unwrap();
             let args = std::fs::read_to_string(&log).unwrap();
             assert_eq!(
@@ -1120,6 +1532,133 @@ mod tests {
         .unwrap();
         let s = status(Some(&bin), &env(home.path(), None));
         assert!(s[0].connected && s[0].matches_this_install);
+    }
+
+    #[test]
+    fn catalog_ids_are_unique_and_parse() {
+        let ids: Vec<_> = Client::all().map(Client::as_str).collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), ids.len());
+        for id in &ids {
+            assert_eq!(client(id).as_str(), *id);
+        }
+        // The first five keep their order (Settings and older status consumers).
+        assert_eq!(
+            &ids[..5],
+            ["claude-code", "claude-desktop", "codex", "cursor", "grok"]
+        );
+        assert!(Client::parse(CUSTOM).is_err());
+        let err = Client::parse("nope").unwrap_err().to_string();
+        assert!(err.contains("gemini-cli"), "{err}");
+        let home = tempfile::tempdir().unwrap();
+        let cat = catalog(&Env::bare(home.path()));
+        assert_eq!(cat.len(), CLIENTS.len());
+        let vscode = cat.iter().find(|i| i.id == "vscode").unwrap();
+        assert_eq!(vscode.method, "file");
+        assert!(vscode.config_file.as_deref().unwrap().ends_with("mcp.json"));
+        assert!(cat.iter().find(|i| i.id == "codex").unwrap().has_account);
+    }
+
+    #[test]
+    fn handshake_names_map_to_clients() {
+        let id = |n: &str| Client::from_handshake(n).map(Client::as_str);
+        assert_eq!(id(" codex-mcp-client "), Some("codex"));
+        assert_eq!(id("grok-shell-invectus"), Some("grok"));
+        assert_eq!(id("claude-code"), Some("claude-code"));
+        assert_eq!(id("Visual Studio Code"), Some("vscode"));
+        assert_eq!(id("something-else"), None);
+    }
+
+    #[test]
+    fn every_json_client_merges_under_its_own_key() {
+        let home = tempfile::tempdir().unwrap();
+        let e = env(home.path(), None);
+        let bin = home.path().join("bin/invectus");
+        for client in Client::all() {
+            let Some((path, key, shape)) = client.config_file(&e) else {
+                continue;
+            };
+            assert!(
+                path.starts_with(home.path()),
+                "{client:?}: {}",
+                path.display()
+            );
+            assert!(
+                !status(Some(&bin), &e)
+                    .iter()
+                    .any(|s| s.client == client && s.connected)
+            );
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(
+                &path,
+                json!({ key: { "other": { "command": "x" } }, "k": 1 }).to_string(),
+            )
+            .unwrap();
+            let p = plan(client, &bin, &e).unwrap();
+            assert_eq!(p.config_key.as_deref(), Some(key));
+            assert_eq!(p.entry, entry_for(shape, &bin));
+            apply(&p).unwrap();
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            assert_eq!(v[key]["invectus"], entry_for(shape, &bin), "{client:?}");
+            assert_eq!(v[key]["other"]["command"], "x");
+            assert_eq!(v["k"], 1);
+            let s = status(Some(&bin), &e);
+            let s = s.iter().find(|s| s.client == client).unwrap();
+            assert!(
+                s.client_found && s.connected && s.matches_this_install,
+                "{client:?}"
+            );
+            assert!(plan(client, &bin, &e).unwrap().up_to_date);
+            disconnect(client, &e).unwrap();
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            assert!(v[key].get("invectus").is_none());
+        }
+        // VS Code takes `servers` and a typed entry.
+        let (_, key, shape) = client("vscode").config_file(&e).unwrap();
+        assert_eq!((key, shape), ("servers", Shape::Stdio));
+        assert_eq!(entry_for(shape, &bin)["type"], "stdio");
+    }
+
+    #[test]
+    fn custom_clients_take_an_absolute_json_file_and_a_plain_key() {
+        let home = tempfile::tempdir().unwrap();
+        let bin = home.path().join("invectus");
+        let file = home.path().join("tool/config.json");
+        assert!(plan_custom(Path::new("config.json"), "mcpServers", &bin).is_err());
+        assert!(plan_custom(&home.path().join("x.toml"), "mcpServers", &bin).is_err());
+        assert!(plan_custom(&file, "a.b", &bin).is_err());
+        assert!(plan_custom(&file, "", &bin).is_err());
+        let p = plan_custom(&file, "mcp_servers", &bin).unwrap();
+        assert_eq!(p.client, CUSTOM);
+        assert!(p.notes.iter().any(|n| n.contains("creates")));
+        apply(&p).unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(v["mcp_servers"]["invectus"], server_entry(&bin));
+        assert!(plan_custom(&file, "mcp_servers", &bin).unwrap().up_to_date);
+        assert_eq!(
+            disconnect_custom(&file, "mcp_servers").unwrap(),
+            "disconnected Other client"
+        );
+        assert!(
+            disconnect_custom(&file, "mcp_servers")
+                .unwrap()
+                .contains("was not connected")
+        );
+    }
+
+    #[test]
+    fn entry_command_reads_strings_and_lists() {
+        assert_eq!(
+            entry_command(&json!({"command": "/a"})).as_deref(),
+            Some("/a")
+        );
+        assert_eq!(
+            entry_command(&json!({"command": ["/b", "mcp"]})).as_deref(),
+            Some("/b")
+        );
+        assert_eq!(entry_command(&json!({})), None);
     }
 
     #[test]

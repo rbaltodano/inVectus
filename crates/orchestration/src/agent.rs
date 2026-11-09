@@ -41,15 +41,14 @@ impl Default for Agent {
     }
 }
 
-/// The handshake's client name as a stable id for provenance. Codex introduces itself as
-/// `codex-mcp-client` and Grok Build as `grok-shell-<server name>` (`grok-shell-invectus`); each
-/// is recorded under its connect client id (`codex`, `grok`).
+/// The handshake's client name as a stable id for provenance: a known client's name is
+/// recorded under its connect client id (Codex's `codex-mcp-client` as `codex`, Grok Build's
+/// `grok-shell-<server name>` as `grok`; see the aliases in `connect::CLIENTS`); any other name
+/// is kept as given.
 pub fn client_id(name: &str) -> String {
-    match name.trim() {
-        "codex-mcp-client" => "codex".into(),
-        n if n.starts_with("grok-shell-") => "grok".into(),
-        other => other.to_string(),
-    }
+    crate::connect::Client::from_handshake(name)
+        .map(|c| c.as_str().to_string())
+        .unwrap_or_else(|| name.trim().to_string())
 }
 
 /// Job changes are logged to stderr; agents follow progress with `job_status`.

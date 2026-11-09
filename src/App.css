@@ -944,3 +944,12 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .sidebar .project-row-sub { font-size: 11px; }
 .sidebar .side-bottom { gap: 16px; padding-top: 20px; }
 .sidebar .job-line { border-color: var(--line); border-radius: 7px; background: color-mix(in srgb, var(--surface) 35%, var(--bg)); }
+
+/* Connect an AI agent: client rows from the catalog */
+.connect-client { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.connect-client-mark { display: inline-flex; flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--text); }
+.connect-unverified { margin-left: 8px; vertical-align: 1px; }
+.connect-more > summary { cursor: pointer; padding: 12px 0 0; color: var(--text-2); font-size: 13px; }
+.connect-custom { gap: 8px; }
+.connect-custom input:first-child { flex: 1 1 260px; min-width: 0; }
+.connect-custom input:nth-child(2) { flex: 0 1 140px; min-width: 0; }

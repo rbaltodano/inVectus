@@ -95,10 +95,18 @@ export interface SavedBookmark {
 }
 export interface SavedDecision { core_key: string; label: string; gap_id: number | null; verdict: GapVerdictRecord }
 export interface SavedOverview { bookmarks: SavedBookmark[]; decisions: SavedDecision[] }
-export type AgentClient = "claude-code" | "claude-desktop" | "codex" | "cursor" | "grok";
+/** A client id from the backend's catalog (`connect_clients`), or "custom". */
+export type AgentClient = string;
+/** One client inVectus can connect, from `connect_clients`. */
+export interface ClientInfo {
+  id: string; display_name: string; aliases: string[]; featured: boolean; checked: boolean;
+  how: string; method: "file" | "command"; config_file: string | null; has_account: boolean;
+}
+/** A client that is not listed: its JSON configuration file and the key holding its servers. */
+export interface CustomClient { file: string; key: string }
 export interface ConnectPlan {
   client: AgentClient; display_name: string; binary: string; method: "file" | "command";
-  config_file: string | null; current: unknown; entry: unknown; command: string[] | null;
+  config_file: string | null; config_key: string | null; current: unknown; entry: unknown; command: string[] | null;
   up_to_date: boolean; manual: string; notes: string[];
 }
 export interface ConnectStatus {
@@ -167,10 +175,11 @@ export const api = {
   removeBookmark: (t: TableRef, kind: string, coreKey: string) => invoke<void>("remove_gap_bookmark", { form: t, kind, coreKey }),
   describe: (t: TableRef, gapId: number, at: number | null) => invoke<DescribeResult>("describe_gap", { form: t, gapId, t: at }),
   verify: (t: TableRef, gapId: number) => invoke<Verification>("verify_gap", { form: t, gapId, network: false }),
-  // Connect an AI agent (no screen yet): plan shows the change; apply makes it.
-  connectPlan: (client: AgentClient) => invoke<ConnectPlan>("connect_plan", { client }),
-  connectApply: (client: AgentClient) => invoke<string>("connect_apply", { client }),
-  connectRemove: (client: AgentClient) => invoke<string>("connect_remove", { client }),
+  // Connect an AI agent: plan shows the change; apply makes it. `custom` takes a file and key.
+  connectClients: () => invoke<ClientInfo[]>("connect_clients"),
+  connectPlan: (client: AgentClient, custom?: CustomClient) => invoke<ConnectPlan>("connect_plan", { client, file: custom?.file ?? null, key: custom?.key ?? null }),
+  connectApply: (client: AgentClient, custom?: CustomClient) => invoke<string>("connect_apply", { client, file: custom?.file ?? null, key: custom?.key ?? null }),
+  connectRemove: (client: AgentClient, custom?: CustomClient) => invoke<string>("connect_remove", { client, file: custom?.file ?? null, key: custom?.key ?? null }),
   connectStatus: () => invoke<ConnectStatus[]>("connect_status"),
   starRepository: () => invoke<"starred" | "unavailable">("star_repository"),
   connectAccount: (client: AgentClient) => invoke<AgentAccount | null>("connect_account", { client }),

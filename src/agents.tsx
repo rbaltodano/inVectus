@@ -3,9 +3,9 @@
 // recent ones so the sidebar, the project header and Settings can show what agents are doing.
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { inTauri } from "./api";
 import AgentIcon from "./AgentIcon";
-import { clientName } from "./agentIdentity";
+import { clientName, registerClients } from "./agentIdentity";
+import { api, inTauri } from "./api";
 
 import { describe, recordActivity, type AgentActivity } from "./agent-activity";
 export { describe, type AgentActivity } from "./agent-activity";
@@ -19,6 +19,8 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<AgentActivity[]>([]);
   useEffect(() => {
     if (!inTauri) return;
+    // Client names for the sidebar and attributions; a failure keeps the built-in names.
+    api.connectClients().then(registerClients).catch(() => undefined);
     const un = listen<AgentActivity>("agent-activity", (e) => setEvents((xs) => recordActivity(xs, e.payload)));
     return () => { un.then((f) => f()); };
   }, []);

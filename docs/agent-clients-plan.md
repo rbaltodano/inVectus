@@ -1,6 +1,6 @@
 # Plan: support many agent clients in Settings
 
-Status: proposal (2026-11-08). Not built. Source studied: T3 Code
+Status: Phases 1–2 built 2026-11-09 (see PROGRESS.md). Phase 3 deferred to post-launch. Source studied: T3 Code
 (`github.com/pingdotgg/t3code`, commit `0770446`, MIT).
 
 ## 1. How T3 Code does it

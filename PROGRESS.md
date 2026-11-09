@@ -2726,3 +2726,42 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   terminal access, deny other permissions by default, run in the project folder only, refuse
   under `--offline`. Agents launched by inVectus would conflict with SPEC §7.8 as written;
   update the spec before building Phase 3.
+
+## 2026-11-09 — Agent client catalog, four new clients, custom client (plan phases 1–2)
+
+- `invectus-orchestration::connect` now uses one table, `CLIENTS`, in place of the `Client`
+  enum and its `match` arms (`docs/agent-clients-plan.md`). Each entry gives the client's id,
+  name, handshake aliases, featured flag, checked flag, method (JSON file with key and entry
+  shape, or the client's own `mcp add`) and account probe. The five existing clients keep their
+  ids, order, commands and files. `agent::client_id` maps handshake names through the aliases:
+  the same results as before for `codex-mcp-client` and `grok-shell-*`, now case-insensitive.
+  Claude Desktop's `claude-ai` is still recorded as given.
+- New clients, configured from their documentation and **unverified** (no session run through
+  them):
+  - Gemini CLI: `~/.gemini/settings.json`, `mcpServers`.
+  - Kiro: `~/.kiro/settings/mcp.json`, `mcpServers`.
+  - LM Studio: `~/.lmstudio/mcp.json`, `mcpServers`. The file exists on the owner's Mac.
+  - VS Code: user `mcp.json` in the app settings folder, `servers`, entry
+    `{type: "stdio", command, args}`.
+  - Windows and Linux paths are unverified.
+- Skipped:
+  - opencode: the current docs show `mcp.servers`, while older configs use `mcp.<name>`.
+  - Windsurf: its docs moved to Devin and give no path.
+  - Zed: its settings file is JSONC.
+  - Cline: its file sits in VS Code extension storage.
+- **Other client:** `invectus connect add custom --file <abs .json> [--key mcpServers]` and an
+  "Other client" row in Settings merge the standard entry into any JSON file. Only an absolute
+  `.json` path and a plain key are accepted; files are backed up as for the listed clients.
+- New `invectus connect clients [--json]` and Tauri `connect_clients`. Settings renders rows
+  from the catalog: featured, found or connected clients first, the rest under "More clients",
+  and an "Unverified" tag on clients not checked. Client names in the sidebar and attributions
+  come from the catalog.
+- Behaviour change: a JSON client now counts as found when its config file **or its folder**
+  exists (before: the file only).
+- Icons: Grok, Kiro and VS Code marks added from T3 Code (MIT, already credited). Grok
+  previously showed the generic icon. Gemini CLI and LM Studio have no mark yet and show the
+  generic icon.
+- Checks (macOS, M-series): `cargo test --workspace --release` passed, with 6 new connect
+  tests. Clippy `-D warnings`, `cargo fmt --check` and `npm run build` passed. Read-only CLI smoke
+  test: `connect clients`, `connect status` (offline) and `connect add vscode` printed the
+  expected plan, and nothing was written. The Settings screen was not checked visually.

@@ -1,17 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Check, Database, Globe, Layers, Monitor, Moon, Palette, Search, ShieldCheck, SlidersHorizontal, Sun, X } from "lucide-react";
+import { Check, Database, Layers, Monitor, Moon, Search, SlidersHorizontal, Sun, X } from "lucide-react";
 import { SETTINGS_SECTIONS, searchSettings, settingsTabIndex, type SettingsSection } from "../settingsNavigation";
 import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type ProjectInfo, type Weights } from "../api";
 import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
 import ConnectAgents from "./ConnectAgents";
+import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 
 /** Gap-score weights per project, kept on this computer; scans read them. */
 export const weightsKey = (root: string) => `invectus.weights.${root}`;
-
-const SECTION_ICONS = { appearance: Palette, models: Database, agents: Bot, network: Globe, scoring: SlidersHorizontal, calibration: ShieldCheck, embedding: Layers };
 
 const WEIGHT_LABEL: [keyof Weights, string][] = [
   ["coverage_ratio", "Demand per coverage item"], ["demand_since", "Demand since the last coverage"], ["momentum", "Momentum"],
@@ -20,6 +19,7 @@ const WEIGHT_LABEL: [keyof Weights, string][] = [
 
 export default function Settings({ project, setProject }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void }) {
   const [section, setSection] = useState<SettingsSection>("appearance");
+  const { tabsRef, tabIndicator } = useTabIndicator(section, true);
   const [query, setQuery] = useState("");
   const content = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -76,9 +76,8 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
         </div>}
       </div>
     </header>
-    <div role="tablist" aria-label="Settings categories" className="settings-tabs">
+    <div ref={tabsRef} role="tablist" aria-label="Settings categories" className="project-tabs settings-tabs">
       {SETTINGS_SECTIONS.map((s, index) => {
-        const Icon = SECTION_ICONS[s.id];
         return <button type="button" role="tab" id={`settings-tab-${s.id}`} key={s.id} aria-label={s.label} title={s.label}
           aria-selected={section === s.id} tabIndex={section === s.id ? 0 : -1}
           aria-controls={`settings-section-${s.id}`} onClick={() => selectSection(s.id)}
@@ -89,9 +88,10 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             const tab = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next];
             tab?.focus(); tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
           }}>
-          <Icon size={14} aria-hidden="true" /><span>{s.label}</span>
+          <span className="tab-code">{String(index + 1).padStart(2, "0")}</span>{s.label}
         </button>;
       })}
+      <TabIndicator geometry={tabIndicator} />
     </div>
     <div className="settings-main">
       <div className="settings-content" ref={content}>

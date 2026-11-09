@@ -2698,3 +2698,20 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   text size and interface density; a reduced-motion override; local job completion/failure
   notifications; model/cache locations and disk usage; backup reminders before upgrades.
 - No push, CI dispatch, model/dataset download, or real agent reconfiguration.
+
+## 2026-11-08 — Settings tabs match project tabs
+
+- Settings tabs now reuse the project tab styling: numbered labels, typography, spacing
+  and a one-pixel indicator sized to the label. Extracted the existing measurement and
+  ResizeObserver logic into `TabIndicator.tsx`, shared by project and settings tabs.
+  Both use the same 200 ms transform/width/top transitions and reduced-motion rule.
+- Settings reveals the selected tab when searching or navigating to a tab outside the
+  visible scroll area. Existing project-tab behavior and all settings actions remain.
+- Frontend build and all 37 UI tests passed. Isolated Chrome fixture checks confirmed
+  label-width geometry, 200 ms transitions actually starting and moving in both tab bars,
+  offscreen settings-tab reveal and the reduced-motion override; existing settings
+  interaction checks also passed. Native macOS UI bundle build passed with the existing
+  unwind-table warning, using the previously documented UI-only rebuild procedure.
+- Relaunched the bundle and opened Settings before the owner requested no further
+  computer use. Visual verification is left to the owner going forward. No preference
+  values were changed, no push or CI dispatch, and no model/dataset downloads.

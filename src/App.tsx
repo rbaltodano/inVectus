@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, inTauri, local, pickProject, pickSource, type GapView, type JobInfo, type MapData, type MapPoint, type ProjectInfo, type TableInfo, type TableRef } from "./api";
 import { listen } from "@tauri-apps/api/event";
 import { JobsProvider, isRunning, useJobs } from "./jobs";
@@ -13,6 +13,7 @@ import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
 import WorkspaceSplit from "./WorkspaceSplit";
 import Settings from "./screens/Settings";
+import TabIndicator, { useTabIndicator } from "./TabIndicator";
 import StarPrompt from "./StarPrompt";
 import { ArrowLeft, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
@@ -281,26 +282,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const [mapRevision, setMapRevision] = useState(0);
   const initialTab = pageTab(initialStack[initialStack.length - 1]);
   const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number; top: number }>();
-  useLayoutEffect(() => {
-    const tabs = tabsRef.current;
-    if (!tabs) return;
-    const measure = () => {
-      const selected = tabs.querySelector<HTMLElement>('[aria-selected="true"]');
-      if (!selected) return;
-      const style = getComputedStyle(selected);
-      const leftPadding = parseFloat(style.paddingLeft), rightPadding = parseFloat(style.paddingRight);
-      const next = { left: selected.offsetLeft + leftPadding, width: selected.offsetWidth - leftPadding - rightPadding,
-        top: selected.offsetTop + selected.offsetHeight - parseFloat(style.paddingBottom) + 6 };
-      setTabIndicator((previous) => previous?.left === next.left && previous.width === next.width && previous.top === next.top ? previous : next);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(tabs);
-    tabs.querySelectorAll('button[role="tab"]').forEach((button) => observer.observe(button));
-    return () => observer.disconnect();
-  }, [activeTab]);
+  const { tabsRef, tabIndicator } = useTabIndicator(activeTab);
   const [tabStacks, setTabStacks] = useState<TabStacks>(() => ({
     [initialTab]: initialTab === "collections" && initialStack[initialStack.length - 1].kind === "import"
       ? [{ kind: "index" }, initialStack[initialStack.length - 1]] : [initialStack[initialStack.length - 1]],
@@ -442,7 +424,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
                 const next = tabKeyIndex(e.key, i);
                 if (next !== undefined) { e.preventDefault(); selectTab(PROJECT_TABS[next].id); document.getElementById(`tab-${PROJECT_TABS[next].id}`)?.focus(); }
               }}><span className="tab-code">{String(i + 1).padStart(2, "0")}</span>{tab.label}</button>)}
-            {tabIndicator && <span className="project-tab-indicator" aria-hidden="true" style={{ width: tabIndicator.width, top: tabIndicator.top, transform: `translateX(${tabIndicator.left}px)` }} />}
+            <TabIndicator geometry={tabIndicator} />
           </div>
         <IndexingIndicator job={job} />
         </div>

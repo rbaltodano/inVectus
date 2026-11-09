@@ -2646,3 +2646,9 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Run [42532458660](https://github.com/rbaltodano/inVectus/actions/runs/42532458660)
   has started its desktop and spike builds on macOS, Windows and Linux. Results are
   pending; no additional platform verification is claimed. `multimodal.yml` was not run.
+
+## 2026-11-08 — Website linked from GitHub
+
+- At the owner's request, added `https://invectus.app` to the repository's About website
+  field and near the top of README.md. The live HTTPS page returned HTTP 200, has the
+  inVectus title, and links back to this repository. No website content changed or CI run.

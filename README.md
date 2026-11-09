@@ -10,6 +10,8 @@
 
 # inVectus
 
+[Website](https://invectus.app)
+
 **Explore a collection. Find areas with limited coverage. Inspect the evidence.**
 
 inVectus is a local-first desktop research tool that maps document collections,

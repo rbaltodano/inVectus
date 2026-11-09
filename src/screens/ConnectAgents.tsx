@@ -1,5 +1,5 @@
 // Settings → Connect an AI agent (target product §5.1, A6). The clients come from the backend's
-// catalog (`connect_clients`, after T3 Code's provider registry): featured and detected clients
+// catalog (`connect_clients`): featured and detected clients
 // first, the rest under "More clients", and an "Other client" entry for any client that reads a
 // JSON file. Connecting shows the exact change first (the file and entry, or the command) and
 // makes it only after "Make this change". Below, the agents' recent calls through this app.

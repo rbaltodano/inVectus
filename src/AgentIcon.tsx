@@ -1,15 +1,12 @@
-// Agent client marks for the sidebar, Settings and attributions, so you can see at a glance which
-// agent works in a project. The Claude, OpenAI, Cursor, Grok, Kiro and VS Code paths come from
-// T3 Code (MIT, Copyright (c) 2026 T3 Tools Inc.; docs/licenses/T3-Code-MIT.txt). The marks are
-// their owners' trademarks, used only to name the client. Clients without a mark here (Gemini
-// CLI, LM Studio, other clients) show a generic agent icon.
+// Agent client marks (licences in docs/licenses). The marks are their owners' trademarks, used
+// only to name the client; other clients get a generic agent icon.
 import { useId } from "react";
 import { Bot } from "lucide-react";
 
-type MarkPath = { d: string; fill?: string; evenodd?: boolean };
+type MarkPath = { d: string; fill?: string; evenodd?: boolean; opacity?: number };
 /** `fill` is the default for paths without their own; `mask` clips every path to a shape. */
 type Mark = { viewBox: string; fill: string; paths: MarkPath[]; mask?: string };
-type MarkName = "claude" | "openai" | "cursor" | "grok" | "kiro" | "vscode";
+type MarkName = "claude" | "openai" | "cursor" | "grok" | "kiro" | "vscode" | "gemini" | "lmstudio";
 
 const MARKS: Record<MarkName, Mark> = {
   claude: { viewBox: "0 0 256 257", fill: "#d97757", paths: [{ d: "m50.228 170.321 50.357-28.257.843-2.463-.843-1.361h-2.462l-8.426-.518-28.775-.778-24.952-1.037-24.175-1.296-6.092-1.297L0 125.796l.583-3.759 5.12-3.434 7.324.648 16.202 1.101 24.304 1.685 17.629 1.037 26.118 2.722h4.148l.583-1.685-1.426-1.037-1.101-1.037-25.147-17.045-27.22-18.017-14.258-10.37-7.713-5.25-3.888-4.925-1.685-10.758 7-7.713 9.397.649 2.398.648 9.527 7.323 20.35 15.75L94.817 91.9l3.889 3.24 1.555-1.102.195-.777-1.75-2.917-14.453-26.118-15.425-26.572-6.87-11.018-1.814-6.61c-.648-2.723-1.102-4.991-1.102-7.778l7.972-10.823L71.42 0 82.05 1.426l4.472 3.888 6.61 15.101 10.694 23.786 16.591 32.34 4.861 9.592 2.592 8.879.973 2.722h1.685v-1.556l1.36-18.211 2.528-22.36 2.463-28.776.843-8.1 4.018-9.722 7.971-5.25 6.222 2.981 5.12 7.324-.713 4.73-3.046 19.768-5.962 30.98-3.889 20.739h2.268l2.593-2.593 10.499-13.934 17.628-22.036 7.778-8.749 9.073-9.657 5.833-4.601h11.018l8.1 12.055-3.628 12.443-11.342 14.388-9.398 12.184-13.48 18.147-8.426 14.518.778 1.166 2.01-.194 30.46-6.481 16.462-2.982 19.637-3.37 8.88 4.148.971 4.213-3.5 8.62-20.998 5.184-24.628 4.926-36.682 8.685-.454.324.519.648 16.526 1.555 7.065.389h17.304l32.21 2.398 8.426 5.574 5.055 6.805-.843 5.184-12.962 6.611-17.498-4.148-40.83-9.721-14-3.5h-1.944v1.167l11.666 11.406 21.387 19.314 26.767 24.887 1.36 6.157-3.434 4.86-3.63-.518-23.526-17.693-9.073-7.972-20.545-17.304h-1.36v1.814l4.73 6.935 25.017 37.59 1.296 11.536-1.814 3.76-6.481 2.268-7.13-1.297-14.647-20.544-15.1-23.138-12.185-20.739-1.49.843-7.194 77.448-3.37 3.953-7.778 2.981-6.48-4.925-3.436-7.972 3.435-15.749 4.148-20.544 3.37-16.333 3.046-20.285 1.815-6.74-.13-.454-1.49.194-15.295 20.999-23.267 31.433-18.406 19.702-4.407 1.75-7.648-3.954.713-7.064 4.277-6.286 25.47-32.405 15.36-20.092 9.917-11.6-.065-1.686h-.583L44.07 198.125l-12.055 1.555-5.185-4.86.648-7.972 2.463-2.593 20.35-13.999-.064.065Z" }] },
@@ -27,6 +24,8 @@ const MARKS: Record<MarkName, Mark> = {
     { d: "m96.461 89.204-20.604 9.92a6.229 6.229 0 0 1-7.107-1.207l-67.451-61.5a4.167 4.167 0 0 1 .004-6.162l5.51-5.009a4.167 4.167 0 0 1 5.32-.236l81.228 61.62c2.725 2.067 6.639.124 6.639-3.297v.24a6.25 6.25 0 0 1-3.539 5.63Z", fill: "#007ACC" },
     { d: "M75.858 99.126a6.232 6.232 0 0 1-7.108-1.21c2.306 2.307 6.25.674 6.25-2.588V4.672c0-3.262-3.944-4.895-6.25-2.589a6.232 6.232 0 0 1 7.108-1.21l20.6 9.908A6.25 6.25 0 0 1 100 16.413v67.174a6.25 6.25 0 0 1-3.541 5.633l-20.601 9.906Z", fill: "#1F9CF0" },
   ] },
+  gemini: { viewBox: "0 0 24 24", fill: "#3186FF", paths: [{ d: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81" }] },
+  lmstudio: { viewBox: "0 0 24 24", fill: "currentColor", paths: [{ d: "M2.84 2a1.273 1.273 0 100 2.547h14.107a1.273 1.273 0 100-2.547H2.84zM7.935 5.33a1.273 1.273 0 000 2.548H22.04a1.274 1.274 0 000-2.547H7.935zM3.624 9.935c0-.704.57-1.274 1.274-1.274h14.106a1.274 1.274 0 010 2.547H4.898c-.703 0-1.274-.57-1.274-1.273zM1.273 12.188a1.273 1.273 0 100 2.547H15.38a1.274 1.274 0 000-2.547H1.273zM3.624 16.792c0-.704.57-1.274 1.274-1.274h14.106a1.273 1.273 0 110 2.547H4.898c-.703 0-1.274-.57-1.274-1.273zM13.029 18.849a1.273 1.273 0 100 2.547h9.698a1.273 1.273 0 100-2.547h-9.698z", evenodd: true, opacity: 0.3 }, { d: "M2.84 2a1.273 1.273 0 100 2.547h10.287a1.274 1.274 0 000-2.547H2.84zM7.935 5.33a1.273 1.273 0 000 2.548H18.22a1.274 1.274 0 000-2.547H7.935zM3.624 9.935c0-.704.57-1.274 1.274-1.274h10.286a1.273 1.273 0 010 2.547H4.898c-.703 0-1.274-.57-1.274-1.273zM1.273 12.188a1.273 1.273 0 100 2.547H11.56a1.274 1.274 0 000-2.547H1.273zM3.624 16.792c0-.704.57-1.274 1.274-1.274h10.286a1.273 1.273 0 110 2.547H4.898c-.703 0-1.274-.57-1.274-1.273zM13.029 18.849a1.273 1.273 0 100 2.547h5.78a1.273 1.273 0 100-2.547h-5.78z", evenodd: true }] },
 };
 
 /** Which mark a client (a catalog id or a name from the MCP handshake) gets. */
@@ -38,6 +37,8 @@ export function markFor(client: string | null | undefined): MarkName | null {
   if (c.includes("grok")) return "grok";
   if (c.includes("kiro")) return "kiro";
   if (/vscode|visual studio code/.test(c)) return "vscode";
+  if (c.includes("gemini")) return "gemini";
+  if (/lm-?studio/.test(c)) return "lmstudio";
   return null;
 }
 
@@ -51,7 +52,7 @@ export default function AgentIcon({ client, size = 14 }: { client: string | null
       <path d={m.mask} fill="#fff" fillRule="evenodd" clipRule="evenodd" />
     </mask>}
     <g mask={m.mask ? `url(#${maskId})` : undefined}>
-      {m.paths.map((p, i) => <path key={i} d={p.d} fill={p.fill} fillRule={p.evenodd ? "evenodd" : undefined} clipRule={p.evenodd ? "evenodd" : undefined} />)}
+      {m.paths.map((p, i) => <path key={i} d={p.d} fill={p.fill} fillRule={p.evenodd ? "evenodd" : undefined} clipRule={p.evenodd ? "evenodd" : undefined} fillOpacity={p.opacity} />)}
     </g>
   </svg>;
 }

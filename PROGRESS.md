@@ -2759,8 +2759,9 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Behaviour change: a JSON client now counts as found when its config file **or its folder**
   exists (before: the file only).
 - Icons: Grok, Kiro and VS Code marks added from T3 Code (MIT, already credited). Grok
-  previously showed the generic icon. Gemini CLI and LM Studio have no mark yet and show the
-  generic icon.
+  previously showed the generic icon. Gemini CLI's mark is from Simple Icons (CC0) and LM Studio's
+  from LobeHub Icons (MIT, `docs/licenses/LobeHub-Icons-MIT.txt`). Source credits were removed
+  from code comments at the owner's request; the licence files stay.
 - Checks (macOS, M-series): `cargo test --workspace --release` passed, with 6 new connect
   tests. Clippy `-D warnings`, `cargo fmt --check` and `npm run build` passed. Read-only CLI smoke
   test: `connect clients`, `connect status` (offline) and `connect add vscode` printed the

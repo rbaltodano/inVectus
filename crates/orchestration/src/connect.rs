@@ -4,9 +4,8 @@
 //! atomically; Claude Code, Codex and Grok Build are configured through their own `mcp add`
 //! commands.
 //!
-//! Every client is one entry in [`CLIENTS`] (after T3 Code's provider registry,
-//! `docs/agent-clients-plan.md`): its name, how it is configured, and how to ask who is signed
-//! in. Adding a client that takes a JSON file or an `mcp add` command is a new entry, not new
+//! Every client is one entry in [`CLIENTS`] (`docs/agent-clients-plan.md`): its name, how it
+//! is configured, and how to ask who is signed in. Adding a client that takes a JSON file or an `mcp add` command is a new entry, not new
 //! code. A client not listed can still be connected through [`plan_custom`].
 //!
 //! Sign-in is left to each client: inVectus never reads, stores or sends a token.

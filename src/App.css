@@ -818,7 +818,7 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 :root[data-theme="light"] .logo .logo-dark { display: none; }
 :root[data-theme="light"] .logo .logo-light { display: block; }
 
-/* Settings: horizontal tabs and grouped rows, inspired by T3 Code's settings surfaces. */
+/* Settings: horizontal tabs and grouped rows. */
 .settings-page { container: settings / inline-size; display: flex; flex-direction: column; max-width: none; min-height: 0; padding: 0; gap: 0; overflow: hidden; }
 .settings-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 28px 20px; flex: none; }
 .settings-title { display: flex; align-items: center; gap: 10px; color: var(--text); }

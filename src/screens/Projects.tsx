@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+import { ago } from "../ago";
 import { fmt, local, type JobInfo, type ProjectInfo } from "../api";
 import plusIcon from "../assets/icons/plus.svg";
 import LineArt from "../LineArt";
@@ -33,40 +35,48 @@ interface Props {
   onForget: (root: string) => void;
 }
 
-/** All projects as cards, most recently opened first. */
+/** All projects as ruled rows, most recently opened first; each reads like a collection. */
 export default function ProjectsPage({ current, recent, job, onPick, onNew, onOpen, onForget }: Props) {
   // A job in a project blocks switching to another one (the backend refuses); say so up front.
   const blocking = job?.state === "running" && job.project ? job : undefined;
-  return <div className="page">
+  return <div className="page projects-page">
     <div className="page-head">
-      <h1>Projects</h1>
+      <div className="projects-heading">
+        <p className="eyebrow">{recent.length > 0 ? `${fmt(recent.length)} on this computer` : "On this computer"}</p>
+        <h1>Projects</h1>
+      </div>
       <div className="row">
         <button type="button" className="btn" onClick={onOpen} disabled={!!blocking}>Open project…</button>
         <button type="button" className="btn primary" onClick={onNew} disabled={!!blocking}><img src={plusIcon} alt="" aria-hidden="true" />New project</button>
       </div>
     </div>
     {blocking && <p className="note">“{blocking.label}” is running; other projects open when it finishes or is cancelled.</p>}
-    {recent.length === 0 && <div className="empty-note empty-state"><LineArt kind="orbit" />
+    {recent.length === 0 && <div className="empty-state"><LineArt kind="orbit" />
       <span className="dim">No projects yet. Open an existing .invectus folder, or create one. A project is a folder on this computer holding one dataset, its index and map, and your decisions.</span>
     </div>}
-    <ul className="cards">
-      {recent.map((r) => {
+    {recent.length > 0 && <ul className="project-rows">
+      {recent.map((r, i) => {
         const open = current?.root === r.root;
         const disabled = !!blocking && blocking.project !== r.root;
-        return <li key={r.root} className="card">
-          <button type="button" className="card-open" onClick={() => onPick(r)} disabled={disabled} aria-current={open ? "true" : undefined}>
-            <span className="card-title">{r.name}</span>
-            <span className="path">{r.root.replace(/^\/Users\/[^/]+/, "~")}</span>
-            {r.warning && <span className="note small">Cloud-synced folder: sync can damage the database</span>}
-          </button>
-          <div className="card-foot">
-            {open && <span className="rule-line" aria-hidden="true" />}
-            <span>{fmt(r.items)} items</span>
-            <span className="index-status"><span className={`square ${r.models.length ? "on" : ""}`} aria-hidden="true" />{r.models.length ? "Indexed" : "Not indexed"}</span>
+        return <li key={r.root} className="project-row" data-open={open || undefined} style={{ "--i": Math.min(i, 12) } as CSSProperties}>
+          <div className="project-row-head">
+            <button type="button" className="project-row-open" onClick={() => onPick(r)} disabled={disabled} aria-current={open ? "true" : undefined}>
+              <h3>{r.name}</h3>
+            </button>
+            {open ? <span className="project-row-state on"><span className="mark full" aria-hidden="true" />Open now</span>
+              : <span className="index-status"><span className={`mark ${r.models.length ? "full" : "ring"}`} aria-hidden="true" />{r.models.length ? "Indexed" : "Not indexed"}</span>}
+            <button type="button" className="text-btn project-row-forget" onClick={() => onForget(r.root)} aria-label={`Remove ${r.name} from the list`}>Remove</button>
           </div>
-          <button type="button" className="card-forget" onClick={() => onForget(r.root)} aria-label={`Remove ${r.name} from the list`}>Remove</button>
+          <span className="path">{r.root.replace(/^\/Users\/[^/]+/, "~")}</span>
+          {r.warning && <span className="note small">Cloud-synced folder: sync can damage the database</span>}
+          <dl className="figures">
+            <div><dt>Items</dt><dd>{fmt(r.items)}</dd></div>
+            <div><dt>Collections</dt><dd>{fmt(r.collections)}</dd></div>
+            <div><dt>Models</dt><dd className={r.models.length ? "models" : "dim"} title={r.models.join(", ") || undefined}>{r.models.length ? r.models.join(", ") : "—"}</dd></div>
+            <div><dt>Opened</dt><dd>{ago(r.opened)}</dd></div>
+          </dl>
         </li>;
       })}
-    </ul>
+    </ul>}
   </div>;
 }

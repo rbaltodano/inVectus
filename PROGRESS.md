@@ -2715,3 +2715,14 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - Relaunched the bundle and opened Settings before the owner requested no further
   computer use. Visual verification is left to the owner going forward. No preference
   values were changed, no push or CI dispatch, and no model/dataset downloads.
+
+## 2026-11-09 — Agent client catalog plan (after T3 Code)
+
+- Added `docs/agent-clients-plan.md`, a proposal that is not built. Phase 1 replaces the
+  `Client` enum with one data-driven catalog. Phase 2 adds more MCP clients plus a custom
+  entry. Phase 3 has inVectus launch agents through ACP.
+- **Decision (owner, 2026-11-09):** Phase 3 waits until after launch. If it is built, build
+  only the narrow version: agents already installed, no registry or `npx` downloads, no file or
+  terminal access, deny other permissions by default, run in the project folder only, refuse
+  under `--offline`. Agents launched by inVectus would conflict with SPEC §7.8 as written;
+  update the spec before building Phase 3.

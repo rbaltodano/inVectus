@@ -101,7 +101,22 @@ registration styles, so a data-driven catalog covers the long tail without per-c
    - One generic `ClientRow` component draws every row from the catalog.
    - Account checks run only for entries with `has_account`, as now.
 
-### Phase 3 (optional, needs an owner decision): host agents through ACP
+### Phase 3 (post-launch, owner 2026-11-09): host agents through ACP
+
+Deferred until after launch. If it is built, build only the narrow version:
+
+- launch agents that are already installed and signed in; never download agents from the ACP
+  Registry and never install them through `npx`/`uvx`;
+- offer the agent no file or terminal access, so it works only through `invectus mcp` tools;
+- deny all other permission requests by default;
+- run the agent in the project folder only;
+- refuse to start under `--offline`.
+
+Why: downloading agents brings supply-chain risk, granting file or terminal access makes
+inVectus responsible for what the agent changes, and prompt injection from collection
+documents is more dangerous when the agent has broad permissions.
+
+The rest of this section is the original proposal.
 
 T3 Code's ACP route would let inVectus start an agent itself. ACP's `session/new` accepts
 `mcpServers`, so we could attach `invectus mcp` and run "describe these gaps" or "name these

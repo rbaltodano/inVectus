@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Database, Layers, Monitor, Moon, Search, SlidersHorizontal, Sun, X } from "lucide-react";
-import { SETTINGS_SECTIONS, searchSettings, settingsTabIndex, type SettingsSection } from "../settingsNavigation";
+import { SETTINGS_SECTIONS, searchSettings, settingsSection, settingsTabIndex, type SettingsSection } from "../settingsNavigation";
 import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type ProjectInfo, type Weights } from "../api";
 import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
@@ -18,13 +18,13 @@ const WEIGHT_LABEL: [keyof Weights, string][] = [
 ];
 
 export default function Settings({ project, setProject }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void }) {
-  const [section, setSection] = useState<SettingsSection>("appearance");
+  const [section, setSection] = useState<SettingsSection>(() => settingsSection(local.get("invectus.settings.section", "appearance")));
   const { tabsRef, tabIndicator } = useTabIndicator(section, true);
   const [query, setQuery] = useState("");
   const content = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const current = SETTINGS_SECTIONS.find((s) => s.id === section)!;
-  const selectSection = (id: SettingsSection) => { setSection(id); content.current?.scrollTo({ top: 0 }); };
+  const selectSection = (id: SettingsSection) => { setSection(id); local.set("invectus.settings.section", id); content.current?.scrollTo({ top: 0 }); };
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [llms, setLlms] = useState<LlmInfo[]>([]);

@@ -41,8 +41,9 @@ example below uses the separately reproducible fictional Urban Futures demo.*
   Optional model downloads and PubMed/OpenAlex checks require explicit network access.
 - **Use the same engine from the terminal.** The desktop app and `invectus` CLI
   share the Rust workspace.
-- **Work through an AI agent (experimental).** Claude Code, Claude Desktop, Codex
-  and Cursor can search, check ideas, list gaps and suggest decisions through MCP.
+- **Work through an AI agent (experimental).** Claude Code, Codex, Cursor, Claude
+  Desktop, Grok Build and other MCP clients can search, check ideas, list gaps and
+  suggest decisions.
 
 ## Use it from an AI agent (experimental)
 
@@ -51,6 +52,7 @@ stdio. inVectus opens no network port, and the agent's suggestions wait for your
 decision. Connect a client in **Settings → Connect an AI agent**, or from the terminal:
 
 ```sh
+invectus connect clients           # every client, and how each one is configured
 invectus connect add claude-code   # shows the change; add --yes to make it
 invectus connect status            # which clients are connected, and signed in how
 ```
@@ -62,6 +64,11 @@ invectus connect status            # which clients are connected, and signed in 
 | Grok Build | Runs `grok mcp add --scope user invectus -- <path>/invectus mcp` |
 | Claude Desktop | Adds one entry to its config file; also installable as a `.mcpb` bundle |
 | Cursor | Adds one entry to `~/.cursor/mcp.json` |
+| Gemini CLI | Adds one entry to `~/.gemini/settings.json` |
+| Kiro | Adds one entry to `~/.kiro/settings/mcp.json` |
+| LM Studio | Adds one entry to `~/.lmstudio/mcp.json` |
+| VS Code | Adds one entry to the user `mcp.json`, under `servers` |
+| Other | Adds the same kind of entry to a JSON file you name |
 
 **Privacy.** The agent uses your own Claude, ChatGPT or Grok plan, or API key,
 through its own app. inVectus never reads, stores or sends tokens or credential
@@ -73,7 +80,9 @@ changed only after you approve the exact change; other entries are kept and the
 old file is saved as a backup.
 
 Connecting and the sign-in check are tested with stand-in clients and checked on
-one Mac; full agent sessions in each client are not yet verified.
+one Mac; full agent sessions in each client are not yet verified. Gemini CLI, Kiro,
+LM Studio and VS Code are configured from their documentation, and no session has
+been checked through them. Paths for those files on Windows and Linux are unverified.
 
 ## A typical workflow
 

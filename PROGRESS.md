@@ -2766,3 +2766,41 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   tests. Clippy `-D warnings`, `cargo fmt --check` and `npm run build` passed. Read-only CLI smoke
   test: `connect clients`, `connect status` (offline) and `connect add vscode` printed the
   expected plan, and nothing was written. The Settings screen was not checked visually.
+
+## 2026-11-09 — Remember the last tab; document the client catalog
+
+- Reopening a project restores its last section (Search, Gaps, Saved or Collections).
+  The choice is per project in local storage (`invectus.tab.<root>`). A new project
+  that starts on an import, and a search opened with a query, still land on that page.
+  Detail pages are not restored. Settings restores its last category the same way
+  (`invectus.settings.section`); a stored id that no longer exists opens Appearance.
+- Settings search now matches Gemini CLI, Kiro, LM Studio and VS Code. README lists
+  those clients, the other-client path, and that their sessions and Windows/Linux
+  paths are unverified.
+- UI tests cover the restore rules and the new search terms. Frontend build was run
+  with those tests. Native window not rechecked.
+
+## 2026-11-09 — Import and path cleanup for beta
+
+- Column mapping no longer treats a short name as a substring. `width` and `valid` are
+  not chosen as the id, and `context` is not chosen as the text. A match is the whole
+  column name or one word in it (`paper_id`, `full_text`, `publication_date`).
+- File names and new-project paths use the last segment of either `/` or `\`. Creating a
+  project waits until a folder is set, so an empty location is not saved as `/<name>`.
+- After import, “Go to the collection” opens that collection. The network switch reports
+  pressed when the network is actually on.
+- CLI `--offline` help and the network-gate comment now include model downloads, PubMed
+  and OpenAlex checks, and client sign-in probes. Import, embedding, search, regions and
+  gap scans stay local.
+- Checks: 43 UI tests, `tsc --noEmit`, and `cargo fmt --check` for `invectus-core` and
+  `invectus-cli`. Not checked in the native window, and not run on Windows.
+
+## 2026-11-09 — Projects page matches Collections
+
+- Projects are ruled rows instead of filled cards: the name in light sans, the folder in mono,
+  then figures for items, collections, models and when the project was last opened
+  (`src/ago.ts`). The open project carries an "Open now" accent mark; Remove sits at the end of
+  the title line. Rows stagger in like gap results, and stay still under reduced motion.
+  Unused card styles were removed (commit 81a40c1).
+- Checks: 46 UI tests and `npm run build`. Not checked in the native window: the release
+  bundle in `target/release/bundle` predates the change, and its rebuild was stopped.

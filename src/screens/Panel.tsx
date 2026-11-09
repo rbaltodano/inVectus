@@ -44,7 +44,7 @@ export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: 
     {searchPage && <div className="stack gap-s" hidden={shown.kind !== "search"}>
       <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && shown.kind === "search"} />
     </div>}
-    {shown.kind === "import" && <Import ctx={ctx} initialPath={shown.path} onCancel={ctx.back} onDone={() => ctx.back()} />}
+    {shown.kind === "import" && <Import ctx={ctx} initialPath={shown.path} onCancel={ctx.back} onDone={(collection) => ctx.push({ kind: "index", collection })} />}
     {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={shown.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
     {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={shown.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} active={active && shown.kind === "gaps"} /></div>}
     {shown.kind === "saved" && <SavedPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} active={active} />}

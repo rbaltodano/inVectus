@@ -1,5 +1,6 @@
-//! Network gate. Inference and search never touch the network; only explicit commands (model
-//! download) call [`ensure_online`], which hard-fails in offline mode (SPEC §7.7).
+//! Network gate. Import, embedding, search, regions and gap scans never call the network.
+//! Model downloads and outside-source checks call [`ensure_online`]. GitHub starring and client
+//! sign-in probes check [`offline`]. Both refuse the work when offline mode is set (SPEC §7.7).
 
 use anyhow::{Result, bail};
 

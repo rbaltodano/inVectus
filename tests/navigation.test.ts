@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { navigateTo, returnFromDetail, pageTab, tabKeyIndex, PROJECT_TABS, type TabStacks } from "../src/navigation.ts";
+import { navigateTo, openingTab, returnFromDetail, pageTab, tabKeyIndex, PROJECT_TABS, type TabStacks } from "../src/navigation.ts";
+
+test("a plain open restores the last section; an import or a query does not", () => {
+  assert.equal(openingTab([{ kind: "search" }], "gaps"), "gaps");
+  assert.equal(openingTab([{ kind: "search" }], "saved"), "saved");
+  assert.equal(openingTab([{ kind: "search" }], "not-a-tab"), "search");
+  assert.equal(openingTab([{ kind: "search" }], undefined), "search");
+  assert.equal(openingTab([{ kind: "search", query: "retina" }], "gaps"), "search");
+  assert.equal(openingTab([{ kind: "search" }, { kind: "import", path: "/tmp/papers.csv" }], "saved"), "collections");
+});
 
 test("project destinations map to the correct tabs", () => {
   assert.equal(pageTab({ kind: "search" }), "search");

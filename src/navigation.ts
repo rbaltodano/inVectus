@@ -9,6 +9,18 @@ export const PROJECT_TABS: { id: ProjectTab; label: string; page: Page }[] = [
 ];
 export const pageTab = (p: Page): ProjectTab => p.kind === "saved" ? "saved" : p.kind === "search" ? "search" : p.kind === "gaps" || p.kind === "gap" ? "gaps" : p.kind === "index" || p.kind === "import" ? "collections" : "search";
 
+export function projectTab(value: unknown): ProjectTab | undefined {
+  return PROJECT_TABS.some((tab) => tab.id === value) ? value as ProjectTab : undefined;
+}
+
+/** A plain open restores the last section. An import or a search with a query wins over that memory. */
+export function openingTab(initialStack: Page[], remembered: unknown): ProjectTab {
+  const last = initialStack[initialStack.length - 1];
+  if (!last) return "search";
+  const plain = initialStack.length === 1 && last.kind === "search" && last.query === undefined;
+  return plain ? projectTab(remembered) ?? "search" : pageTab(last);
+}
+
 
 export type TabStacks = Partial<Record<ProjectTab, Page[]>>;
 

@@ -16,7 +16,8 @@ import Settings from "./screens/Settings";
 import TabIndicator, { useTabIndicator } from "./TabIndicator";
 import StarPrompt from "./StarPrompt";
 import { ArrowLeft, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
-import { PROJECT_TABS, pageTab, navigateTo, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
+import { PROJECT_TABS, pageTab, navigateTo, openingTab, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
+import { baseName, joinPath } from "./paths";
 import "./App.css";
 
 /** A page beside the circle; Saved and Gaps retain their own detail return paths. */
@@ -213,7 +214,7 @@ function rowFact(r: Recent, job?: JobInfo): string {
 
 function JobLine({ job, recent }: { job: JobInfo; recent: Recent[] }) {
   const cancel = useAction();
-  const name = job.project ? recent.find((r) => r.root === job.project)?.name ?? job.project.split("/").pop() : "all projects";
+  const name = job.project ? recent.find((r) => r.root === job.project)?.name ?? baseName(job.project) : "all projects";
   const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
   return <div className="job-line" aria-live="polite">
     <span>{job.label}</span>
@@ -234,10 +235,11 @@ function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?
   const create = async (source?: string) => {
     setError(undefined); setBusy(true);
     try {
-      const stem = source?.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+      const stem = source ? baseName(source).replace(/\.[^.]+$/, "") : "";
       const n = name.trim() || stem;
       if (!n) { setError("Name the project, or pick a dataset to name it after."); return; }
-      const p = await api.open(`${dir.replace(/\/$/, "")}/${n}`, true);
+      if (!dir.trim()) { setError("Choose a folder for the project."); return; }
+      const p = await api.open(joinPath(dir, n), true);
       onCreated(p, source ? { kind: "import", path: source } : undefined);
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   };
@@ -253,10 +255,10 @@ function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?
         <div className="menu-card stack gap">
           <label className="field">Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Medical school research topic" /></label>
           <label className="field">Location<input value={dir} onChange={(e) => setDir(e.target.value)} /></label>
-          <span className="dim small">{name.trim() ? `${tilde(dir.replace(/\/$/, ""))}/${name.trim()}.invectus` : "Everything stays on this computer. Avoid iCloud, Dropbox and OneDrive folders."}</span>
+          <span className="dim small">{name.trim() && dir.trim() ? `${tilde(joinPath(dir, name.trim()))}.invectus` : "Everything stays on this computer. Avoid iCloud, Dropbox and OneDrive folders."}</span>
         </div>
-        <button type="button" className="menu-row" onClick={() => pick(true)} disabled={busy || !!blocked}>Choose a folder instead</button>
-        <button type="button" className="menu-row" onClick={() => create()} disabled={busy || !name.trim() || !!blocked}>Create without data</button>
+        <button type="button" className="menu-row" onClick={() => pick(true)} disabled={busy || !dir.trim() || !!blocked}>Choose a folder instead</button>
+        <button type="button" className="menu-row" onClick={() => create()} disabled={busy || !dir.trim() || !name.trim() || !!blocked}>Create without data</button>
         {blocked && <p className="note">“{blocked.label}” is running; a new project can open when it finishes.</p>}
         {error && <p className="err" role="alert">{error}</p>}
       </aside>
@@ -280,13 +282,14 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const gapsRequest = useRef(0);
   const [dataRevision, setDataRevision] = useState(0);
   const [mapRevision, setMapRevision] = useState(0);
-  const initialTab = pageTab(initialStack[initialStack.length - 1]);
+  const initialPage = initialStack[initialStack.length - 1] ?? { kind: "search" as const };
+  const initialTab = openingTab(initialStack, local.get(`invectus.tab.${project.root}`, ""));
   const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
   const { tabsRef, tabIndicator } = useTabIndicator(activeTab);
-  const [tabStacks, setTabStacks] = useState<TabStacks>(() => ({
-    [initialTab]: initialTab === "collections" && initialStack[initialStack.length - 1].kind === "import"
-      ? [{ kind: "index" }, initialStack[initialStack.length - 1]] : [initialStack[initialStack.length - 1]],
-  }));
+  const [tabStacks, setTabStacks] = useState<TabStacks>(() => {
+    const page = pageTab(initialPage) === initialTab ? initialPage : PROJECT_TABS.find((tab) => tab.id === initialTab)!.page;
+    return { [initialTab]: initialTab === "collections" && page.kind === "import" ? [{ kind: "index" }, page] : [page] };
+  });
   const [tabMarks, setTabMarks] = useState<Partial<Record<ProjectTab, Marks>>>({});
   const marks = tabMarks[activeTab] ?? {};
   const stack = tabStacks[activeTab]!;
@@ -295,6 +298,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
     setTabStacks((prev) => prev[id] ? prev : { ...prev, [id]: [PROJECT_TABS.find((t) => t.id === id)!.page] });
     setActiveTab(id);
   };
+  useEffect(() => { local.set(`invectus.tab.${project.root}`, activeTab); }, [project.root, activeTab]);
   const setStack = (pages: Page[] | ((s: Page[]) => Page[]), tab = activeTab) =>
     setTabStacks((prev) => ({ ...prev, [tab]: typeof pages === "function" ? pages(prev[tab]!) : pages }));
   const [opts, setOpts] = useState({ showGaps: true, showLabels: false, showOutlines: false });
@@ -406,7 +410,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
     <header className="head">
       <div className="project-heading"><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1><ProjectName name={project.name} onSave={onRename} /></h1><div className="path">{tilde(project.root)}</div></div>
       <div className="head-actions">
-      <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={!project.network_enabled}
+      <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={project.network_enabled && !project.offline_env}
         onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
         title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
         {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button></div>

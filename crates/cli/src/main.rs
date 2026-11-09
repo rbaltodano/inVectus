@@ -36,8 +36,9 @@ use std::time::Instant;
     about = "inVectus engine: import, embed and search collections"
 )]
 struct Cli {
-    /// Refuse every network call (also: INVECTUS_OFFLINE=1). Import, embed and search never use
-    /// the network; only `models download` does.
+    /// Refuse network calls (also `INVECTUS_OFFLINE=1`). Import, embedding, search, regions and gap
+    /// scans stay local either way. This refuses model downloads, PubMed and OpenAlex checks, and
+    /// client sign-in probes.
     #[arg(long, global = true)]
     offline: bool,
     /// Installed-models folder (default: OS app-data folder, or INVECTUS_MODELS_DIR).

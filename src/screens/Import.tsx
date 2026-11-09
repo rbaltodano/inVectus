@@ -1,6 +1,8 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { api, fmt, inTauri, pickSource, ROLES, type ImportForm, type ImportOutcome, type Preview, type Role, type SourceInfo } from "../api";
+import { guessMapping } from "../column-guess";
+import { baseName, collectionIdFromPath } from "../paths";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
@@ -9,14 +11,6 @@ const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
 type Step = 0 | 1 | 2 | 3;
 
 interface Rule { value: string; role: Role }
-
-/** Guess a column for a field from common names. */
-function guess(columns: string[], names: string[]) {
-  const lower = columns.map((c) => c.toLowerCase());
-  for (const n of names) { const i = lower.indexOf(n); if (i >= 0) return columns[i]; }
-  for (const n of names) { const i = lower.findIndex((c) => c.includes(n)); if (i >= 0) return columns[i]; }
-  return "";
-}
 
 /** Add or update a collection: source → columns → roles → preview → import, then indexing
  *  starts by itself in the backend. */
@@ -37,20 +31,16 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const report = outcome?.report;
   const [dragging, setDragging] = useState(false);
   const { busy, error, setError, run } = useAction();
+  const collectionRef = useRef(collection);
+  collectionRef.current = collection;
 
   const look = (p: string) => run(async () => {
     const s = await api.inspect(p);
     setPath(p); setSource(s); setPreview(undefined); setOutcome(undefined);
-    const c = s.columns;
-    setMap({
-      text: guess(c, ["abstract", "text", "body", "content", "description", "summary"]),
-      title: guess(c, ["title", "name", "headline"]),
-      id: guess(c, ["id", "pmid", "doi", "key", "uid"]),
-      date: guess(c, ["date", "pub_date", "published", "year", "created"]),
-      url: guess(c, ["url", "link", "href", "doi"]),
-    });
-    setRoleColumn(guess(c, ["pub_types", "publication_types", "type", "kind", "role"]));
-    if (!collection) setCollection(p.split("/").pop()!.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "-").toLowerCase());
+    const guessed = guessMapping(s.columns);
+    setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url: guessed.url });
+    setRoleColumn(guessed.role);
+    if (!collectionRef.current) setCollection(collectionIdFromPath(p));
     return true;
   });
   // A dataset picked from the circle goes straight to the column step.
@@ -153,7 +143,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
         </div>
       </section>
       {source && <div className="panel row wrap">
-        <span className="strong">{path.split("/").pop()}</span>
+        <span className="strong">{baseName(path)}</span>
         <span className="muted">{source.kind.toUpperCase()} · {source.rows_read >= 1000 ? "1,000+" : fmt(source.rows_read)} {folder ? "files" : "rows"} · {source.columns.length} columns{source.unreadable ? ` · ${source.unreadable} unreadable` : ""}</span>
       </div>}
       <div className="row end">
@@ -164,7 +154,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
 
     {step === 1 && source && <>
       <div className="panel row wrap">
-        <span className="strong">{path.split("/").pop()}</span>
+        <span className="strong">{baseName(path)}</span>
         <span className="muted">{source.kind.toUpperCase()} · into “{collection}”</span>
         <button type="button" className="link push" onClick={() => setStep(0)}>Change source</button>
       </div>

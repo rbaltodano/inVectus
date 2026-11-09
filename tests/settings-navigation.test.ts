@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SETTINGS_SECTIONS, searchSettings } from "../src/settingsNavigation.ts";
+import { SETTINGS_SECTIONS, searchSettings, settingsSection } from "../src/settingsNavigation.ts";
+
+test("a stored settings tab is kept only when it still exists", () => {
+  assert.equal(settingsSection("calibration"), "calibration");
+  assert.equal(settingsSection("retired-tab"), "appearance");
+  assert.equal(settingsSection(undefined), "appearance");
+});
 
 test("settings search finds controls by provider and preference, including project controls", () => {
   assert.deepEqual(searchSettings("grok").map((s) => s.id), ["agents"]);
+  assert.deepEqual(searchSettings("gemini").map((s) => s.id), ["agents"]);
+  assert.deepEqual(searchSettings("lm studio").map((s) => s.id), ["agents"]);
+  assert.deepEqual(searchSettings("vs code").map((s) => s.id), ["agents"]);
   assert.deepEqual(searchSettings("  DARK  ").map((s) => s.id), ["appearance"]);
   assert.deepEqual(searchSettings("coverage momentum").map((s) => s.id), ["scoring"]);
   assert.deepEqual(searchSettings("offline").map((s) => s.id), ["network"]);

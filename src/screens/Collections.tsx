@@ -18,6 +18,7 @@ export default function Collections({ ctx, focus }: { ctx: Ctx; focus?: string }
   const { project } = ctx;
   const job = useJobs().current;
   const [open, setOpen] = useState<string | undefined>(focus ?? (project.collections.length === 1 ? project.collections[0].collection_id : undefined));
+  useEffect(() => { if (focus) setOpen(focus); }, [focus]);
   return <div className="page collections">
     <div className="row collections-head">
       <span className="section">Collections{project.collections.length ? ` · ${fmt(project.collections.length)}` : ""}</span>

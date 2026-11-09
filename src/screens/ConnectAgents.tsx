@@ -55,16 +55,15 @@ export default function ConnectAgents() {
   const canApply = plan && !plan.up_to_date && (plan.method === "file" || !!plan.command);
 
   return <section aria-labelledby="s-agents" className="panel stack gap">
-    <h2 id="s-agents">Connect an AI agent</h2>
-    <div className="muted small">Lets an agent such as Claude, Codex or Grok use inVectus through MCP: search, verdicts, gaps, descriptions and suggestions. It runs on this computer over stdio and opens no network port. While this app is open, the agent works in the project you have open here, and its suggestions wait for your decision.</div>
-    <div className="muted small">The agent runs on your own Claude, ChatGPT or Grok plan (or API key), signed in through its own app. inVectus never sees the sign-in; it only asks the client who is signed in.</div>
+    <h3 id="s-agents">Connect an AI agent</h3>
+    <div className="muted small">Connect your clients to search collections, inspect evidence and suggest decisions.</div>
     {CLIENTS.map((c) => {
       const s = status.find((x) => x.client === c.id);
       const connected = s?.connected && s.matches_this_install;
       const account = s?.client_found ? accountText(accounts[c.id]) : null;
       return <div key={c.id} className="spread setting-row">
         <div><b>{c.name}</b>
-          <div className="muted small">{statusText(s)}{s?.connected && !s.matches_this_install && s.binary ? `: ${s.binary}` : ""}</div>
+          <div className="muted small"><span className="settings-agent-status" data-connected={connected}>{statusText(s)}</span>{s?.connected && !s.matches_this_install && s.binary ? `: ${s.binary}` : ""}</div>
           {account && <div className="dim small">{account}</div>}</div>
         <div className="row">
           {s?.connected && <button type="button" className="text-btn" disabled={action.busy} onClick={() => remove(c.id)}>Disconnect</button>}
@@ -87,6 +86,11 @@ export default function ConnectAgents() {
     </div>}
     {done && <div className="note small">{done}</div>}
     <ErrorLine error={action.error} />
+    <details className="settings-agent-about">
+      <summary>How connections work</summary>
+      <div className="muted small">Lets an agent such as Claude, Codex or Grok use inVectus through MCP: search, verdicts, gaps, descriptions and suggestions. It runs on this computer over stdio and opens no network port. While this app is open, the agent works in the project you have open here, and its suggestions wait for your decision.</div>
+      <div className="muted small">The agent runs on your own Claude, ChatGPT or Grok plan (or API key), signed in through its own app. inVectus never sees the sign-in; it only asks the client who is signed in.</div>
+    </details>
     <div className="muted small">Or by hand: <code>invectus connect add claude-code</code> (or <code>codex</code>, <code>grok</code>) shows the change, and <code>--yes</code> makes it. Claude Desktop can also install <code>invectus connect bundle</code>'s .mcpb file.</div>
 
     <div className="label agent-activity-head">Recent agent activity</div>

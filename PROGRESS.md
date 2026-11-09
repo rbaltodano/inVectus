@@ -2652,3 +2652,49 @@ instrument style, dashed outlines marking agents' work throughout, for review to
 - At the owner's request, added `https://invectus.app` to the repository's About website
   field and near the top of README.md. The live HTTPS page returned HTTP 200, has the
   inVectus title, and links back to this repository. No website content changed or CI run.
+
+## 2026-11-08 — T3-style settings, horizontal tabs and main sidebar
+
+- Reworked Settings with seven horizontal tabs, search, app/project scope labels and
+  rounded groups of rows using inVectus's light/dark tokens. The owner requested tabs
+  instead of a second sidebar, then requested the original settings-sidebar styling for
+  the app's main sidebar. The main navigation now uses that same solid surface, rounded
+  hover/selection rows, quiet borders, compact spacing and search field. Project controls,
+  activity indicators, job controls, keyboard shortcuts and the macOS titlebar drag area
+  remain. Reference: T3 Code's settings route, sidebar, AppearanceSettingsPanel and
+  SettingsGroup at upstream commit `920ffcdd043ef184d21fb11be7b052f628667142`.
+  No upstream component code or dependencies were added.
+- All existing settings remain: System/Light/Dark appearance; embedding-model status and
+  consented downloads; local LLM status; all five agent clients, account status, connection
+  plans/copy/apply/disconnect and recent activity; project offline switch/environment
+  override notice; six gap weights/reset; both calibration modes and metadata; embedding
+  identity/runtime/origin/vector details; project path. Agent explanations remain under
+  “How connections work”. Panels stay mounted so changing tabs preserves pending plans
+  and download confirmations without repeating account probes.
+- Added searchable settings (including available model keys), Enter to open a result,
+  Escape/clear, accessible tabs with Left/Right/Home/End navigation, theme preview cards,
+  connection-state dots and no-project/empty-index states. Tabs scroll horizontally at
+  narrow widths. Download consent points to Settings → Network. Preference values,
+  backend actions and network policy are unchanged.
+- Checks: frontend production build, **37 UI tests** (including three settings-navigation
+  tests), and whitespace check passed. Isolated file-based Chrome renders with a fixture
+  Tauri bridge covered light/dark and 800/850/1100 px widths, all settings categories,
+  download/connection prompts and the selected main-sidebar project row. The 17 settings
+  scenarios had no runtime errors or unexpected horizontal overflow; the extra project
+  render checked the main sidebar. Eight interaction flows/16 assertions passed: theme
+  persistence; search navigation/focus; tab wrapping/Home/one visible panel/no second
+  sidebar; network toggle; weight change/reset; calibration request/job guard; offline
+  download refusal/cancel; retained connection plans without applying. These are frontend
+  fixture checks, not live client sessions or native backend writes.
+- Native macOS bundle build passed on arm64 macOS 27.0.1 (700.28 MiB), with the existing
+  upstream large unwind-table linker warning. The first normal build was stopped in its
+  unchanged CLI pre-build. UI rebuilds reused the previously validated CLI, pinned
+  MACOSX_DEPLOYMENT_TARGET=10.15 and overrode only beforeBuildCommand to `npm run build`.
+  Relaunched the final bundle at the owner's request and left Settings open. Native
+  accessibility confirmed the new seven-tab group, selected Appearance panel, settings
+  search and current System/Light/Dark choices. No preference values were changed during
+  native inspection.
+- Proposed QoL preferences, not implemented: restore the last workspace/settings tab;
+  text size and interface density; a reduced-motion override; local job completion/failure
+  notifications; model/cache locations and disk usage; backup reminders before upgrades.
+- No push, CI dispatch, model/dataset download, or real agent reconfiguration.

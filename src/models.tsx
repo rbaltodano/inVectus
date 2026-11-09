@@ -17,7 +17,7 @@ export function DownloadConsent({ model, project, onClose }: { model: MissingMod
       <dt>Version</dt><dd>pinned revision; every file's SHA-256 is checked</dd>
     </dl>
     <div className="small">This goes online once for this model. Indexing and search then run offline. Models are shared by all projects.</div>
-    {offline && <div className="note small">{project?.offline_env ? "INVECTUS_OFFLINE is set, so downloads are refused." : project ? "This project is offline. Switch the network on (top right) to download." : "Open a project and switch its network on to download."}</div>}
+    {offline && <div className="note small">{project?.offline_env ? "INVECTUS_OFFLINE is set, so downloads are refused." : project ? "This project is offline. Enable network access in Settings → Network to download." : "Open a project and switch its network on to download."}</div>}
     <ErrorLine error={error} />
     <div className="row end">
       {onClose && <button type="button" className="btn" onClick={onClose}>Not now</button>}

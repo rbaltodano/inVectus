@@ -2804,3 +2804,24 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   Unused card styles were removed (commit 81a40c1).
 - Checks: 46 UI tests and `npm run build`. Not checked in the native window: the release
   bundle in `target/release/bundle` predates the change, and its rebuild was stopped.
+
+## 2026-11-09 — First macOS preview release and curl installer
+
+- Owner approved pushing the 8 pending commits (HEAD a55ec5e) and publishing a release.
+  Tagged **v0.1.0** on a55ec5e: https://github.com/rbaltodano/inVectus/releases/tag/v0.1.0
+  (not a prerelease, so `releases/latest` resolves to it).
+- Built on the owner's Apple Silicon Mac: `cargo build --release --locked -p invectus-cli`,
+  `npm run tauri build -- --bundles app`, binaries stripped, ad-hoc signed (`codesign -s -`;
+  not Developer ID signed, not notarized). Archive `inVectus-macos-arm64.tar.gz`, 199,212,333
+  bytes, SHA-256 `70e0e402ec97821b180c9513490e4f09bc8408abcb58e39be898a145cbb1eadd`.
+- `https://invectus.app/install.sh` (in the invectus-website repo) downloads the latest
+  release, verifies it against `SHA256SUMS`, installs `inVectus.app` to `~/Applications` and
+  links `invectus` into `~/.local/bin`. No sudo, no model download, no agent connection.
+- Verified: install, in-place upgrade, tampered-checksum refusal and the packaged CLI
+  (`--version`, `connect status` lists the new clients) in an empty `$HOME`; the installed app
+  process launched. Ran the live `curl -fsSL https://invectus.app/install.sh | sh` against the
+  published release in a clean `$HOME`.
+- **Unverified:** a fresh Mac or user account, Gatekeeper on a browser-downloaded copy
+  (the curl route avoids quarantine; a browser download of the unsigned app would be blocked),
+  Intel Macs, macOS older than the build host, Windows and Linux. The site says Windows and
+  Linux are build-from-source; no CI run backs any claim for them.

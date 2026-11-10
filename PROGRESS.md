@@ -2853,3 +2853,11 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   source would also be network use and must follow the explicit-network rule. The section is a
   placeholder only.
 - Checks (arm64 macOS): `tsc`, frontend build, UI tests. Native window not checked.
+
+## 2026-11-10 — Projects page as a compact table (UI)
+
+- The Projects page lists projects as a compact table (Name with folder beneath, Items,
+  Collections, Models, Opened) instead of tall ruled rows with a figures strip. The whole row
+  opens the project; Remove appears on hover; the open project shows an accent "Open" tag.
+  Collections and Models columns hide below 760 px.
+- Verified: `npm run build` passes. Not yet checked visually in the running app.

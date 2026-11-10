@@ -712,6 +712,6 @@ mod tests {
 
     #[test]
     fn shell_uses_core() {
-        assert_eq!(engine_version(), "0.1.0");
+        assert_eq!(engine_version(), "0.2.0");
     }
 }

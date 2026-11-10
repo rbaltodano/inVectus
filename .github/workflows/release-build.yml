@@ -104,12 +104,21 @@ jobs:
           "$CLI" init "$home/m.invectus"
           py=$(command -v python3 || command -v python)
           "$py" - "$home/m.csv" <<'PY'
+          # Fictional rows with distinct vocabulary per topic, so regions form (near-identical
+          # template rows collapse into one region and `regions run` rightly refuses).
           import sys
-          topics = ["river bridges", "apple orchards", "solar roofs", "bus stops", "rain gardens"]
-          rows = ["id,title,text"]
-          for i in range(60):
-              t = topics[i % 5]
-              rows.append(f'{i},Study {i} on {t},"A fictional note about {t}, case {i}, with enough words to embed."')
+          topics = {
+              "bridges": ["steel truss spans over the river", "cable-stayed footbridge corrosion", "masonry arch load ratings", "bridge deck de-icing salt damage"],
+              "orchards": ["apple orchard pollination by bees", "pear tree pruning schedules", "cider apple frost protection", "orchard soil nitrogen and fruit yield"],
+              "solar": ["rooftop solar panels on terraced houses", "photovoltaic inverter failures", "community solar battery storage", "solar shingle installation costs"],
+              "transit": ["bus stop shelter placement", "night bus ridership in suburbs", "bus lane enforcement cameras", "timetable reliability on rural routes"],
+              "rain": ["rain garden plants for clay soil", "stormwater runoff from car parks", "permeable paving infiltration rates", "bioswale maintenance in winter"],
+          }
+          rows = ["id,title,text"]; i = 0
+          for name, phrases in topics.items():
+              for k in range(20):
+                  a, b = phrases[k % 4], phrases[(k // 4) % 4]
+                  rows.append(f'{i},{name.title()} study {k},"A fictional field report on {a}; it also notes {b} (site {k})."'); i += 1
           open(sys.argv[1], "w").write("\n".join(rows) + "\n")
           PY
           "$CLI" import -p "$home/m.invectus" -c m "$home/m.csv" --text text --title title --id id

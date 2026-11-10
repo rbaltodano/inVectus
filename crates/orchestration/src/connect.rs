@@ -1228,8 +1228,9 @@ mod tests {
         std::fs::write(
             codex_home.join("config.toml"),
             format!(
-                "model = \"x\"\n[mcp_servers.invectus]\ncommand = \"{}\"\nargs = [\"mcp\"]\n",
-                bin.display()
+                // `{:?}` escapes Windows backslashes as a TOML basic string needs.
+                "model = \"x\"\n[mcp_servers.invectus]\ncommand = {:?}\nargs = [\"mcp\"]\n",
+                bin.display().to_string()
             ),
         )
         .unwrap();
@@ -1284,8 +1285,8 @@ mod tests {
                 grok_home.join("config.toml"),
                 format!(
                     "[cli]\ninstaller = \"internal\"\n\n[mcp_servers.invectus]\n\
-                     command = \"{}\"\nargs = [\"mcp\"]\nenabled = {enabled}\n",
-                    bin.display()
+                     command = {:?}\nargs = [\"mcp\"]\nenabled = {enabled}\n",
+                    bin.display().to_string()
                 ),
             )
             .unwrap()

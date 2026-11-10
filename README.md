@@ -49,7 +49,7 @@ example below uses the separately reproducible fictional Urban Futures demo.*
 
 The agent's client starts `invectus mcp` on your computer and talks to it over
 stdio. inVectus opens no network port, and the agent's suggestions wait for your
-decision. Connect a client in **Settings → Connect an AI agent**, or from the terminal:
+decision. Connect a client in **Integrations → AI agents**, or from the terminal:
 
 ```sh
 invectus connect clients           # every client, and how each one is configured

@@ -317,7 +317,7 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .sidebar { overflow: hidden; }
 .side-top { flex: 1; min-height: 0; gap: 16px; }
 .side-bottom { flex: none; padding-top: 16px; }
-.side-top > .logo, .side-search, .side-actions { flex: none; }
+.side-top > .logo, .side-search, .side-actions, .side-integrations { flex: none; }
 .side-actions { display: flex; flex-direction: column; gap: 4px; }
 .sidebar .side-link { font-size: 13px; font-weight: 400; padding: 10px 12px; gap: 12px; }
 .sidebar .side-link:disabled, .project-link:disabled { opacity: 0.45; cursor: default; }

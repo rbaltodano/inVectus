@@ -5,7 +5,6 @@ import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type Proj
 import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
-import ConnectAgents from "./ConnectAgents";
 import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 
@@ -134,7 +133,6 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             </section>
 
           </div>
-          <div id="settings-section-agents" role="tabpanel" aria-labelledby="settings-tab-agents" className="settings-section" hidden={section !== "agents"}><ConnectAgents /></div>
           <div id="settings-section-network" role="tabpanel" aria-labelledby="settings-tab-network" className="settings-section" hidden={section !== "network"}>
             {projectEmpty}
 

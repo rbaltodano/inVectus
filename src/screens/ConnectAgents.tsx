@@ -1,4 +1,4 @@
-// Settings → Connect an AI agent (target product §5.1, A6). The clients come from the backend's
+// Integrations → AI agents (target product §5.1, A6). The clients come from the backend's
 // catalog (`connect_clients`): featured and detected clients
 // first, the rest under "More clients", and an "Other client" entry for any client that reads a
 // JSON file. Connecting shows the exact change first (the file and entry, or the command) and

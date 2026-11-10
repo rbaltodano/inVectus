@@ -2841,3 +2841,15 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   assertion on a Windows-built zip) — fix unverified until CI runs again.
 - Checks (arm64 macOS 27.0.1): 136 workspace release tests, clippy `-D warnings`, fmt,
   `tsc`, frontend build, 46 UI tests. No push, CI dispatch or download.
+
+## 2026-11-10 — Integrations page (UI)
+
+- New sidebar page **Integrations**, above Projects. It holds AI agent connections (moved
+  out of Settings, which no longer has an "AI agents" tab) and a **Databases** section marked
+  "Not available yet" that points to CSV/TSV/Parquet import.
+- Sidebar project rows lost their folder icons; names are indented to line up with "Projects".
+- **Spec conflict to review:** importing from an outside database is not in SPEC v1 (v1 has
+  file and table import; connectors beyond PubMed and Steam are post-v1). A remote database
+  source would also be network use and must follow the explicit-network rule. The section is a
+  placeholder only.
+- Checks (arm64 macOS): `tsc`, frontend build, UI tests. Native window not checked.

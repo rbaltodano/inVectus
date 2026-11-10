@@ -8,11 +8,9 @@ test("a stored settings tab is kept only when it still exists", () => {
   assert.equal(settingsSection(undefined), "appearance");
 });
 
-test("settings search finds controls by provider and preference, including project controls", () => {
-  assert.deepEqual(searchSettings("grok").map((s) => s.id), ["agents"]);
-  assert.deepEqual(searchSettings("gemini").map((s) => s.id), ["agents"]);
-  assert.deepEqual(searchSettings("lm studio").map((s) => s.id), ["agents"]);
-  assert.deepEqual(searchSettings("vs code").map((s) => s.id), ["agents"]);
+test("settings search finds controls by preference, including project controls", () => {
+  // AI agents moved to the Integrations page.
+  assert.deepEqual(searchSettings("grok"), []);
   assert.deepEqual(searchSettings("  DARK  ").map((s) => s.id), ["appearance"]);
   assert.deepEqual(searchSettings("coverage momentum").map((s) => s.id), ["scoring"]);
   assert.deepEqual(searchSettings("offline").map((s) => s.id), ["network"]);

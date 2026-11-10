@@ -18,3 +18,6 @@ __pycache__/
 *.py[cod]
 .ruff_cache/
 .pytest_cache/
+
+# CLI copied for Tauri externalBin (scripts/prepare-cli-sidecar.mjs)
+src-tauri/binaries/

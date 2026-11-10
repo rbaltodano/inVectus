@@ -1,0 +1,125 @@
+name: Release bundles
+# Manual only: dispatched by hand on the owner's request (see AGENTS.md). Builds the
+# installers for each OS, installs each one on its runner, runs the installed CLI, and keeps
+# the installers as workflow artifacts. Publishing a GitHub release stays a separate, manual step.
+on:
+  workflow_dispatch:
+    inputs:
+      model_smoke:
+        description: "Also download bge-small-en-v1.5 (~134 MB per OS) and run import → embed → search with the installed CLI"
+        type: boolean
+        default: false
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            bundles: app
+            config: ""
+          - os: windows-latest
+            bundles: nsis
+            config: --config src-tauri/tauri.cli-sidecar.json
+          - os: ubuntu-24.04
+            bundles: deb,appimage
+            config: --config src-tauri/tauri.cli-sidecar.json
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: "36.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Linux desktop prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev pkg-config clang
+      - run: npm ci
+      - name: Build installers
+        run: npm run tauri build -- --bundles ${{ matrix.bundles }} ${{ matrix.config }} --ci
+
+      - name: Install and locate the CLI (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          app=target/release/bundle/macos/inVectus.app
+          test -x "$app/Contents/MacOS/invectus"
+          mkdir -p dist-release
+          tar -czf dist-release/inVectus-macos-arm64.tar.gz -C target/release/bundle/macos inVectus.app
+          echo "CLI=$PWD/$app/Contents/MacOS/invectus" >> "$GITHUB_ENV"
+      - name: Install and locate the CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          New-Item -ItemType Directory -Force dist-release | Out-Null
+          Copy-Item $setup.FullName dist-release/
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S', '/D=C:\inVectus-smoke'
+          Get-ChildItem C:\inVectus-smoke
+          if (-not (Test-Path C:\inVectus-smoke\invectus.exe)) { throw "invectus.exe was not installed beside the app" }
+          "CLI=/c/inVectus-smoke/invectus.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install and locate the CLI (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          deb=$(ls target/release/bundle/deb/*.deb | head -1)
+          mkdir -p dist-release && cp "$deb" target/release/bundle/appimage/*.AppImage dist-release/
+          sudo apt-get install -y "./$deb"
+          dpkg -L "$(dpkg-deb -f "$deb" Package)" | grep -E '/usr/bin/'
+          test -x /usr/bin/invectus
+          echo "CLI=/usr/bin/invectus" >> "$GITHUB_ENV"
+
+      - name: Installed CLI smoke test (no network)
+        env:
+          INVECTUS_OFFLINE: "1"
+        run: |
+          home=$(mktemp -d)
+          export HOME="$home" USERPROFILE="$home" APPDATA="$home/AppData" XDG_CONFIG_HOME="$home/.config"
+          "$CLI" --version
+          "$CLI" connect clients
+          "$CLI" connect status
+          "$CLI" init "$home/smoke.invectus"
+          printf 'id,title,text\n1,Alpha,Rivers and bridges in small towns.\n2,Beta,Orchards and apples.\n' > "$home/s.csv"
+          "$CLI" import -p "$home/smoke.invectus" -c s "$home/s.csv" --text text --title title --id id --chunk-chars 2000
+          "$CLI" status -p "$home/smoke.invectus"
+          # Refused offline, never attempted:
+          if "$CLI" models download bge-small-en-v1.5; then echo "offline download was not refused"; exit 1; fi
+
+      - name: Model smoke test (downloads bge-small-en-v1.5)
+        if: inputs.model_smoke
+        run: |
+          home=$(mktemp -d)
+          export INVECTUS_MODELS_DIR="$home/models"
+          "$CLI" models download bge-small-en-v1.5
+          export INVECTUS_OFFLINE=1
+          "$CLI" init "$home/m.invectus"
+          py=$(command -v python3 || command -v python)
+          "$py" - "$home/m.csv" <<'PY'
+          import sys
+          topics = ["river bridges", "apple orchards", "solar roofs", "bus stops", "rain gardens"]
+          rows = ["id,title,text"]
+          for i in range(60):
+              t = topics[i % 5]
+              rows.append(f'{i},Study {i} on {t},"A fictional note about {t}, case {i}, with enough words to embed."')
+          open(sys.argv[1], "w").write("\n".join(rows) + "\n")
+          PY
+          "$CLI" import -p "$home/m.invectus" -c m "$home/m.csv" --text text --title title --id id
+          "$CLI" embed -p "$home/m.invectus" -c m
+          "$CLI" search -p "$home/m.invectus" -c m "apple trees" -k 3
+          "$CLI" regions run -p "$home/m.invectus" -c m
+          "$CLI" gaps scan -p "$home/m.invectus" -c m
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: inVectus-${{ runner.os }}
+          path: dist-release/
+          if-no-files-found: error

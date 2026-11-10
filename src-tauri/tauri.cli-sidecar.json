@@ -1,0 +1,8 @@
+{
+  "build": {
+    "beforeBuildCommand": "npm run build && cargo build --release -p invectus-cli && node scripts/prepare-cli-sidecar.mjs"
+  },
+  "bundle": {
+    "externalBin": ["binaries/invectus"]
+  }
+}

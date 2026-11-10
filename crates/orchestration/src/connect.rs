@@ -1213,6 +1213,7 @@ mod tests {
     fn codex_uses_its_own_command_and_reads_config_toml() {
         let home = tempfile::tempdir().unwrap();
         let bin = home.path().join("invectus");
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut e = env(home.path(), None);
         let p = plan(client("codex"), &bin, &e).unwrap();
         assert_eq!(p.method, "command");
@@ -1258,6 +1259,7 @@ mod tests {
     fn grok_uses_its_own_command_and_reads_its_config_toml() {
         let home = tempfile::tempdir().unwrap();
         let bin = home.path().join("invectus");
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut e = env(home.path(), None);
         let p = plan(client("grok"), &bin, &e).unwrap();
         assert_eq!(p.method, "command");

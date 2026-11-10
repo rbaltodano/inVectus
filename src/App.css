@@ -537,31 +537,42 @@ input, select, textarea { border-color: var(--line-2); border-radius: var(--r); 
 
 .card-title { font-family: var(--sans); font-size: 15px; font-weight: 400; color: var(--text); }
 
-/* Projects: ruled rows like Collections — a light name, its folder, a row of figures. Rows slide
-   in on a short stagger like gap results; the open project carries the one accent. */
+/* Projects: a compact table, one line per project (folder beneath the name). The whole row opens
+   the project; rows slide in on a short stagger; the open project carries the one accent. */
 .projects-page { gap: 32px; line-height: 1.6; }
 .projects-heading { display: flex; flex-direction: column; min-width: 0; }
 .projects-heading .eyebrow { margin: 0 0 10px; }
-.project-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.project-row { display: flex; flex-direction: column; gap: 16px; padding: 32px 16px; border-top: 1px solid var(--line);
-  animation: gap-slide-in 300ms ease-out both; animation-delay: calc(var(--i, 0) * 50ms); }
-.project-row:first-child { border-top: none; padding-top: 8px; }
-.project-row:last-child { border-bottom: 1px solid var(--line); }
-.project-row-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 20px; }
-.project-row-open { border: none; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
-.project-row-open h3 { font-family: var(--sans); font-size: 24px; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); overflow-wrap: anywhere; transition: opacity 150ms ease; }
-.project-row-open:hover:not(:disabled) h3 { opacity: 0.75; }
-.project-row-open:disabled { opacity: 0.5; cursor: default; }
-.project-row-state { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
-.project-row-state .mark { background: var(--accent); border-color: var(--accent); }
-.project-row .path { font-size: 11px; margin-top: -10px; }
-.project-row .figures dd.models { font-family: var(--mono); font-size: 13px; line-height: 1.9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-row .figures > div { min-width: 120px; }
-.project-row-forget { margin-left: auto; padding: 0; font-size: 13px; color: var(--dim); opacity: 0; transition: opacity 150ms ease; }
-.project-row:hover .project-row-forget, .project-row:focus-within .project-row-forget { opacity: 1; }
+.project-table { --cols: minmax(0, 1fr) 96px 96px minmax(0, 180px) 88px 64px; display: flex; flex-direction: column; border-bottom: 1px solid var(--line); }
+.project-table-head, .project-trow { display: grid; grid-template-columns: var(--cols); column-gap: 16px; align-items: start; padding: 0 12px; }
+.project-trow > [role="cell"] { line-height: 22px; }
+.project-tname .path, .project-tname .note { line-height: 1.4; }
+.project-table-head { padding-bottom: 10px; border-bottom: 1px solid var(--line-2, var(--line)); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.project-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.project-trow { position: relative; padding-top: 12px; padding-bottom: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-2);
+  transition: background 120ms ease; animation: gap-slide-in 300ms ease-out both; animation-delay: calc(var(--i, 0) * 50ms); }
+.project-table-head + .project-trow { border-top: none; }
+.project-trow:hover:not([data-disabled]) { background: var(--surface-2); }
+.project-trow[data-disabled] { opacity: 0.5; }
+.project-tname { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.project-tname .mark { margin-top: 8px; }
+.project-tname .project-row-state { line-height: 22px; }
+.project-tname-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.project-trow-open { border: none; background: none; padding: 0; font: inherit; font-size: 14px; font-weight: 500; color: var(--ink); text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-trow-open::after { content: ""; position: absolute; inset: 0; }
+.project-trow-open:disabled { cursor: default; }
+.project-trow-open:focus-visible { outline: none; }
+.project-trow:has(.project-trow-open:focus-visible) { outline: 1px solid var(--accent); outline-offset: -1px; }
+.project-tname .path { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-row-state { flex: none; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.project-trow .models { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-tactions { text-align: right; }
+.project-row-forget { position: relative; z-index: 1; padding: 0; font-size: 12px; color: var(--dim); opacity: 0; transition: opacity 150ms ease; }
+.project-trow:hover .project-row-forget, .project-trow:focus-within .project-row-forget { opacity: 1; }
 .project-row-forget:hover { color: var(--text); }
 @media (hover: none) { .project-row-forget { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .project-row { animation: none; } .project-row-open h3, .project-row-forget { transition: none; } }
+@media (max-width: 760px) { .project-table { --cols: minmax(0, 1fr) 80px 72px 56px; } .project-table .col-collections, .project-table .col-models { display: none; } }
+@media (prefers-reduced-motion: reduce) { .project-trow { animation: none; transition: none; } .project-row-forget { transition: none; } }
 
 /* Gap charts enter like Angrove's Insight Tree: the indicator bars fill with its connector curve
    (ease-out quint, 0.55 s), one after another; the year bars spring up from the baseline left

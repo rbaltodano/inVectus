@@ -35,7 +35,7 @@ interface Props {
   onForget: (root: string) => void;
 }
 
-/** All projects as ruled rows, most recently opened first; each reads like a collection. */
+/** All projects as a compact table, most recently opened first. */
 export default function ProjectsPage({ current, recent, job, onPick, onNew, onOpen, onForget }: Props) {
   // A job in a project blocks switching to another one (the backend refuses); say so up front.
   const blocking = job?.state === "running" && job.project ? job : undefined;
@@ -54,29 +54,43 @@ export default function ProjectsPage({ current, recent, job, onPick, onNew, onOp
     {recent.length === 0 && <div className="empty-state"><LineArt kind="orbit" />
       <span className="dim">No projects yet. Open an existing .invectus folder, or create one. A project is a folder on this computer holding one dataset, its index and map, and your decisions.</span>
     </div>}
-    {recent.length > 0 && <ul className="project-rows">
+    {recent.length > 0 && <div className="project-table" role="table" aria-label="Projects">
+      <div className="project-table-head" role="row">
+        <span role="columnheader">Name</span>
+        <span role="columnheader" className="num">Items</span>
+        <span role="columnheader" className="num col-collections">Collections</span>
+        <span role="columnheader" className="col-models">Models</span>
+        <span role="columnheader">Opened</span>
+        <span role="columnheader"><span className="sr-only">Actions</span></span>
+      </div>
       {recent.map((r, i) => {
         const open = current?.root === r.root;
         const disabled = !!blocking && blocking.project !== r.root;
-        return <li key={r.root} className="project-row" data-open={open || undefined} style={{ "--i": Math.min(i, 12) } as CSSProperties}>
-          <div className="project-row-head">
-            <button type="button" className="project-row-open" onClick={() => onPick(r)} disabled={disabled} aria-current={open ? "true" : undefined}>
-              <h3>{r.name}</h3>
-            </button>
-            {open ? <span className="project-row-state on"><span className="mark full" aria-hidden="true" />Open now</span>
-              : <span className="index-status"><span className={`mark ${r.models.length ? "full" : "ring"}`} aria-hidden="true" />{r.models.length ? "Indexed" : "Not indexed"}</span>}
-            <button type="button" className="text-btn project-row-forget" onClick={() => onForget(r.root)} aria-label={`Remove ${r.name} from the list`}>Remove</button>
+        const status = open ? "Open now" : r.models.length ? "Indexed" : "Not indexed";
+        return <div key={r.root} role="row" className="project-trow" data-open={open || undefined} data-disabled={disabled || undefined}
+          style={{ "--i": Math.min(i, 12) } as CSSProperties}>
+          <div role="cell" className="project-tname">
+            <span className={`mark ${open || r.models.length ? "full" : "ring"}`} title={status} aria-hidden="true" />
+            <div className="project-tname-text">
+              <button type="button" className="project-trow-open" onClick={() => onPick(r)} disabled={disabled}
+                aria-current={open ? "true" : undefined} aria-label={`${r.name}, ${status}`}>
+                {r.name}
+              </button>
+              <span className="path">{r.root.replace(/^\/Users\/[^/]+/, "~")}</span>
+              {r.warning && <span className="note small">Cloud-synced folder: sync can damage the database</span>}
+            </div>
+            {open && <span className="project-row-state">Open</span>}
           </div>
-          <span className="path">{r.root.replace(/^\/Users\/[^/]+/, "~")}</span>
-          {r.warning && <span className="note small">Cloud-synced folder: sync can damage the database</span>}
-          <dl className="figures">
-            <div><dt>Items</dt><dd>{fmt(r.items)}</dd></div>
-            <div><dt>Collections</dt><dd>{fmt(r.collections)}</dd></div>
-            <div><dt>Models</dt><dd className={r.models.length ? "models" : "dim"} title={r.models.join(", ") || undefined}>{r.models.length ? r.models.join(", ") : "—"}</dd></div>
-            <div><dt>Opened</dt><dd>{ago(r.opened)}</dd></div>
-          </dl>
-        </li>;
+          <span role="cell" className="num">{r.items ? fmt(r.items) : "—"}</span>
+          <span role="cell" className="num col-collections">{fmt(r.collections)}</span>
+          <span role="cell" className={`col-models ${r.models.length ? "models" : "dim"}`} title={r.models.join(", ") || undefined}>
+            {r.models.length ? r.models.join(", ") : "—"}</span>
+          <span role="cell" className="dim">{ago(r.opened)}</span>
+          <span role="cell" className="project-tactions">
+            <button type="button" className="text-btn project-row-forget" onClick={() => onForget(r.root)} aria-label={`Remove ${r.name} from the list`}>Remove</button>
+          </span>
+        </div>;
       })}
-    </ul>}
+    </div>}
   </div>;
 }

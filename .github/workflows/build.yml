@@ -30,7 +30,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: cargo fmt --all --check
-      - run: cargo test --workspace --locked
+      - run: cargo test --workspace --locked --no-fail-fast
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # Engine tests run without model files; real-model tests skip when weights are absent.
       - run: cargo run --locked --bin invectus -- --help

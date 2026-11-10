@@ -295,7 +295,10 @@ fn planted_gaps_are_found_explained_and_keep_their_verdicts() {
     // Bookmarks are independent of verdicts, idempotent and persisted across reopening.
     invectus_gaps::saved::bookmark(&p, &table, a.gap_id).unwrap();
     invectus_gaps::saved::bookmark(&p, &table, a.gap_id).unwrap();
-    let reopened = Project::open(&p.root).unwrap();
+    // Close first: Windows refuses a second open of the same database file, even in-process.
+    let root = p.root.clone();
+    drop(p);
+    let reopened = Project::open(&root).unwrap();
     let saved = invectus_gaps::saved::overview(&reopened, &table).unwrap();
     assert_eq!(saved.bookmarks.len(), 1);
     let serialized = serde_json::to_value(&saved).unwrap();
@@ -317,6 +320,7 @@ fn planted_gaps_are_found_explained_and_keep_their_verdicts() {
     let isolated = invectus_gaps::saved::overview(&reopened, &other_collection).unwrap();
     assert!(isolated.bookmarks.is_empty() && isolated.decisions.is_empty());
     drop(reopened);
+    let mut p = Project::open(&root).unwrap();
 
     regions(&mut p, &v);
     let pending_scan = invectus_gaps::saved::overview(&p, &table).unwrap();

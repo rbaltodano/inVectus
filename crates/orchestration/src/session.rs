@@ -294,6 +294,22 @@ pub fn open_project(
             j.project.as_deref().unwrap_or_default()
         ));
     }
+    // Reopening the open project: close it first. Windows refuses a second open of the same
+    // database file even within one process (macOS and Linux allow it).
+    let same = |root: &std::path::Path| {
+        let canon = |p: &std::path::Path| std::fs::canonicalize(p).ok();
+        let mut suffixed = path.as_os_str().to_owned();
+        suffixed.push(".invectus");
+        let wanted = if path.join("project.json").exists() {
+            canon(&path)
+        } else {
+            canon(std::path::Path::new(&suffixed))
+        };
+        wanted.is_some() && canon(root) == wanted
+    };
+    if guard.as_ref().is_some_and(|s| same(&s.project.root)) {
+        *guard = None;
+    }
     let project = if create {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(err)?;
@@ -525,7 +541,7 @@ pub fn export_gaps(session: &Shared, form: TableForm, format: &str) -> OpResult<
 }
 
 #[cfg(test)]
-mod export_name_tests {
+mod session_tests {
     use super::export_file_name;
 
     #[test]
@@ -539,5 +555,19 @@ mod export_name_tests {
             "gaps-urban-futures-1794332898914.csv"
         );
         assert_eq!(export_file_name("a/b:c", "x", "md"), "gaps-a_b_c-x.md");
+    }
+
+    /// Windows refuses a second open of a database file in one process, so reopening the
+    /// open project must close it first (CI runs this on Windows).
+    #[test]
+    fn reopening_the_open_project_works() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = crate::Shared::default();
+        let board = crate::SharedBoard::default();
+        let path = dir.path().join("p").display().to_string();
+        super::open_project(&session, &board, &path, true).unwrap();
+        super::open_project(&session, &board, &path, false).unwrap();
+        let suffixed = format!("{path}.invectus");
+        super::open_project(&session, &board, &suffixed, false).unwrap();
     }
 }

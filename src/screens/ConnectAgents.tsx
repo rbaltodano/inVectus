@@ -70,37 +70,32 @@ export default function ConnectAgents() {
     ? "Adds inVectus to the file you named."
     : clients.find((c) => c.id === plan?.client)?.how;
 
-  const row = (c: ClientInfo) => {
+  const card = (c: ClientInfo) => {
     const s = statusOf(c.id);
-    const connected = s?.connected && s.matches_this_install;
+    const connected = !!(s?.connected && s.matches_this_install);
     const account = s?.client_found ? accountText(accounts[c.id]) : null;
-    return <div key={c.id} className="spread setting-row">
-      <div className="connect-client">
-        <span className="connect-client-mark"><AgentIcon client={c.id} size={18} /></span>
-        <div><b>{c.display_name}</b>{!c.checked && <span className="tag connect-unverified" title="No session has been checked through this client yet">Unverified</span>}
-          <div className="muted small"><span className="settings-agent-status" data-connected={connected}>{statusText(s)}</span>{s?.connected && !s.matches_this_install && s.binary ? `: ${s.binary}` : ""}</div>
-          {account && <div className="dim small">{account}</div>}</div>
+    return <li key={c.id} className="integration-card" data-connected={connected}>
+      <div className="integration-card-top">
+        <span className="integration-mark"><AgentIcon client={c.id} size={22} /></span>
+        {connected
+          ? <span className="integration-badge">Connected</span>
+          : <button type="button" className="integration-connect" disabled={action.busy} onClick={() => open(c.id)}>{s?.connected ? "Use this install" : "Connect"}</button>}
       </div>
-      <div className="row">
-        {s?.connected && <button type="button" className="text-btn" disabled={action.busy} onClick={() => remove(c.id)}>Disconnect</button>}
-        {!connected && <button type="button" className="btn small" disabled={action.busy} onClick={() => open(c.id)}>{s?.connected ? "Use this install…" : "Connect…"}</button>}
-      </div>
-    </div>;
+      <div className="integration-name">{c.display_name}{!c.checked && <span className="tag connect-unverified" title="No session has been checked through this client yet">Unverified</span>}</div>
+      <p className="integration-desc">{statusText(s)}{s?.connected && !s.matches_this_install && s.binary ? `: ${s.binary}` : ""}{account ? `. ${account}` : ""}</p>
+      {s?.connected && <button type="button" className="text-btn integration-disconnect" disabled={action.busy} onClick={() => remove(c.id)}>Disconnect</button>}
+    </li>;
   };
 
-  return <section aria-labelledby="s-agents" className="panel stack gap">
-    <h3 id="s-agents">Connect an AI agent</h3>
-    <div className="muted small">Connect your clients to search collections, inspect evidence and suggest decisions.</div>
-    {main.map(row)}
+  return <div className="integrations-agents">
+    <ul className="integration-grid" aria-label="AI agent clients">{main.map(card)}</ul>
     <details className="connect-more">
       <summary>More clients{more.length ? ` (${more.length})` : ""}</summary>
-      {more.map(row)}
-      <div className="setting-row stack gap-s">
-        <div className="connect-client">
-          <span className="connect-client-mark"><AgentIcon client={null} size={18} /></span>
-          <div><b>Other client</b>
-            <div className="muted small">Any client that reads MCP servers from a JSON file. The entry is <code>{"{ \"command\": …, \"args\": [\"mcp\"] }"}</code> under the key you name.</div></div>
-        </div>
+      <ul className="integration-grid" aria-label="More AI agent clients">{more.map(card)}</ul>
+      <div className="integration-card integration-card-wide">
+        <div className="integration-card-top"><span className="integration-mark"><AgentIcon client={null} size={22} /></span></div>
+        <div className="integration-name">Other client</div>
+        <p className="integration-desc">Any client that reads MCP servers from a JSON file. The entry is <code>{"{ \"command\": …, \"args\": [\"mcp\"] }"}</code> under the key you name.</p>
         <div className="row wrap connect-custom">
           <input aria-label="Client's configuration file (full path)" placeholder="/full/path/to/mcp.json" value={custom.file} onChange={(e) => setCustom({ ...custom, file: e.target.value })} />
           <input aria-label="Key holding its servers" placeholder="mcpServers" value={custom.key} onChange={(e) => setCustom({ ...custom, key: e.target.value })} />
@@ -109,17 +104,20 @@ export default function ConnectAgents() {
         </div>
       </div>
     </details>
-    {plan && <div className="connect-plan stack gap-s" role="dialog" aria-label={`Connect ${plan.display_name}`}>
-      <div className="label">Connect {plan.display_name}</div>
-      <div className="muted small">{how} Nothing has changed yet.</div>
-      {plan.config_file && <div className="small">File: <code className="path">{plan.config_file}</code></div>}
-      <pre className="connect-code">{plan.method === "file" ? JSON.stringify({ [plan.config_key ?? "mcpServers"]: { invectus: plan.entry } }, null, 2) : plan.manual}</pre>
-      {plan.method === "file" && <div className="dim small">Other servers and settings in the file are kept; the old file is saved beside it as a backup.</div>}
-      {plan.notes.map((n) => <div key={n} className="dim small">Note: {n}</div>)}
-      <div className="row wrap">
-        {canApply && <button type="button" className="btn primary small" disabled={action.busy} onClick={apply}>Make this change</button>}
-        {plan.method === "command" && <button type="button" className="btn small" onClick={() => copy(plan.manual)}>{copied ? "Copied" : "Copy command"}</button>}
-        <button type="button" className="text-btn" onClick={() => setPlan(undefined)}>Cancel</button>
+    {plan && <div className="integration-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setPlan(undefined); }}
+      onKeyDown={(e) => { if (e.key === "Escape") setPlan(undefined); }}>
+      <div className="integration-modal connect-plan stack gap-s" role="dialog" aria-modal="true" aria-label={`Connect ${plan.display_name}`}>
+        <div className="integration-modal-head"><span className="integration-mark"><AgentIcon client={plan.client} size={22} /></span><h3>Connect {plan.display_name}</h3></div>
+        <div className="muted small">{how} Nothing has changed yet.</div>
+        {plan.config_file && <div className="small">File: <code className="path">{plan.config_file}</code></div>}
+        <pre className="connect-code">{plan.method === "file" ? JSON.stringify({ [plan.config_key ?? "mcpServers"]: { invectus: plan.entry } }, null, 2) : plan.manual}</pre>
+        {plan.method === "file" && <div className="dim small">Other servers and settings in the file are kept; the old file is saved beside it as a backup.</div>}
+        {plan.notes.map((n) => <div key={n} className="dim small">Note: {n}</div>)}
+        <div className="row wrap integration-modal-actions">
+          <button type="button" className="text-btn" onClick={() => setPlan(undefined)}>Cancel</button>
+          {plan.method === "command" && <button type="button" className="btn small" onClick={() => copy(plan.manual)}>{copied ? "Copied" : "Copy command"}</button>}
+          {canApply && <button type="button" className="btn primary small" autoFocus disabled={action.busy} onClick={apply}>Make this change</button>}
+        </div>
       </div>
     </div>}
     {done && <div className="note small">{done}</div>}
@@ -129,8 +127,8 @@ export default function ConnectAgents() {
       <div className="muted small">Lets an agent such as Claude, Codex or Grok use inVectus through MCP: search, verdicts, gaps, descriptions and suggestions. It runs on this computer over stdio and opens no network port. While this app is open, the agent works in the project you have open here, and its suggestions wait for your decision.</div>
       <div className="muted small">The agent runs on your own plan or API key, signed in through its own app. inVectus never sees the sign-in; for Claude Code, Codex and Grok Build it only asks the client who is signed in.</div>
       <div className="muted small">Clients marked Unverified are set up from their documentation; no session has been checked through them yet.</div>
+      <div className="muted small">Or by hand: <code>invectus connect clients</code> lists them, and <code>invectus connect add codex</code> (or any listed id) shows the change; <code>--yes</code> makes it. Claude Desktop can also install <code>invectus connect bundle</code>'s .mcpb file.</div>
     </details>
-    <div className="muted small">Or by hand: <code>invectus connect clients</code> lists them, and <code>invectus connect add codex</code> (or any listed id) shows the change; <code>--yes</code> makes it. Claude Desktop can also install <code>invectus connect bundle</code>'s .mcpb file.</div>
 
     <div className="label agent-activity-head">Recent agent activity</div>
     {activity.length === 0 && <div className="dim small">No agent has worked through this app since it opened.</div>}
@@ -139,5 +137,5 @@ export default function ConnectAgents() {
       <span>{clientName(a.client)} {describe(a)}</span>
       {!a.ok && <span className="err">failed</span>}
     </li>)}</ul>}
-  </section>;
+  </div>;
 }

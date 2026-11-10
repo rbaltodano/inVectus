@@ -317,8 +317,8 @@ details summary { cursor: pointer; padding: 4px 0; font-size: 14px; text-transfo
 .sidebar { overflow: hidden; }
 .side-top { flex: 1; min-height: 0; gap: 16px; }
 .side-bottom { flex: none; padding-top: 16px; }
-.side-top > .logo, .side-search, .side-actions, .side-integrations { flex: none; }
-.side-actions, .side-integrations { display: flex; flex-direction: column; gap: 4px; }
+.side-top > .logo, .side-search, .side-actions { flex: none; }
+.side-actions { display: flex; flex-direction: column; gap: 4px; }
 .sidebar .side-link { font-size: 13px; font-weight: 400; padding: 10px 12px; gap: 12px; }
 .sidebar .side-link:disabled, .project-link:disabled { opacity: 0.45; cursor: default; }
 .sidebar-projects { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -968,3 +968,37 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .connect-custom { gap: 8px; }
 .connect-custom input:first-child { flex: 1 1 260px; min-width: 0; }
 .connect-custom input:nth-child(2) { flex: 0 1 140px; min-width: 0; }
+
+/* Integrations: a gallery of connectable apps, not a settings form. */
+.integrations-page { max-width: none; padding: 0; overflow-y: auto; }
+.integrations-inner { max-width: 960px; margin: 0 auto; padding: 48px clamp(20px, 4vw, 56px) 64px; display: flex; flex-direction: column; gap: 40px; }
+.integrations-header { display: flex; flex-direction: column; gap: 10px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.integrations-header h1 { font: 500 28px/1.15 var(--sans); letter-spacing: -.025em; color: var(--text); }
+.integrations-header p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--dim); }
+.integrations-section { display: flex; flex-direction: column; gap: 16px; }
+.integrations-section-head { display: flex; flex-direction: column; gap: 4px; }
+.integrations-section-head h2 { font: 500 16px/1.3 var(--sans); color: var(--text); }
+.integrations-section-head p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--dim); }
+.integrations-agents { display: flex; flex-direction: column; gap: 16px; }
+.integration-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.integration-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); transition: border-color .15s; }
+.integration-card:hover { border-color: var(--line-2); }
+.integration-card[data-disabled="true"] { background: none; border-style: dashed; }
+.integration-card-wide { margin-top: 16px; }
+.integration-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 30px; margin-bottom: 8px; }
+.integration-mark { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; color: var(--text); }
+.integration-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--text); }
+.integration-desc { margin: 0; font-size: 13px; line-height: 1.55; color: var(--dim); overflow-wrap: anywhere; }
+.integration-badge { padding: 4px 9px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.integration-badge-muted { background: var(--surface-2); color: var(--dim); }
+.integration-connect { padding: 4px 10px; border: 1px solid var(--line-2); border-radius: 6px; background: none; color: var(--text); font: 500 12px var(--sans); white-space: nowrap; cursor: pointer; }
+.integration-connect:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.integration-connect:disabled { opacity: .45; cursor: default; }
+.integration-disconnect { align-self: flex-start; margin-top: auto; padding-top: 8px; font-size: 12px; }
+.integrations-agents .connect-more > summary { padding: 4px 0 0; }
+.integrations-agents .connect-more[open] > summary { margin-bottom: 16px; }
+.integration-modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / .45); }
+.integration-modal { width: min(560px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; padding: 22px; border: 1px solid var(--line-2); border-style: solid; border-radius: 12px; background: var(--bg); box-shadow: 0 20px 60px var(--shadow); }
+.integration-modal-head { display: flex; align-items: center; gap: 10px; }
+.integration-modal-head h3 { font-size: 16px; font-weight: 500; }
+.integration-modal-actions { justify-content: flex-end; gap: 8px; padding-top: 6px; }

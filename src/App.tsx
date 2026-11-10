@@ -167,8 +167,6 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         <div className="side-actions">
           {nav("New project", Plus, route.view === "new", () => setRoute({ view: "new" }), opening || switchingBlocked)}
           {nav("Open project…", FolderOpen, false, openProject, opening || switchingBlocked)}
-        </div>
-        <div className="side-integrations">
           {nav("Integrations", Blocks, route.view === "integrations", () => setRoute({ view: "integrations" }))}
         </div>
         <div className="sidebar-projects">

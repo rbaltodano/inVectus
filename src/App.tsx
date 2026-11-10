@@ -171,9 +171,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
           {nav("Projects", Folder, route.view === "projects", () => setRoute({ view: "projects" }))}
           <ul className="project-list" aria-label="Projects">
             {matches.map((r, index) => <li key={r.root}>
-              <div className="project-sidebar-row" aria-keyshortcuts={index < 9 ? `Meta+${index + 1}` : undefined} data-current={route.view === "project" && project?.root === r.root}>
-                <button type="button" className="project-open" aria-label={`Open project ${r.name}`} title={tilde(r.root)}
-                  disabled={opening || (switchingBlocked && job?.project !== r.root)} onClick={() => openRecent(r)}><Folder size={14} aria-hidden="true" /></button>
+              <div className="project-sidebar-row" aria-keyshortcuts={index < 9 ? `Meta+${index + 1}` : undefined} data-current={route.view === "project" && project?.root === r.root} title={tilde(r.root)}>
                 <div className="project-row-text">
                   <ProjectName name={r.name} className="sidebar-project-name" disabled={opening || (switchingBlocked && job?.project !== r.root)} onSelect={() => void openRecent(r)} onSave={(name) => renameProject(r.root, name)} />
                   <ProjectRowDetail root={r.root} fallback={rowFact(r, job)} />

@@ -802,7 +802,11 @@ fn connect_writes_only_when_asked_and_bundles() {
         format!("server/invectus{}", std::env::consts::EXE_SUFFIX)
     );
     let mut binary = archive.by_name(entry).unwrap();
-    assert_eq!(binary.unix_mode().unwrap() & 0o777, 0o755);
+    // A Windows-built bundle is recorded as DOS-made, so zip reports no Unix mode; the mode
+    // only matters to the Unix bundles that need an executable bit.
+    if cfg!(unix) {
+        assert_eq!(binary.unix_mode().unwrap() & 0o777, 0o755);
+    }
     let mut contents = Vec::new();
     std::io::Read::read_to_end(&mut binary, &mut contents).unwrap();
     assert_eq!(

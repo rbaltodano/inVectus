@@ -2825,3 +2825,19 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   (the curl route avoids quarantine; a browser download of the unsigned app would be blocked),
   Intel Macs, macOS older than the build host, Windows and Linux. The site says Windows and
   Linux are build-from-source; no CI run backs any claim for them.
+
+## 2026-11-10 — Beta QA pass
+
+- New [docs/beta-qa-log.md](docs/beta-qa-log.md): feature-by-feature test of the CLI,
+  agent (MCP) tools and app wiring on the fictional Urban Futures demo and small fixtures,
+  merged with the open items from beta-release.md. Native window not driven.
+- Fixed: app import failed on a first run with no model (token chunking needs BGE; now
+  falls back to character chunks with a note); export file names held a `:` (broke on
+  Windows; now `gaps-<collection>-<run timestamp>.<ext>`); near-chance calibrations
+  (AUC < 0.6) now warn that the verdict says little (the demo gave every query, even
+  nonsense, "NEAR"); Describe disabled with a note when no local LLM is installed;
+  missing-model and offline-verify messages name the app's settings and valid CLI flags;
+  bridge slider debounced; Windows CI test failure from run 42532458660 (Unix file-mode
+  assertion on a Windows-built zip) — fix unverified until CI runs again.
+- Checks (arm64 macOS 27.0.1): 136 workspace release tests, clippy `-D warnings`, fmt,
+  `tsc`, frontend build, 46 UI tests. No push, CI dispatch or download.

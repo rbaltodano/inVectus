@@ -26,6 +26,9 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const pin = useAction();
   const [saved, setSaved] = useState(false);
   const [t, setT] = useState(50);
+  // The gap reloads for a new slider position only once the slider rests for a moment.
+  const [settledT, setSettledT] = useState(50);
+  useEffect(() => { const timer = setTimeout(() => setSettledT(t), 250); return () => clearTimeout(timer); }, [t]);
   const [described, setDescribed] = useState<DescribeResult>();
   const [verification, setVerification] = useState<Verification>();
   const load = useAction();
@@ -33,13 +36,16 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const describe = useAction();
   const verify = useAction();
   const respond = useAction();
+  // Describing needs the optional local language model, which the app cannot download.
+  const [llmReady, setLlmReady] = useState<boolean>();
+  useEffect(() => { api.llms().then((l) => setLlmReady(l.some((m) => m.installed))).catch(() => setLlmReady(undefined)); }, []);
 
   const draft = useRef(false);
   useEffect(() => { draft.current = false; }, [project.root, id, tref.collection, tref.space]);
   useEffect(() => {
     let cancelled = false;
     load.run(async () => {
-      const g = await api.gap(tref, id, t / 100);
+      const g = await api.gap(tref, id, settledT / 100);
       if (cancelled) return;
       setGap(g);
       if (!draft.current) { setVerdict(g.verdict?.verdict ?? "open"); setNote(g.verdict?.note ?? ""); }
@@ -50,7 +56,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
       setDescribed(undefined); setVerification(undefined);
     });
     return () => { cancelled = true; };
-  }, [project.root, id, tref.collection, tref.space, ctx.dataRevision, t]);
+  }, [project.root, id, tref.collection, tref.space, ctx.dataRevision, settledT]);
 
   if (!gap) return <div className="page"><ErrorLine error={load.error} />{load.busy && <p className="muted">Loading…</p>}</div>;
 
@@ -149,8 +155,9 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
             {description!.accepted === null && <span className="muted">No attempt passed both checks; showing the last one.</span>}
           </div>}
           {description?.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
+          {llmReady === false && <div className="note small">No local language model is installed, so the app cannot write a description. A connected AI agent can write one instead (Settings → AI agents).</div>}
           <div className="row">
-            <button type="button" className="btn" disabled={describe.busy} onClick={() => describe.run(async () => setDescribed(await api.describe(tref, id, bridge ? t / 100 : null)))}>
+            <button type="button" className="btn" disabled={describe.busy || llmReady === false} onClick={() => describe.run(async () => setDescribed(await api.describe(tref, id, bridge ? t / 100 : null)))}>
               {describe.busy ? "Writing… (the local model can take a minute)" : attempt ? "Regenerate" : "Describe with the local model"}</button>
           </div>
         </section>

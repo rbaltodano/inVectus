@@ -484,6 +484,23 @@ pub fn scan_gaps(
     })
 }
 
+/// `gaps-<collection>-<run>.<ext>`, with the run named by its timestamp (the part after the
+/// last `:` of `regions:<collection>:<space>:<millis>`) and every character a file name may
+/// not hold on Windows, macOS or Linux replaced.
+fn export_file_name(collection: &str, run_id: &str, ext: &str) -> String {
+    let run = run_id.rsplit(':').next().unwrap_or(run_id);
+    let safe = |s: &str| -> String {
+        s.chars()
+            .map(|c| match c {
+                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+                c if c.is_control() => '_',
+                c => c,
+            })
+            .collect()
+    };
+    format!("gaps-{}-{}.{ext}", safe(collection), safe(run))
+}
+
 /// Write the latest gaps as `csv` or `markdown` into the project's `exports/` folder; returns
 /// the file's path. Titles and links only.
 pub fn export_gaps(session: &Shared, form: TableForm, format: &str) -> OpResult<String> {
@@ -501,12 +518,26 @@ pub fn export_gaps(session: &Shared, form: TableForm, format: &str) -> OpResult<
         };
         let dir = s.project.root.join("exports");
         std::fs::create_dir_all(&dir)?;
-        let path = dir.join(format!(
-            "gaps-{}-{}.{ext}",
-            table.collection_id,
-            &list.run_id[..list.run_id.len().min(8)]
-        ));
+        let path = dir.join(export_file_name(&table.collection_id, &list.run_id, ext));
         std::fs::write(&path, text)?;
         Ok(path.display().to_string())
     })
+}
+
+#[cfg(test)]
+mod export_name_tests {
+    use super::export_file_name;
+
+    #[test]
+    fn export_names_are_portable_and_name_the_run() {
+        assert_eq!(
+            export_file_name(
+                "urban-futures",
+                "regions:urban-futures:0b35fad4:1794332898914",
+                "csv"
+            ),
+            "gaps-urban-futures-1794332898914.csv"
+        );
+        assert_eq!(export_file_name("a/b:c", "x", "md"), "gaps-a_b_c-x.md");
+    }
 }

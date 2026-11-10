@@ -22,6 +22,16 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const [source, setSource] = useState<SourceInfo>();
   const [map, setMap] = useState({ text: "", title: "", id: "", date: "", url: "" });
   const [chunk, setChunk] = useState({ mode: "tokens", tokens: 448, tokenOverlap: 48, chars: 2000, overlap: 200 });
+  // Token chunking needs BGE-small's tokenizer. Before it is installed (a first run), fall back
+  // to character chunks so the import still works; indexing then asks to download the model.
+  const [tokenizerReady, setTokenizerReady] = useState(true);
+  useEffect(() => {
+    api.models().then((ms) => {
+      const ready = ms.some((m) => m.key === "bge-small-en-v1.5" && m.installed);
+      setTokenizerReady(ready);
+      if (!ready) setChunk((c) => ({ ...c, mode: "characters" }));
+    }).catch(() => undefined);
+  }, []);
   const [defaultRole, setDefaultRole] = useState<Role>("neutral");
   const [roleColumn, setRoleColumn] = useState("");
   const [rules, setRules] = useState<Rule[]>([]);
@@ -182,7 +192,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
         {exists ? <div className="muted small">This collection keeps its saved chunking settings.</div> : <details>
             <summary>Long items: {chunk.mode === "tokens" ? `${fmt(chunk.tokens)} tokens (${fmt(chunk.tokenOverlap)} overlap)` : `${fmt(chunk.chars)} characters (${fmt(chunk.overlap)} overlap)`}</summary>
             <label>Chunking<select value={chunk.mode} onChange={(e) => setChunk({ ...chunk, mode: e.target.value })}>
-              <option value="tokens">Tokens (recommended)</option><option value="characters">Characters</option>
+              <option value="tokens" disabled={!tokenizerReady}>Tokens (recommended)</option><option value="characters">Characters</option>
             </select></label>
             <div className="row wrap">
               {chunk.mode === "tokens" ? <>
@@ -193,7 +203,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
               <label>Overlap (characters)<input type="number" min={0} value={chunk.overlap} onChange={(e) => setChunk({ ...chunk, overlap: Number(e.target.value) })} /></label>
               </>}
             </div>
-            <div className="muted small">Chunks are searched separately and roll up to their item in results. Token chunking requires BGE-small to be installed in Models.</div>
+            <div className="muted small">Chunks are searched separately and roll up to their item in results. {tokenizerReady ? "Token chunking requires BGE-small to be installed." : "Token chunking needs BGE-small, which is not installed yet, so this import uses character chunks. You can download the model after the import."}</div>
           </details>}
       </section>
 

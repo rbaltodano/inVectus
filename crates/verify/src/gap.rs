@@ -99,8 +99,9 @@ pub fn verify_gap(
 ) -> Result<Verification> {
     if !opts.allow_network && !project.config.network_enabled {
         bail!(
-            "network is off for this project: pass --network to let this command query {} \
-             (results are cached in the project)",
+            "network is off for this project: turn on its network switch (Settings → Network in \
+             the app) or pass --network to the CLI to query {} (results are cached in the \
+             project)",
             opts.sources
                 .iter()
                 .map(|s| s.name())

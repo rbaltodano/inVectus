@@ -70,16 +70,19 @@ impl ModelStore {
     pub fn verified_dir(&self, spec: &ModelSpec) -> Result<PathBuf> {
         let dir = self.dir(spec);
         let rec_path = dir.join("install.json");
-        let raw = std::fs::read(&rec_path).with_context(|| {
-            format!(
-                "model {} is not installed in {}; run `invectus models install {}` (from a local \
-                 folder) or `invectus models download {}`",
+        if !rec_path.exists() {
+            bail!(
+                "model {} is not installed in {}; download it in the app (Settings → Models), \
+                 or run `invectus models download {}` or `invectus models install {} \
+                 --from <folder>`",
                 spec.key,
                 self.root.display(),
                 spec.key,
                 spec.key
-            )
-        })?;
+            );
+        }
+        let raw =
+            std::fs::read(&rec_path).with_context(|| format!("reading {}", rec_path.display()))?;
         let rec: InstallRecord = serde_json::from_slice(&raw)?;
         if rec.revision != spec.revision || rec.repo != spec.repo {
             bail!(

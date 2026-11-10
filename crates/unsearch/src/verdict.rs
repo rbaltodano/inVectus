@@ -118,6 +118,10 @@ pub fn calibration_for(project: &Project, table: &VectorTableRecord) -> Result<C
         })
 }
 
+/// Below this held-out AUC a calibration is close to chance and `check` warns that its verdict
+/// carries little information.
+pub const WEAK_AUC: f64 = 0.6;
+
 pub fn check(
     project: &Project,
     vectors: &VectorStore,
@@ -222,6 +226,14 @@ pub fn check(
         _ => None,
     };
     let holdout_auc = cal.metrics["holdout"]["auc"].as_f64();
+    if holdout_auc.is_some_and(|a| a < WEAK_AUC) {
+        notes.push(format!(
+            "this calibration barely tells the same thing from a different one (held-out AUC \
+             {:.2}; 0.50 is chance), so the verdict says little; read the nearest items, or \
+             calibrate with paraphrases from the local language model or a connected agent",
+            holdout_auc.unwrap()
+        ));
+    }
     let quality = if cal.method.contains("no LLM") {
         format!(
             "Approximate: calibrated without a language model on {} titled items (title vs own \

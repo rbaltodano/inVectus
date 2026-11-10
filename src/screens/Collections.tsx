@@ -130,7 +130,7 @@ function Details({ ctx, c, tables }: { ctx: Ctx; c: Collection; tables: TableInf
       <span className="section">{t.model_key} · {t.space_id.slice(0, 12)}</span>
       <div className="detail-line">
         <span className="eyebrow">Calibration</span>
-        <span>{t.calibration ? `${t.calibration.method}, ${fmt(t.calibration.sample)} items${t.calibration.holdout_auc ? `, held-out AUC ${t.calibration.holdout_auc.toFixed(3)}` : ""}${t.calibration.vectors !== t.vectors ? " — the collection changed since" : ""}` : "None. Search shows similarity only, no verdict."}</span>
+        <span>{t.calibration ? `${t.calibration.method}, ${fmt(t.calibration.sample)} items${t.calibration.holdout_auc ? `, held-out AUC ${t.calibration.holdout_auc.toFixed(3)}${t.calibration.holdout_auc < 0.6 ? " (near chance: verdicts say little)" : ""}` : ""}${t.calibration.vectors !== t.vectors ? " — the collection changed since" : ""}` : "None. Search shows similarity only, no verdict."}</span>
         <span className="row wrap">
           <button type="button" className="text-btn" disabled={running || busy || t.vectors === 0} onClick={() => cal(t, false)}>{t.calibration ? "Recalibrate" : "Calibrate"}</button>
           {llmReady && <button type="button" className="text-btn" disabled={running || busy || t.vectors === 0} onClick={() => cal(t, true)}>With language model</button>}

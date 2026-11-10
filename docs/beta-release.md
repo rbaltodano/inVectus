@@ -34,6 +34,9 @@ Do not advertise automatic updates or automatic project migration/rollback.
   commit in PROGRESS.md. Keep both workflows manual-only. Do not claim Windows/Linux until
   their CI and installer smoke checks pass. Earlier run `42146609686` failed
   on all three systems. Follow-up run status and its tested commit are recorded in PROGRESS.md.
+- Build the installers with the manual `release-build.yml` workflow (macOS app, Windows
+  NSIS, Linux .deb/AppImage). It installs each one and runs the installed CLI offline; the
+  optional `model_smoke` input also downloads BGE-small and indexes a fictional CSV.
 - Build the actual distribution artifact. Verify the bundled `invectus` CLI runs from
   inside it and that Connect an AI agent registers that installed path. Current Tauri
   config bundles the CLI into the macOS app; Windows/Linux packaging still needs validation.

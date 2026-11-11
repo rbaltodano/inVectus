@@ -445,6 +445,7 @@ h2, .h1, .h2 { font-family: var(--sans); font-weight: 400; font-size: 15px; lett
 .editable-project-name input { display: block; width: 100%; min-width: 0; min-height: 0; padding: 0; border: none; border-radius: 0; background: transparent; color: inherit; font: inherit; }
 .project-name-error { display: block; margin-top: 4px; color: var(--danger); font-size: 12px; line-height: 1.5; font-weight: 400; letter-spacing: 0; }
 .project-sidebar-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; min-height: 36px; color: var(--text-2); }
+.project-sidebar-row { cursor: pointer; }
 .project-sidebar-row:hover, .project-sidebar-row[data-current="true"] { background: var(--surface); color: var(--ink); }
 .sidebar-project-name { flex: 1; font-size: 13px; line-height: 20px; }
 .score, .stat b, .big-num, .indexing-percent { font-family: var(--sans); font-variant-numeric: tabular-nums; }

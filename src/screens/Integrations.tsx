@@ -5,6 +5,7 @@
 // (docs/integrations.md).
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { DOT_FLICKER_MS } from "../dot-flicker";
+import IntegrationIcon, { hasIntegrationMark } from "../IntegrationIcon";
 import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbulb, ListChecks, Map as MapIcon, NotebookText, Search, Sheet, Table2, X, type LucideIcon } from "lucide-react";
 import { api, inTauri } from "../api";
 import { ErrorLine, useAction } from "../App";
@@ -108,7 +109,7 @@ export default function Integrations() {
       onChange={(from) => setTokens((t) => ({ ...t, [e.token!.id]: from }))} />
     : <li key={e.id} className="integration-card" data-disabled={e.muted || undefined} data-label={e.code}>
       <div className="integration-card-top">
-        <span className="integration-mark">{e.icon && <e.icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span>
+        <span className="integration-mark">{hasIntegrationMark(e.id) ? <IntegrationIcon name={e.id} /> : e.icon && <e.icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span>
         <span className={`integration-badge${e.muted ? " integration-badge-muted" : ""}`} data-tone={e.muted ? undefined : "ink"}>{e.badge}</span>
       </div>
       <div className="integration-name">{e.name}</div>
@@ -280,7 +281,7 @@ function TokenCard({ it, from, onChange, label }: { it: TokenIntegration; from: 
 
   return <li className="integration-card" data-connected={connected} data-label={label}>
     <div className="integration-card-top">
-      <span className="integration-mark"><Icon size={22} strokeWidth={1.5} aria-hidden="true" /></span>
+      <span className="integration-mark">{hasIntegrationMark(it.id) ? <IntegrationIcon name={it.id} /> : <Icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span>
       {connected
         ? <span className="integration-badge">Connected</span>
         : <button type="button" className="integration-connect" disabled={!inTauri || from === undefined} onClick={() => setOpen(true)}>Connect</button>}
@@ -294,7 +295,7 @@ function TokenCard({ it, from, onChange, label }: { it: TokenIntegration; from: 
     {open && <div className="integration-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
       onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
       <div className="integration-modal stack gap-s" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <div className="integration-modal-head"><span className="integration-mark"><Icon size={22} strokeWidth={1.5} aria-hidden="true" /></span><h3 id={titleId}>Connect {it.name}</h3></div>
+        <div className="integration-modal-head"><span className="integration-mark">{hasIntegrationMark(it.id) ? <IntegrationIcon name={it.id} /> : <Icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span><h3 id={titleId}>Connect {it.name}</h3></div>
         <ol className="integration-steps small">{it.steps.map((step, i) => <li key={i}>{step}</li>)}</ol>
         <label className="small">{it.label}
           <input type="password" autoFocus autoComplete="off" spellCheck={false} value={token} placeholder={it.placeholder}

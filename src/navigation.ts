@@ -7,7 +7,7 @@ export const PROJECT_TABS: { id: ProjectTab; label: string; page: Page }[] = [
   { id: "saved", label: "Saved", page: { kind: "saved" } },
   { id: "collections", label: "Collections", page: { kind: "index" } },
 ];
-export const pageTab = (p: Page): ProjectTab => p.kind === "saved" ? "saved" : p.kind === "search" ? "search" : p.kind === "gaps" || p.kind === "gap" ? "gaps" : p.kind === "index" || p.kind === "import" ? "collections" : "search";
+export const pageTab = (p: Page): ProjectTab => p.kind === "saved" ? "saved" : p.kind === "search" ? "search" : p.kind === "gaps" || p.kind === "gap" ? "gaps" : p.kind === "index" || p.kind === "import" || p.kind === "add" ? "collections" : "search";
 
 export function projectTab(value: unknown): ProjectTab | undefined {
   return PROJECT_TABS.some((tab) => tab.id === value) ? value as ProjectTab : undefined;

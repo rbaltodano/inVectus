@@ -193,6 +193,16 @@ async fn set_verify_sources(
 }
 
 #[tauri::command]
+async fn set_project_agent(
+    state: State<'_, AppState>,
+    project: String,
+    agent: Option<String>,
+) -> CmdResult<ProjectInfo> {
+    let (session, board) = (state.session.clone(), state.board.clone());
+    off_thread(move || orch::set_project_agent(&session, &board, &project, agent.as_deref())).await
+}
+
+#[tauri::command]
 async fn set_agent_model(
     state: State<'_, AppState>,
     project: String,
@@ -726,6 +736,7 @@ pub fn run() {
             set_integration_token,
             set_network,
             set_agent_model,
+            set_project_agent,
             list_llms,
             install_model,
             default_gap_weights,

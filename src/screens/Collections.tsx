@@ -3,7 +3,9 @@ import { api, fmt, when, STATUS_LABEL, type Collection, type IndexStatus, type M
 import { ErrorLine, useStartJob, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent, useIndexPlan } from "../models";
-import { Plus } from "lucide-react";
+import { FileSpreadsheet, FolderOpen, Plus } from "lucide-react";
+import IntegrationIcon, { type IntegrationMarkName } from "../IntegrationIcon";
+import { baseName } from "../paths";
 import LineArt from "../LineArt";
 
 /** A status mark: filled = done, half = partial or running, ring = nothing yet, cross = failed. */
@@ -22,7 +24,7 @@ export default function Collections({ ctx, focus }: { ctx: Ctx; focus?: string }
   return <div className="page collections">
     <div className="row collections-head">
       <span className="section">Collections{project.collections.length ? ` · ${fmt(project.collections.length)}` : ""}</span>
-      <button type="button" className="btn" disabled={isRunning(job)} onClick={() => ctx.push({ kind: "import" })}><Plus size={14} aria-hidden="true" />Add to Dataset</button>
+      <button type="button" className="btn" disabled={isRunning(job)} onClick={() => ctx.push({ kind: "add" })}><Plus size={14} aria-hidden="true" />Add to Dataset</button>
     </div>
     {project.collections.length === 0 && <div className="empty-state">
       <LineArt kind="grid" />
@@ -73,6 +75,7 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
       <h3 id={`c-${c.collection_id}`}>{c.collection_id}</h3>
       {overall !== "indexed" && overall !== "imported" && <span className="index-status"><StatusMark status={overall} />{overall === "none" ? "Not indexed" : overall === "outdated" ? "Partly indexed" : STATUS_LABEL[overall]}</span>}
     </div>
+    <CollectionSource c={c} />
     <dl className="figures">
       <div><dt>Items</dt><dd>{fmt(c.items)}</dd></div>
       <div><dt>Demand</dt><dd>{fmt(c.by_role.demand ?? 0)}</dd></div>
@@ -109,6 +112,22 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     <ErrorLine error={error} />
     {open && <Details ctx={ctx} c={c} tables={tables} />}
   </section>;
+}
+
+// Where a collection's data came from, with the integration's mark.
+const SOURCE_MARK: Record<string, IntegrationMarkName> = { google_sheet: "sheets", excel: "excel", notion: "notion", zotero: "zotero", airtable: "airtable", typeform: "typeform", tally: "tally", canny: "canny", productboard: "productboard" };
+const SOURCE_NAME: Record<string, string> = { csv: "CSV file", parquet: "Parquet file", folder: "Folder", excel: "Excel file", google_sheet: "Google Sheets", notion: "Notion", zotero: "Zotero", airtable: "Airtable", typeform: "Typeform", tally: "Tally", canny: "Canny", productboard: "Productboard" };
+
+function CollectionSource({ c }: { c: Collection }) {
+  const kind = c.source_kind ?? "";
+  const mark = SOURCE_MARK[kind];
+  const where = c.source_spec ?? (c.source_path ? baseName(c.source_path) : null);
+  return <div className="collection-source" title={c.source_spec ?? c.source_path ?? undefined}>
+    <span className="collection-source-mark">{mark ? <IntegrationIcon name={mark} size={16} /> : kind === "folder"
+      ? <FolderOpen size={16} strokeWidth={1.5} aria-hidden="true" /> : <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden="true" />}</span>
+    <span>{SOURCE_NAME[kind] ?? "Imported"}{where ? <span className="dim"> · {where}</span> : null}</span>
+    {c.updated_at && <span className="dim push">Updated {when(c.updated_at)}</span>}
+  </div>;
 }
 
 /** Shown only when an index needs attention; a healthy index needs no row. */

@@ -54,7 +54,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url: guessed.url });
     setRoleColumn(guessed.role);
     if (!collectionRef.current) setCollection(s.remote ? s.kind.replace("_", "-") : collectionIdFromPath(p));
-    return true;
+    // An online source that was never pulled stays on the Source step, where Pull is.
+    return !(s.remote && s.needs_pull);
   });
   // Pulling (network) runs as a job; when it ends, read the fresh snapshot.
   const pull = () => run(async () => { const j = await api.pullSource(path); jobs.started(j); setPullJob(j.id); });

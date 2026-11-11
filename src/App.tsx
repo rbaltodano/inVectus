@@ -15,20 +15,22 @@ import WorkspaceSplit from "./WorkspaceSplit";
 import Integrations from "./screens/Integrations";
 import Agents from "./screens/Agents";
 import Settings from "./screens/Settings";
+import Home from "./screens/Home";
+import NewProject from "./screens/NewProject";
 import TabIndicator, { useTabIndicator } from "./TabIndicator";
 import StarPrompt from "./StarPrompt";
-import { ArrowLeft, Blocks, Bot, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Blocks, Bot, Folder, FolderOpen, House, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, openingTab, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
-import { baseName, joinPath } from "./paths";
+import { baseName } from "./paths";
 import "./App.css";
 
 /** A page beside the circle; Saved and Gaps retain their own detail return paths. */
 export type Page =
-  | { kind: "search"; query?: string } | { kind: "import"; path?: string }
+  | { kind: "search"; query?: string } | { kind: "import"; path?: string; next?: string[] } | { kind: "add" }
   | { kind: "index"; collection?: string } | { kind: "gaps" } | { kind: "saved" }
   | { kind: "gap"; id: number } | { kind: "item"; point: MapPoint };
 
-export type Route = { view: "projects" } | { view: "new" } | { view: "integrations" } | { view: "agents" } | { view: "settings" } | { view: "project" };
+export type Route = { view: "home" } | { view: "projects" } | { view: "new" } | { view: "integrations" } | { view: "agents" } | { view: "settings" } | { view: "project" };
 
 /** Older views navigate with these; `go` turns them into menu pages. */
 type Legacy = { view: "project"; tab: "overview" | "search" | "gaps" | "collections" | "map"; gap?: number; region?: number; query?: string; collection?: string; adding?: boolean };
@@ -58,6 +60,12 @@ export interface Ctx {
 export const tableKey = (t: TableInfo) => `${t.collection}\u0000${t.space_id}`;
 const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 
+/** The table a project opens on: the remembered one, else the first embedded table with a map. */
+export function defaultTable(project: ProjectInfo, selected?: string): TableInfo | undefined {
+  const tables = project.tables;
+  return tables.find((t) => tableKey(t) === selected) ?? tables.find((t) => t.origin === "embedded" && t.regions) ?? tables.find((t) => t.origin === "embedded") ?? tables[0];
+}
+
 export default function App() {
   const [project, setProject] = useState<ProjectInfo>();
   const refresh = async () => { try {
@@ -73,7 +81,7 @@ export default function App() {
 }
 
 function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setProject: (p: ProjectInfo) => void; refresh: () => Promise<void> }) {
-  const [route, setRoute] = useState<Route>({ view: "projects" });
+  const [route, setRoute] = useState<Route>({ view: "home" });
   const [recent, setRecent] = useState<Recent[]>(recentProjects);
   const [commandHeld, setCommandHeld] = useState(false);
   const [stack, setStack] = useState<Page[]>([{ kind: "search" }]);
@@ -92,7 +100,36 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     if (current?.root === root) setProject({ ...current, name: saved });
   };
 
-  useEffect(() => { if (project) { remember(project); setRecent(recentProjects()); } }, [project]);
+  // Home shows the last project; it opens quietly (not counted as opened until you enter it).
+  const quietRoot = useRef<string>();
+  const [homeLoading, setHomeLoading] = useState(false);
+  useEffect(() => {
+    if (route.view !== "home" || project || !inTauri || opening) return;
+    const last = recentProjects()[0];
+    if (!last) return;
+    let cancelled = false;
+    setHomeLoading(true);
+    api.open(last.root, false)
+      .then((p) => { if (!cancelled) { quietRoot.current = p.root; setProject(p); } })
+      .catch((e) => { if (!cancelled) setError(String(e)); })
+      .finally(() => { if (!cancelled) setHomeLoading(false); });
+    return () => { cancelled = true; };
+  }, [route.view]);
+  const remembered = useRef<ProjectInfo>();
+  useEffect(() => {
+    if (!project) return;
+    if (quietRoot.current === project.root) {
+      if (route.view !== "project") return;
+      quietRoot.current = undefined;
+    } else if (remembered.current === project) return;
+    remembered.current = project;
+    remember(project); setRecent(recentProjects());
+  }, [project, route.view]);
+  const enter = (first?: Page) => {
+    setQuery(""); setError(undefined);
+    setStack(first ? [{ kind: "search" }, first] : [{ kind: "search" }]);
+    setRoute({ view: "project" });
+  };
 
   const opened = (p: ProjectInfo, first?: Page) => {
     setProject(p); setError(undefined);
@@ -166,6 +203,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
             onKeyDown={(e) => { if (e.key === "Enter" && matches[0]) openRecent(matches[0]); if (e.key === "Escape") setQuery(""); }} />
         </div>
         <div className="side-actions">
+          {nav("Home", House, route.view === "home", () => setRoute({ view: "home" }))}
           {nav("New project", Plus, route.view === "new", () => setRoute({ view: "new" }), opening || switchingBlocked)}
           {nav("Open project…", FolderOpen, false, openProject, opening || switchingBlocked)}
           {nav("Integrations", Blocks, route.view === "integrations", () => setRoute({ view: "integrations" }))}
@@ -175,7 +213,8 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
           {nav("Projects", Folder, route.view === "projects", () => setRoute({ view: "projects" }))}
           <ul className="project-list" aria-label="Projects">
             {matches.map((r, index) => <li key={r.root}>
-              <div className="project-sidebar-row" aria-keyshortcuts={index < 9 ? `Meta+${index + 1}` : undefined} data-current={route.view === "project" && project?.root === r.root} title={tilde(r.root)}>
+              <div className="project-sidebar-row" aria-keyshortcuts={index < 9 ? `Meta+${index + 1}` : undefined} data-current={route.view === "project" && project?.root === r.root} title={tilde(r.root)}
+                onClick={(e) => { if (e.detail <= 1 && !(e.target as HTMLElement).closest("input, button, a")) void openRecent(r); }}>
                 <div className="project-row-text">
                   <ProjectName name={r.name} className="sidebar-project-name" disabled={opening || (switchingBlocked && job?.project !== r.root)} onSelect={() => void openRecent(r)} onSave={(name) => renameProject(r.root, name)} />
                   <ProjectRowDetail root={r.root} fallback={rowFact(r, job)} />
@@ -196,10 +235,12 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
 
     <main className="main">
       {!inTauri && <p className="banner">Browser preview: the engine runs only in the desktop app.</p>}
-      {route.view === "projects" && error && <p className="banner err" role="alert">{error}</p>}
+      {(route.view === "projects" || route.view === "home") && error && <p className="banner err" role="alert">{error}</p>}
+      {route.view === "home" && <Home project={project} recent={recent} job={job} loading={homeLoading || opening}
+        onEnter={enter} onPick={openRecent} onNew={() => setRoute({ view: "new" })} onOpen={openProject} onProjects={() => setRoute({ view: "projects" })} />}
       {route.view === "projects" && <ProjectsPage current={project} recent={recent} job={job}
         onPick={openRecent} onNew={() => setRoute({ view: "new" })} onOpen={openProject} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
-      {route.view === "new" && <NewProject onCreated={opened} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
+      {route.view === "new" && <NewProject onCreated={opened} onIntegrations={() => setRoute({ view: "integrations" })} onAgents={() => setRoute({ view: "agents" })} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
       {route.view === "integrations" && <Integrations />}
       {route.view === "agents" && <Agents />}
       {route.view === "settings" && <Settings project={project} setProject={setProject} />}
@@ -227,49 +268,6 @@ function JobLine({ job, recent }: { job: JobInfo; recent: Recent[] }) {
     <ErrorLine error={cancel.error} />
     {isRunning(job) && job.kind !== "download" && <button type="button" className="text-btn" disabled={cancel.busy} onClick={() => cancel.run(() => api.cancel(job))}>Cancel</button>}
   </div>;
-}
-
-/** New project: name and place on the right; the empty circle picks the dataset. */
-function NewProject({ onCreated, blocked }: { onCreated: (p: ProjectInfo, first?: Page) => void; blocked?: JobInfo }) {
-  const [name, setName] = useState("");
-  const [dir, setDir] = useState("");
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (inTauri) api.defaultDir().then(setDir).catch(() => undefined); }, []);
-  const create = async (source?: string) => {
-    setError(undefined); setBusy(true);
-    try {
-      const stem = source ? baseName(source).replace(/\.[^.]+$/, "") : "";
-      const n = name.trim() || stem;
-      if (!n) { setError("Name the project, or pick a dataset to name it after."); return; }
-      if (!dir.trim()) { setError("Choose a folder for the project."); return; }
-      const p = await api.open(joinPath(dir, n), true);
-      onCreated(p, source ? { kind: "import", path: source } : undefined);
-    } catch (e) { setError(String(e)); } finally { setBusy(false); }
-  };
-  const pick = async (folder = false) => {
-    if (blocked) return;
-    const path = await pickSource(folder).catch((e) => { setError(String(e)); return null; });
-    if (path) create(path);
-  };
-  return <>
-    <header className="head"><div><div className="eyebrow">Setup</div><h1>New project</h1></div></header>
-    <div className="stage">
-      <aside className="menu" aria-label="New project">
-        <div className="menu-card stack gap">
-          <label className="field">Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Medical school research topic" /></label>
-          <label className="field">Location<input value={dir} onChange={(e) => setDir(e.target.value)} /></label>
-          <span className="dim small">{name.trim() && dir.trim() ? `${tilde(joinPath(dir, name.trim()))}.invectus` : "Everything stays on this computer. Avoid iCloud, Dropbox and OneDrive folders."}</span>
-        </div>
-        <button type="button" className="menu-row" onClick={() => pick(true)} disabled={busy || !dir.trim() || !!blocked}>Choose a folder instead</button>
-        <button type="button" className="menu-row" onClick={() => create()} disabled={busy || !dir.trim() || !name.trim() || !!blocked}>Create without data</button>
-        {blocked && <p className="note">“{blocked.label}” is running; a new project can open when it finishes.</p>}
-        {error && <p className="err" role="alert">{error}</p>}
-      </aside>
-      <DataCircle gaps={[]} marks={{}} showGaps={false} showLabels={false} showOutlines={false} onGap={() => undefined} onItem={() => undefined}
-        empty={{ title: "Click to add a dataset", hint: "CSV · TSV · Parquet · or a folder of .txt / .md", onPick: () => pick(false) }} />
-    </div>
-  </>;
 }
 
 function Workspace({ project, setProject, refresh, initialStack, goRoute, onRename }: {
@@ -312,7 +310,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const [netError, setNetError] = useState<string>();
 
   const tables = project.tables;
-  const table = tables.find((t) => tableKey(t) === selected) ?? tables.find((t) => t.origin === "embedded" && t.regions) ?? tables.find((t) => t.origin === "embedded") ?? tables[0];
+  const table = defaultTable(project, selected);
   const tref = useMemo(() => table ? { project: project.root, collection: table.collection, space: table.space_id } : undefined, [project.root, table?.collection, table?.space_id]);
   const job = jobs.current && jobs.current.project === project.root ? jobs.current : undefined;
 
@@ -389,7 +387,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
     if (r.tab === "overview") selectTab("search");
     else if (r.tab === "search") push({ kind: "search", query: r.query });
     else if (r.tab === "gaps") push(r.gap !== undefined ? { kind: "gap", id: r.gap } : { kind: "gaps" });
-    else if (r.tab === "collections") push(r.adding ? { kind: "import" } : { kind: "index", collection: r.collection });
+    else if (r.tab === "collections") push(r.adding ? { kind: "add" } : { kind: "index", collection: r.collection });
     else if (r.tab === "map") { if (r.region !== undefined) showRegion(r.region); }
   };
   const pickTable = (t: TableInfo) => { setSelected(tableKey(t)); local.set(`invectus.scope.${project.root}`, tableKey(t)); };

@@ -164,6 +164,8 @@ pub struct ProjectInfo {
     /// Outside sources gap checks use (`pubmed`, `openalex`, `semanticscholar`, `arxiv`).
     pub verify_sources: Vec<String>,
     pub preferred_agent_model: Option<String>,
+    /// Who does this project's writing work: an agent client id or `on-device`.
+    pub agent: Option<String>,
     /// `INVECTUS_OFFLINE=1`: every network use is refused whatever the project switch says.
     pub offline_env: bool,
     pub collections: Vec<CollectionInfo>,
@@ -270,6 +272,7 @@ pub fn project_info(s: &Session, board: &SharedBoard) -> anyhow::Result<ProjectI
             .map(|v| v.name().to_string())
             .collect(),
         preferred_agent_model: s.project.preferred_agent_model()?,
+        agent: s.project.agent()?,
         offline_env: invectus_core::net::offline(),
         collections,
         tables,
@@ -390,6 +393,23 @@ pub fn set_agent_model(
             "the open project changed; choose the model again"
         );
         s.project.set_preferred_agent_model(model)?;
+        project_info(s, board)
+    })
+}
+
+/// Choose who does the open project's writing work (an agent client id, or `on-device`).
+pub fn set_project_agent(
+    session: &Shared,
+    board: &SharedBoard,
+    project: &str,
+    agent: Option<&str>,
+) -> OpResult<ProjectInfo> {
+    with_session(session, |s| {
+        anyhow::ensure!(
+            s.project.root == std::path::Path::new(project),
+            "the open project changed; choose the agent again"
+        );
+        s.project.set_agent(agent)?;
         project_info(s, board)
     })
 }

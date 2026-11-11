@@ -33,6 +33,8 @@ export interface IndexPlan { models: string[]; missing: MissingModel[]; notes: s
 export interface ProjectInfo {
   root: string; name: string; warning: string | null; network_enabled: boolean; offline_env: boolean; verify_sources: string[];
   preferred_agent_model?: string | null;
+  /** Who does this project's writing work: an agent client id, or `on-device`. */
+  agent?: string | null;
   collections: Collection[]; tables: TableInfo[]; activity: JobRecord[]; running: JobInfo | null;
 }
 export interface ModelInfo { key: string; repo: string; dimensions: number; megabytes: number; installed: boolean; default: boolean; note: string }
@@ -154,6 +156,7 @@ export const api = {
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
   setVerifySources: (sources: string[]) => invoke<ProjectInfo>("set_verify_sources", { sources }),
   setAgentModel: (project: string, model: string | null) => invoke<ProjectInfo>("set_agent_model", { project, model }),
+  setProjectAgent: (project: string, agent: string | null) => invoke<ProjectInfo>("set_project_agent", { project, agent }),
   inspect: (path: string, sheet?: string | null) => invoke<SourceInfo>("inspect_source", { path, sheet: sheet ?? null }),
   /** Network: pull a Google Sheet or Notion database into the open project (a background job). */
   pullSource: (spec: string) => invoke<JobInfo>("pull_source", { spec }),
@@ -238,6 +241,12 @@ export async function pickSource(folder = false): Promise<string | null> {
   const r = await openDialog(folder
     ? { directory: true, multiple: false, title: "Choose a folder of .txt or .md files" }
     : { directory: false, multiple: false, title: "Choose a dataset", filters: [{ name: "Datasets", extensions: ["csv", "tsv", "parquet", "pq", "xlsx", "xlsm", "xlsb", "xls", "ods"] }] });
+  return typeof r === "string" ? r : null;
+}
+
+/** The system's folder picker for where a new project lives. */
+export async function pickDirectory(start?: string): Promise<string | null> {
+  const r = await openDialog({ directory: true, multiple: false, title: "Choose where the project lives", defaultPath: start || undefined });
   return typeof r === "string" ? r : null;
 }
 

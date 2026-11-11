@@ -1,0 +1,10 @@
+Simple Icons (https://simpleicons.org, https://github.com/simple-icons/simple-icons)
+
+The icon data is released under CC0 1.0 Universal (public domain dedication):
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Used in src/IntegrationIcon.tsx: Notion, Zotero, Airtable, Google Sheets (v16.37.0)
+and Microsoft Excel (v10.0.0). The marks remain their owners' trademarks; inVectus shows them
+only to name the service an integration connects to. Tally, Canny and Productboard marks come
+from each company's own site favicon, and Typeform's symbol is redrawn from its favicon;
+all are used the same way.

@@ -14,6 +14,21 @@ function springSamples(response = 0.5, damping = 0.8) {
   return out;
 }
 
+const SPRING = springSamples();
+SPRING[SPRING.length - 1][1] = 1;
+/** Settle time of springRelaxed, in ms. */
+export const SPRING_MS = SPRING[SPRING.length - 1][0] * 1000;
+/** springRelaxed's progress `ms` after it starts (0 before, 1 once settled), for JS-driven motion. */
+export function springAt(ms: number): number {
+  if (ms <= 0) return 0;
+  if (ms >= SPRING_MS) return 1;
+  const t = ms / 1000;
+  let i = 1;
+  while (SPRING[i][0] < t) i++;
+  const [t0, v0] = SPRING[i - 1], [t1, v1] = SPRING[i];
+  return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+}
+
 export function installMotion(root: HTMLElement = document.documentElement) {
   const s = springSamples();
   const end = s[s.length - 1][0];

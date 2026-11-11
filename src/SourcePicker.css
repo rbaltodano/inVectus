@@ -1,0 +1,25 @@
+/* Source tiles (New project, Add to Dataset): built-in sources and connected integrations. */
+.source-picker { display: flex; flex-direction: column; gap: 12px; }
+.np-sources { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+.np-source { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 14px 16px; border: 1px solid var(--line); border-radius: var(--r);
+  background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--ink); text-align: left; font: inherit; cursor: pointer; transition: border-color .15s, background-color .15s;
+  animation: item-flicker 150ms step-end backwards; }
+.np-source:hover:not(:disabled) { border-color: rgba(var(--ink-rgb), .35); background: var(--surface); }
+.np-source[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.np-source[aria-pressed="true"]:hover:not(:disabled) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.np-source[aria-pressed="true"] .np-source-hint { color: var(--accent); }
+.np-source-check { position: absolute; top: 10px; right: 10px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--bg); }
+.np-source:disabled { opacity: .45; cursor: default; }
+.np-source-mark { height: 22px; display: flex; align-items: center; margin-bottom: 8px; color: var(--ink); }
+.np-source-name { font-size: 13px; }
+.np-source-hint { font-size: 11.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+.source-dialog .push-right { margin-right: auto; }
+@media (prefers-reduced-motion: reduce) { .np-source { animation: none; } }
+
+/* A collection's source line (Collections tab). */
+.collection-source { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
+.collection-source > span:not(.collection-source-mark):not(.push) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.collection-source-mark { display: flex; flex: none; color: var(--ink); }
+.collection-source .push { margin-left: auto; flex: none; }
+.add-data-actions { gap: 16px; align-items: center; }

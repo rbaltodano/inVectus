@@ -2972,3 +2972,30 @@ real accounts were used.
   `install.sh` installed v0.2.0 end to end.
 - **Unverified / limits:** Windows installer unsigned (SmartScreen warning); Linux tested on
   Ubuntu 24.04 only; Intel Macs not built; no clean-machine test by a person yet.
+
+## 2026-11-11 — Home page, New project, sources, integration marks
+
+- **Home** is the default page and the first sidebar item. The last project opens quietly
+  (not counted as opened until entered). A Continue card shows a slice of its data circle
+  (centre on the card's right edge, radius 60% of its width) with readiness, then a camera tour
+  to a random top-12 gap with a card that opens it; Top gaps (code, label, the engine's
+  explanation, demand sparkline per year, score); Recent projects. Display only: map positions
+  decide nothing.
+- **Sidebar projects** open on one click anywhere on the row; double-clicking the name renames.
+- **Integrations** cards show each service's mark (Simple Icons CC0, Excel from v10.0.0;
+  Tally, Canny, Productboard from their sites; Typeform's symbol redrawn).
+  `docs/licenses/Simple-Icons-CC0.txt`.
+- **New project:** the heading is the name field; Project destination with a folder picker;
+  Import existing data shows built-in sources and connected integrations only, several can be
+  chosen (link sources ask in a dialog), and they import one after another; Agent for this
+  project lists connected agents and the on-device model, labelled Cloud or Local, defaulting
+  to the last chosen, else the last active, else on-device.
+- **Add to Dataset** opens the same source picker; Collections show each collection's source.
+- **Per-project agent:** `project.json` gains optional `agent` (a client id or `on-device`),
+  set through `set_project_agent`. Stored and shown only; nothing routes work by it yet.
+  *Spec note:* SPEC §7.8 describes agent and desktop editions but no per-project agent choice;
+  recorded here for review.
+- Checks: `tsc`; `cargo fmt --check`; `invectus-core` project-config test (agent field) passes;
+  release app bundle built and launched on this Mac (arm64). Screens checked in headless
+  Chrome with a stand-in backend and the real gapmap-full map export; the native window was
+  not captured (no screen-recording permission). Not run: full workspace tests, clippy, CI.

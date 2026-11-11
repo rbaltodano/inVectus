@@ -5,6 +5,7 @@ import { api, fmt, local, year, KIND_LABEL, verdictLabel, type CheckResult, type
 import { ErrorLine, useAction, type Ctx, type Page } from "../App";
 import Link from "../Link";
 import Import from "./Import";
+import AddData from "./AddData";
 import Collections from "./Collections";
 import SavedPage from "./Saved";
 import GapDetailView from "./GapDetail";
@@ -18,7 +19,7 @@ import filterChevron from "../assets/figma/search-filter-chevron.svg?no-inline";
 import resultDivider from "../assets/figma/search-result-divider.svg?no-inline";
 import { MatrixLoader } from "../IndexingIndicator";
 
-const pageKey = (p: Page) => p.kind === "gap" ? `gap:${p.id}` : p.kind === "item" ? `item:${p.point.item_id}` : p.kind;
+const pageKey = (p: Page) => p.kind === "gap" ? `gap:${p.id}` : p.kind === "item" ? `item:${p.point.item_id}` : p.kind === "import" ? `import:${p.path ?? ""}` : p.kind;
 const SWAP_OUT_MS = 150;
 
 export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: Page[]; active: boolean; tabId: string }) {
@@ -44,7 +45,10 @@ export default function Panel({ ctx, stack, active, tabId }: { ctx: Ctx; stack: 
     {searchPage && <div className="stack gap-s" hidden={shown.kind !== "search"}>
       <SearchPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} initial={searchPage.query} active={active && shown.kind === "search"} />
     </div>}
-    {shown.kind === "import" && <Import ctx={ctx} initialPath={shown.path} onCancel={ctx.back} onDone={(collection) => ctx.push({ kind: "index", collection })} />}
+    {shown.kind === "add" && <AddData ctx={ctx} onIntegrations={() => ctx.go({ view: "integrations" })} />}
+    {/* Several chosen sources import one after another; each import starts fresh. */}
+    {shown.kind === "import" && <Import key={shown.path ?? "paste"} ctx={ctx} initialPath={shown.path} onCancel={ctx.back}
+      onDone={(collection) => shown.next?.length ? ctx.push({ kind: "import", path: shown.next[0], next: shown.next.slice(1) }) : ctx.push({ kind: "index", collection })} />}
     {stack.some((p) => p.kind === "index") && <div className="stack gap-s" hidden={shown.kind !== "index"}><Collections ctx={ctx} focus={stack.find((p) => p.kind === "index")?.collection} /></div>}
     {stack.some((p) => p.kind === "gaps") && <div className="stack gap-s" hidden={shown.kind !== "gaps"}><GapsPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} active={active && shown.kind === "gaps"} /></div>}
     {shown.kind === "saved" && <SavedPage key={`${ctx.tref?.collection}:${ctx.tref?.space}`} ctx={ctx} active={active} />}

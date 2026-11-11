@@ -1,0 +1,89 @@
+/* Home: the Continue card (a slice of the data circle), Top gaps and Recent projects. */
+.home-page { gap: 36px; max-width: 1240px; }
+.home-page > * { flex-shrink: 0; } /* the page scrolls; cards keep their height */
+.home-card { border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); }
+.home-card-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+.home-card-head h2 { font-size: 15px; font-weight: 400; }
+.home-card-head .text-btn { color: var(--dim); }
+.home-card-head .text-btn:hover { color: var(--ink); }
+
+/* Continue: text on the left 40%, the circle's slice behind the rest. */
+.home-continue { position: relative; height: 420px; overflow: hidden; }
+.home-slice { position: absolute; inset: 0; }
+.home-slice canvas { animation: item-flicker 150ms step-end backwards; }
+.home-slice canvas { display: block; }
+.home-slice-note { position: absolute; left: 70%; top: 50%; transform: translate(-50%, -50%); margin: 0; }
+.home-continue-text { position: absolute; left: 28px; top: 28px; bottom: 28px; width: calc(40% - 56px); display: flex; flex-direction: column; min-width: 0; }
+.home-project-name { font-size: 34px; font-weight: 300; letter-spacing: -0.02em; line-height: 1.1; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-continue-text .path { font-size: 11px; color: var(--dim); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-facts { display: flex; gap: 28px; margin: 26px 0 0; }
+.home-facts dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.home-facts dd { margin: 6px 0 0; font-size: 20px; font-weight: 300; font-variant-numeric: tabular-nums; }
+.home-ready { list-style: none; padding: 0; margin: 24px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.home-ready li { display: flex; gap: 8px; }
+.home-ready li.ok { color: var(--accent); }
+.home-ready li.todo { color: var(--dim); }
+.home-continue-actions { margin-top: auto; gap: 10px; }
+.home-legend { position: absolute; right: 22px; bottom: 18px; display: flex; gap: 16px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--bg-rgb), 0.8); font-size: 11.5px; color: var(--dim); }
+.home-legend span { display: flex; align-items: center; gap: 7px; }
+.home-legend-square { width: 5px; height: 5px; background: var(--ink); }
+.home-legend-ring { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--ink); }
+
+/* Top gaps: rows enter one after another; the sparkline (JS), meter and number start together. */
+.home-gaps-head, .home-gap { display: grid; grid-template-columns: 44px minmax(0, 1fr) 140px 150px; gap: 24px; align-items: center; padding: 12px 22px; }
+.home-gaps-head { grid-template-columns: minmax(0, 1fr) 140px 150px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 35%, var(--bg));
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.home-gaps-head .num { text-align: right; }
+.home-gap { width: 100%; padding: 14px 22px; border: none; border-bottom: 1px solid var(--line); background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.home-gap:last-child { border-bottom: none; }
+.home-gap:hover { background: var(--hover-fill); }
+.home-gap-code { font: 500 10.5px var(--mono); letter-spacing: 0.06em; color: var(--dim); }
+.home-gap-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.home-gap-label, .home-gap-why { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-gap-why { font-size: 11.5px; color: var(--dim); }
+.home-spark { width: 140px; height: 28px; display: block; }
+.home-spark-area { fill: rgba(var(--ink-rgb), 0.08); }
+.home-spark-line { fill: none; stroke: var(--ink); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.home-gap-score { display: flex; align-items: center; justify-content: flex-end; gap: 10px; font-variant-numeric: tabular-nums; }
+.home-gap-meter { width: 90px; height: 3px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+.home-gap-meter i { display: block; height: 100%; background: var(--ink); transform-origin: left center;
+  animation: fill-x 550ms cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: var(--delay, 0ms); }
+.home-gap-value { animation: item-flicker 150ms step-end backwards; animation-delay: var(--delay, 0ms); }
+
+/* Recent projects */
+.home-table-head, .home-table-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px minmax(0, 200px) minmax(0, 220px) 100px; gap: 16px; align-items: center; padding: 13px 22px; }
+.home-table-head { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 35%, var(--bg));
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.home-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.home-table-row { width: 100%; border: none; border-bottom: 1px solid var(--line); background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.home-table-row:last-child { border-bottom: none; }
+.home-table-row:hover { background: var(--hover-fill); }
+.home-table-name, .home-col-models { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-col-models.models { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.home-status { display: inline-flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; }
+.home-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: none; }
+.home-status.ok { color: var(--accent); } .home-status.ok i { background: var(--accent); }
+.home-status.busy { color: var(--star); } .home-status.busy i { background: var(--star); }
+
+@media (max-width: 900px) {
+  .home-continue { height: auto; display: flex; flex-direction: column-reverse; }
+  .home-slice { position: relative; height: 260px; }
+  .home-continue-text { position: static; width: auto; padding: 24px; }
+  .home-gaps-head, .home-gap { grid-template-columns: 44px minmax(0, 1fr) 110px; }
+  .home-gaps-head { grid-template-columns: minmax(0, 1fr) 110px; }
+  .home-spark, .home-gaps-head span:nth-child(2) { display: none; }
+  .home-table-head, .home-table-row { grid-template-columns: minmax(0, 1fr) 90px 80px; }
+  .home-col-models, .home-table-head span:nth-child(4), .home-status { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-slice, .home-slice canvas, .home-gap-card, .home-gap-meter i, .home-gap-value { animation: none; }
+}
+
+/* The gap the camera tours to: a card beside its ring that opens the gap. */
+.home-gap-card { position: absolute; z-index: 2; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: var(--r);
+  background: rgba(var(--bg-rgb), 0.92); color: var(--ink); text-align: left; font: inherit; font-size: 12px; cursor: pointer; animation: item-flicker 150ms step-end backwards; }
+.home-gap-card:hover { border-color: var(--accent); }
+.home-gap-card b { font-weight: 400; font-size: 13px; }
+.home-gap-card-code { font: 500 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.home-gap-card-why { color: var(--dim); line-height: 1.45; }
+.home-gap-card-foot { font-size: 11px; color: var(--dim); }

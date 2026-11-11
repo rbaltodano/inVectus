@@ -9,10 +9,7 @@ export default function ProjectName({ name, onSave, onSelect, className = "", di
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const input = useRef<HTMLInputElement>(null);
-  const clickTimer = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => () => clearTimeout(clickTimer.current), []);
   const beginRename = () => {
-    clearTimeout(clickTimer.current);
     cancelled.current = false; setDraft(name); setError(undefined); setEditing(true);
   };
   const pending = useRef(false);
@@ -39,9 +36,9 @@ export default function ProjectName({ name, onSave, onSelect, className = "", di
       : <button type="button" className="project-name-button" disabled={disabled} title={onSelect ? "Click to open; double-click to rename" : "Double-click to rename project"}
         aria-label={`${onSelect ? "Open" : "Rename"} project ${name}`}
         onClick={(event) => {
-          if (event.detail === 0) { if (onSelect) onSelect(); else beginRename(); return; }
-          clearTimeout(clickTimer.current);
-          if (event.detail === 1 && onSelect) clickTimer.current = setTimeout(onSelect, 300);
+          // One click opens at once (the row stays put, so a second click can still rename).
+          if (onSelect) { event.stopPropagation(); if (event.detail <= 1) onSelect(); return; }
+          if (event.detail === 0) beginRename();
         }}
         onDoubleClick={beginRename}
         onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); beginRename(); } }}>{name}</button>}

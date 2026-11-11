@@ -18,6 +18,10 @@ pub struct ProjectConfig {
     /// Requested model for future MCP agent work; the agent client controls execution.
     #[serde(default)]
     pub preferred_agent_model: Option<String>,
+    /// Who does this project's writing work: an agent client id (`claude-code`, `codex`, …) or
+    /// `on-device` for the local language model. `None`: not chosen yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
     /// Outside sources gap checks use (`pubmed`, `openalex`, `semanticscholar`, `arxiv`);
     /// `None`: PubMed and OpenAlex.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -50,6 +54,7 @@ impl Project {
             name,
             network_enabled: false,
             preferred_agent_model: None,
+            agent: None,
             verify_sources: None,
         };
         write_json_atomic(&root.join("project.json"), &config)?;
@@ -107,9 +112,32 @@ impl Project {
         Ok(())
     }
 
+    /// Choose who does this project's writing work (an agent client id, or `on-device`).
+    pub fn set_agent(&mut self, agent: Option<&str>) -> Result<()> {
+        if let Some(agent) = agent
+            && (agent.is_empty()
+                || agent.len() > 64
+                || !agent
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
+        {
+            bail!("agent must be a client id such as `claude-code`, or `on-device`");
+        }
+        let mut config = read_config(&self.root)?;
+        config.agent = agent.map(str::to_owned);
+        write_json_atomic(&self.root.join("project.json"), &config)?;
+        self.config = config;
+        Ok(())
+    }
+
     /// Read current metadata, including preferences changed by the desktop app.
     pub fn preferred_agent_model(&self) -> Result<Option<String>> {
         Ok(read_config(&self.root)?.preferred_agent_model)
+    }
+
+    /// Who does this project's writing work, as last saved (an agent client id or `on-device`).
+    pub fn agent(&self) -> Result<Option<String>> {
+        Ok(read_config(&self.root)?.agent)
     }
 
     /// Change the display name without moving the project or touching its database.
@@ -260,6 +288,16 @@ mod tests {
         );
         project.set_preferred_agent_model(None).unwrap();
         assert!(project.preferred_agent_model().unwrap().is_none());
+
+        assert!(project.config.agent.is_none());
+        project.set_agent(Some("on-device")).unwrap();
+        assert_eq!(
+            read_config(&project.root).unwrap().agent.as_deref(),
+            Some("on-device")
+        );
+        assert!(project.set_agent(Some("Claude Code")).is_err());
+        project.set_agent(None).unwrap();
+        assert!(read_config(&project.root).unwrap().agent.is_none());
     }
 
     #[test]

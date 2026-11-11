@@ -1,4 +1,4 @@
-// Integrations: what inVectus connects to. AI agents (MCP clients) and data sources. Excel is
+// Integrations: data sources and outside checks (AI agents have their own page, Agents.tsx). Excel is
 // read locally; Google Sheets (shared by link), Notion, Zotero and Airtable (tokens in the
 // keychain) are pulled into a project only when the person asks, then imported offline
 // (docs/integrations.md).
@@ -7,7 +7,6 @@ import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbul
 import { api, inTauri } from "../api";
 import { ErrorLine, useAction } from "../App";
 import Link from "../Link";
-import ConnectAgents from "./ConnectAgents";
 
 export default function Integrations() {
   // undefined while loading; each integration's token source, or null when not connected.
@@ -17,7 +16,7 @@ export default function Integrations() {
     <div className="integrations-inner">
       <header className="integrations-header">
         <h1>Integrations</h1>
-        <p>Connect inVectus to your AI agents and bring in data from the tools you already use.</p>
+        <p>Bring in data from the tools you already use, and choose where gap checks look for existing work. AI agents have their own page.</p>
       </header>
       <section aria-labelledby="i-data" className="integrations-section">
         <div className="integrations-section-head">
@@ -68,13 +67,6 @@ export default function Integrations() {
             <p className="integration-desc">PubMed and OpenAlex by default; Semantic Scholar and arXiv when you turn them on. No keys needed.</p>
           </li>
 </ul>
-      </section>
-      <section aria-labelledby="i-agents" className="integrations-section">
-        <div className="integrations-section-head">
-          <h2 id="i-agents">AI agents</h2>
-          <p>Let your agents search collections, inspect evidence and suggest decisions. Works for all projects.</p>
-        </div>
-        <ConnectAgents />
       </section>
     </div>
   </div>;

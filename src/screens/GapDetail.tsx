@@ -162,7 +162,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
             {description!.accepted === null && <span className="muted">No attempt passed both checks; showing the last one.</span>}
           </div>}
           {description?.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
-          {llmReady === false && <div className="note small">No local language model is installed, so the app cannot write a description. A connected AI agent can write one instead (Integrations → AI agents).</div>}
+          {llmReady === false && <div className="note small">No local language model is installed, so the app cannot write a description. A connected AI agent can write one instead (Agents).</div>}
           <div className="row">
             <button type="button" className="btn" disabled={describe.busy || llmReady === false} onClick={() => describe.run(async () => setDescribed(await api.describe(tref, id, bridge ? t / 100 : null)))}>
               {describe.busy ? "Writing… (the local model can take a minute)" : attempt ? "Regenerate" : "Describe with the local model"}</button>

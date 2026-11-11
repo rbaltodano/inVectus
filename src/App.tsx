@@ -13,10 +13,11 @@ import Panel from "./screens/Panel";
 import IndexingIndicator from "./IndexingIndicator";
 import WorkspaceSplit from "./WorkspaceSplit";
 import Integrations from "./screens/Integrations";
+import Agents from "./screens/Agents";
 import Settings from "./screens/Settings";
 import TabIndicator, { useTabIndicator } from "./TabIndicator";
 import StarPrompt from "./StarPrompt";
-import { ArrowLeft, Blocks, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Blocks, Bot, Folder, FolderOpen, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, openingTab, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import { baseName, joinPath } from "./paths";
 import "./App.css";
@@ -27,7 +28,7 @@ export type Page =
   | { kind: "index"; collection?: string } | { kind: "gaps" } | { kind: "saved" }
   | { kind: "gap"; id: number } | { kind: "item"; point: MapPoint };
 
-export type Route = { view: "projects" } | { view: "new" } | { view: "integrations" } | { view: "settings" } | { view: "project" };
+export type Route = { view: "projects" } | { view: "new" } | { view: "integrations" } | { view: "agents" } | { view: "settings" } | { view: "project" };
 
 /** Older views navigate with these; `go` turns them into menu pages. */
 type Legacy = { view: "project"; tab: "overview" | "search" | "gaps" | "collections" | "map"; gap?: number; region?: number; query?: string; collection?: string; adding?: boolean };
@@ -168,6 +169,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
           {nav("New project", Plus, route.view === "new", () => setRoute({ view: "new" }), opening || switchingBlocked)}
           {nav("Open project…", FolderOpen, false, openProject, opening || switchingBlocked)}
           {nav("Integrations", Blocks, route.view === "integrations", () => setRoute({ view: "integrations" }))}
+          {nav("Agents", Bot, route.view === "agents", () => setRoute({ view: "agents" }))}
         </div>
         <div className="sidebar-projects">
           {nav("Projects", Folder, route.view === "projects", () => setRoute({ view: "projects" }))}
@@ -199,6 +201,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         onPick={openRecent} onNew={() => setRoute({ view: "new" })} onOpen={openProject} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
       {route.view === "new" && <NewProject onCreated={opened} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
       {route.view === "integrations" && <Integrations />}
+      {route.view === "agents" && <Agents />}
       {route.view === "settings" && <Settings project={project} setProject={setProject} />}
       {route.view === "project" && project && <Workspace key={project.root} project={project} setProject={setProject} refresh={refresh}
         initialStack={stack} goRoute={setRoute} onRename={(name) => renameProject(project.root, name)} />}

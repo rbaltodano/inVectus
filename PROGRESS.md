@@ -2944,3 +2944,11 @@ real accounts were used.
   taken out the same day it was added. The ODP replacement is on the roadmap (its docs pages are
   JavaScript-only and could not be read here).
 - Fixed: the Zotero refusal message wording; the CLI ends its progress line before an error.
+
+## 2026-11-10 — Agents page
+
+- AI agent clients moved off Integrations to their own sidebar page, **Agents** (under
+  Integrations): client cards, more clients, how connections work, recent agent activity.
+  Integrations now holds data sources and outside checks only. Checked: `tsc`, frontend build,
+  46 UI tests; rendered in a browser preview with this Mac's real client list (native window
+  not captured: no screen-recording permission in the agent session).

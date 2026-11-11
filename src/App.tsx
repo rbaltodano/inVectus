@@ -231,7 +231,8 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         {error && <p className="side-error" role="alert">{error}</p>}
       </div>
       <div className="side-bottom">
-        {job && <JobLine job={job} recent={recent} />}
+        {/* Only work in progress shows here; finished jobs leave the sidebar. */}
+        {job && isRunning(job) && <JobLine job={job} recent={recent} />}
         {nav("Settings", SettingsIcon, route.view === "settings", () => setRoute({ view: "settings" }))}
       </div>
     </nav>

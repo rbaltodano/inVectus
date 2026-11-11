@@ -1,19 +1,13 @@
 // New project: name and place, where the first data comes from (a file, a folder or one of the
 // integrations), and who does the project's writing work (an agent, or the on-device model).
-import { useEffect, useMemo, useState } from "react";
-import { Folder, Cpu } from "lucide-react";
-import AgentIcon, { markFor } from "../AgentIcon";
-import { useAgentActivity } from "../agents";
-import { api, inTauri, local, pickDirectory, type ConnectStatus, type JobInfo, type LlmInfo, type ProjectInfo } from "../api";
+import { useEffect, useState } from "react";
+import { Folder } from "lucide-react";
+import { AgentMark, LAST_AGENT, useAgentOptions } from "../agentOptions";
+import { api, inTauri, local, pickDirectory, type JobInfo, type ProjectInfo } from "../api";
 import type { Page } from "../App";
 import SourcePicker, { type Picked } from "../SourcePicker";
 import { baseName, joinPath } from "../paths";
 import "./NewProject.css";
-
-/** Agents that run on this computer; every other client runs its model in the cloud. */
-const LOCAL_CLIENTS = new Set(["on-device", "lmstudio", "ollama", "jan"]);
-const LAST_AGENT = "invectus.last-agent";
-interface AgentOption { id: string; name: string; local: boolean; note: string }
 
 interface Props {
   onCreated: (p: ProjectInfo, first?: Page) => void;
@@ -26,38 +20,19 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
   const [name, setName] = useState("");
   const [dir, setDir] = useState("");
   const [sources, setSources] = useState<Picked[]>([]);
-  const [clients, setClients] = useState<ConnectStatus[]>([]);
-  const [llm, setLlm] = useState<LlmInfo>();
   const [agent, setAgent] = useState<string>();
   const [agentPicked, setAgentPicked] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const activity = useAgentActivity();
+  const { agents, fallback } = useAgentOptions();
 
   useEffect(() => {
     if (!inTauri) return;
     api.defaultDir().then(setDir).catch(() => undefined);
-    api.connectStatus().then((c) => setClients(c ?? [])).catch(() => undefined);
-    api.llms().then((ls) => setLlm(ls?.find((l) => l.default) ?? ls?.[0])).catch(() => undefined);
   }, []);
 
-  const agents = useMemo<AgentOption[]>(() => [
-    ...clients.filter((c) => c.connected).map((c) => ({
-      id: c.client, name: c.display_name, local: LOCAL_CLIENTS.has(c.client),
-      note: LOCAL_CLIENTS.has(c.client) ? "Its model runs on this computer" : "Uses your plan with its provider",
-    })),
-    { id: "on-device", name: "On-device model", local: true,
-      note: llm ? `${llm.key}${llm.installed ? "" : ` · ${(llm.megabytes / 1024).toFixed(1)} GB download when first used`}` : "Runs on this computer, offline" },
-  ], [clients, llm]);
-
-  // Default: the agent you chose last time, else the one that last worked here; without a
-  // connected agent, the on-device model.
-  useEffect(() => {
-    if (agentPicked && agents.some((a) => a.id === agent)) return;
-    const remembered = local.get<string | null>(LAST_AGENT, null);
-    const recent = activity[0] && agents.find((a) => a.id !== "on-device" && markFor(a.id) && markFor(a.id) === markFor(activity[0].client));
-    setAgent(agents.find((a) => a.id === remembered)?.id ?? recent?.id ?? "on-device");
-  }, [agents, activity, agentPicked]);
+  // Default to the agent chosen last time (see useAgentOptions) until one is picked here.
+  useEffect(() => { if (!agentPicked || !agents.some((a) => a.id === agent)) setAgent(fallback); }, [fallback, agents, agentPicked]);
 
   // Without a name, the project is named after the first file or folder chosen.
   const firstLocal = sources.find((p) => p.id === "file" || p.id === "folder");
@@ -109,7 +84,7 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
       <p className="dim small">Who writes gap descriptions, region names and paraphrases. You can change it later.</p>
       <div className="np-agents" role="radiogroup" aria-labelledby="np-agent">
         {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={agent === a.id} className="np-agent" onClick={() => { setAgent(a.id); setAgentPicked(true); }}>
-          <span className="np-agent-mark">{a.id === "on-device" ? <Cpu size={18} strokeWidth={1.5} aria-hidden="true" /> : <AgentIcon client={a.id} size={18} />}</span>
+          <span className="np-agent-mark"><AgentMark id={a.id} /></span>
           <span className="np-agent-text"><span className="np-agent-name">{a.name}</span><span className="np-agent-note">{a.note}</span></span>
           <span className={`np-agent-where ${a.local ? "local" : "cloud"}`}>{a.local ? "Local" : "Cloud"}</span>
         </button>)}

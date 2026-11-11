@@ -17,6 +17,7 @@ import Agents from "./screens/Agents";
 import Settings from "./screens/Settings";
 import Home from "./screens/Home";
 import NewProject from "./screens/NewProject";
+import AgentChip from "./AgentChip";
 import TabIndicator, { useTabIndicator } from "./TabIndicator";
 import StarPrompt from "./StarPrompt";
 import { ArrowLeft, Blocks, Bot, Folder, FolderOpen, House, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
@@ -307,7 +308,6 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   const [resetKey, setResetKey] = useState(0);
   const [mapFocus, setMapFocus] = useState<{ region: number; request: number }>();
   const [mapError, setMapError] = useState<string>();
-  const [netError, setNetError] = useState<string>();
 
   const tables = project.tables;
   const table = defaultTable(project, selected);
@@ -411,16 +411,12 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   return <>
     <header className="head">
       <div className="project-heading"><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1><ProjectName name={project.name} onSave={onRename} /></h1><div className="path">{tilde(project.root)}</div></div>
-      <div className="head-actions">
-      <button type="button" className={`net ${project.network_enabled && !project.offline_env ? "on" : ""}`} aria-pressed={project.network_enabled && !project.offline_env}
-        onClick={async () => { try { setProject(await api.setNetwork(!project.network_enabled)); } catch (e) { setNetError(String(e)); } }}
-        title={project.offline_env ? "INVECTUS_OFFLINE is set: the network stays off" : "Network is used only for model downloads and outside-source checks"}>
-        {project.network_enabled && !project.offline_env ? "Network on" : "Offline"}</button></div>
+      {/* The network switch lives in Settings → Network. */}
+      <div className="head-actions"><AgentChip project={project} setProject={setProject} /></div>
     </header>
     <WorkspaceSplit>
       <section className="project-console" aria-label="Project workspace">
         {project.warning && <p className="banner">{project.warning}</p>}
-        {netError && <p className="banner err">{netError}</p>}
         <AgentStatus root={project.root} />
         <div className="project-toolbar">
           <div ref={tabsRef} className="project-tabs" role="tablist" aria-label="Project sections">

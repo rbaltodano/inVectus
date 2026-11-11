@@ -1,0 +1,29 @@
+/* The agent pill in the project header, its list, and the Add an agent dialog. */
+.agent-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border: 1px solid var(--line-2); border-radius: 999px !important;
+  background: none; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; transition: border-color .15s; }
+.agent-chip:hover, .agent-chip[aria-expanded="true"] { border-color: rgba(var(--ink-rgb), .45); }
+.agent-chip-mark { width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; flex: none; }
+.agent-chip-chev { color: var(--dim); }
+.agent-where { font: 500 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--dim); flex: none; }
+.agent-where.local { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+.agent-menu { position: fixed; z-index: 100; width: 320px; max-width: calc(100vw - 16px); border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg);
+  box-shadow: 0 20px 60px var(--shadow); overflow: hidden; animation: item-flicker 150ms step-end backwards; }
+.agent-menu-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font: 400 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.agent-menu-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px; border: none; border-bottom: 1px solid var(--line); border-radius: 0 !important;
+  background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.agent-menu-row:hover:not(:disabled) { background: var(--hover-fill); }
+.agent-menu-row[aria-checked="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+.agent-menu-mark { width: 22px; display: flex; justify-content: center; flex: none; }
+.agent-menu-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.agent-menu-note { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-menu-check { width: 14px; flex: none; color: var(--accent); }
+.agent-menu-add { border-bottom: none; color: var(--dim); }
+.agent-menu-add:hover { color: var(--ink); }
+.agent-menu-error { padding: 8px 14px 12px; margin: 0; }
+
+.integration-modal.agent-add-modal { width: min(820px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; gap: 18px; }
+.agent-add-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.agent-add-head h3 { font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+.agent-add-close { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line-2); background: none; color: var(--ink); cursor: pointer; flex: none; }
+@media (prefers-reduced-motion: reduce) { .agent-menu { animation: none; } }

@@ -1075,3 +1075,6 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .integration-modal label { display: flex; flex-direction: column; gap: 6px; }
 .settings-sources { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; border: none; }
 .settings-sources legend { margin-bottom: 8px; font-size: 13px; font-weight: 500; color: var(--text); }
+/* Dev mode marker next to the logo (never in a built app). */
+.logo { display: flex; align-items: center; gap: 10px; }
+.dev-badge { font: 500 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 999px; color: var(--accent); }

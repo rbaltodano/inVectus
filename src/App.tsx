@@ -196,7 +196,9 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     <nav aria-label="Main" className="sidebar">
       <div className="sidebar-window-drag" data-tauri-drag-region aria-hidden="true" />
       <div className="side-top">
-        <div className="logo"><img className="logo-dark" src={brandLogo} alt="inVectus" /><img className="logo-light" src={brandLogoDarkText} alt="inVectus" /></div>
+        <div className="logo"><img className="logo-dark" src={brandLogo} alt="inVectus" /><img className="logo-light" src={brandLogoDarkText} alt="inVectus" />
+          {/* Dev mode (npm run tauri dev): screen and style changes appear without a rebuild. */}
+          {import.meta.env.DEV && <span className="dev-badge" title="Live dev build: changes to screens and styles appear here without a rebuild">Live</span>}</div>
         <div className="side-search">
           <Search size={16} strokeWidth={1.5} aria-hidden="true" />
           <label htmlFor="side-q" className="sr-only">Find a project</label>

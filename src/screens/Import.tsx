@@ -6,6 +6,9 @@ import { baseName, collectionIdFromPath } from "../paths";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
+import Select from "../Select";
+
+const ROLE_NOTE: Record<Role, string> = { neutral: "Neither asks nor answers; context only", demand: "Asks for or needs something", coverage: "Answers a need" };
 
 const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
 const REMOTE_NAMES: Record<string, string> = { google_sheet: "Google Sheets", notion: "Notion", zotero: "Zotero", airtable: "Airtable", typeform: "Typeform", tally: "Tally", canny: "Canny", productboard: "Productboard" };
@@ -111,6 +114,12 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     return () => clearTimeout(timer);
   }, [step, formKey]);
 
+  // A few distinct values from the first rows, to describe a column in a dropdown.
+  const valuesOf = (col: string) => {
+    const i = source?.columns.indexOf(col) ?? -1;
+    if (i < 0 || !source) return "";
+    return [...new Set(source.sample.map((row) => row[i]).filter((v): v is string => !!v && v.trim() !== ""))].slice(0, 3).map((v) => v.length > 24 ? `${v.slice(0, 24)}…` : v).join(", ");
+  };
   const sampleOf = (col: string) => {
     const i = source?.columns.indexOf(col) ?? -1;
     return i >= 0 ? source?.sample[0]?.[i] ?? "" : "";
@@ -191,7 +200,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
         <span className="strong">{sourceName}</span>
         <span className="muted">{source.kind.replace("_", " ").toUpperCase()} · {source.rows_read >= 1000 ? "1,000+" : fmt(source.rows_read)} {folder ? "files" : "rows"} · {source.columns.length} columns{source.unreadable ? ` · ${source.unreadable} unreadable` : ""}</span>
         {source.sheets.length > 1 && <label className="inline push">Sheet
-          <select value={sheet ?? ""} disabled={busy} onChange={(e) => look(path, e.target.value)}>{source.sheets.map((n) => <option key={n}>{n}</option>)}</select>
+          <Select ariaLabel="Sheet" menuTitle="Sheets in this file" value={sheet ?? ""} disabled={busy} onChange={(next) => look(path, next)}
+            options={source.sheets.map((n) => ({ value: n, label: n, note: n === sheet ? `Reading this sheet · ${source.columns.length} columns` : undefined }))} />
         </label>}
       </div>}
       <div className="row end">
@@ -216,10 +226,9 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
               <div className="th">Field</div><div className="th">Column</div><div className="th sample">Sample from row 1</div>
               {([["text", "Text"], ["title", "Title"], ["id", "ID"], ["date", "Date"], ["url", "URL"]] as const).map(([k, label]) => <Fragment key={k}>
                 <label htmlFor={`m-${k}`} className="strong">{label}{k === "text" && <span className="req"> *</span>}</label>
-                <select id={`m-${k}`} value={map[k]} onChange={(e) => setMap({ ...map, [k]: e.target.value })}>
-                  <option value="">{k === "text" ? "Choose a column" : k === "id" ? "Row number" : "None"}</option>
-                  {source.columns.map((c) => <option key={c}>{c}</option>)}
-                </select>
+                <Select id={`m-${k}`} menuTitle={`${label} column`} value={map[k]} onChange={(next) => setMap({ ...map, [k]: next })}
+                  options={[{ value: "", label: k === "text" ? "Choose a column" : k === "id" ? "Row number" : "None", note: k === "id" ? "Number items by their row" : k === "text" ? undefined : "Leave this field empty" },
+                    ...source.columns.map((c) => ({ value: c, label: c, note: sampleOf(c) ? `Row 1: ${sampleOf(c)}` : "Row 1 is empty" }))]} />
                 <div className="muted clip sample">{map[k] ? sampleOf(map[k]) || "(empty)" : ""}</div>
               </Fragment>)}
             </div>
@@ -229,9 +238,9 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
       <section className="panel">
         {exists ? <div className="muted small">This collection keeps its saved chunking settings.</div> : <details>
             <summary>Long items: {chunk.mode === "tokens" ? `${fmt(chunk.tokens)} tokens (${fmt(chunk.tokenOverlap)} overlap)` : `${fmt(chunk.chars)} characters (${fmt(chunk.overlap)} overlap)`}</summary>
-            <label>Chunking<select value={chunk.mode} onChange={(e) => setChunk({ ...chunk, mode: e.target.value })}>
-              <option value="tokens" disabled={!tokenizerReady}>Tokens (recommended)</option><option value="characters">Characters</option>
-            </select></label>
+            <label>Chunking<Select ariaLabel="Chunking" value={chunk.mode} onChange={(next) => setChunk({ ...chunk, mode: next })}
+              options={[{ value: "tokens", label: "Tokens (recommended)", note: tokenizerReady ? "Splits by the embedding model's tokens" : "Needs BGE-small, which is not installed yet", disabled: !tokenizerReady },
+                { value: "characters", label: "Characters", note: "Splits every set number of characters" }]} /></label>
             <div className="row wrap">
               {chunk.mode === "tokens" ? <>
                 <label>Chunk above (tokens)<input type="number" min={1} value={chunk.tokens} onChange={(e) => setChunk({ ...chunk, tokens: Number(e.target.value) })} /></label>
@@ -251,22 +260,18 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           <div className="muted small">Demand = something asking or needing. Coverage = something answering it. Gaps compare the two.</div>
         </div>
         <label className="inline">Everything else is
-          <select value={defaultRole} onChange={(e) => setDefaultRole(e.target.value as Role)}>{ROLES.map((r) => <option key={r}>{r}</option>)}</select>
+          <Select<Role> ariaLabel="Default role" menuTitle="Role" value={defaultRole} onChange={setDefaultRole} options={ROLES.map((r) => ({ value: r, label: r, note: ROLE_NOTE[r] }))} />
         </label>
         {!folder && <>
           <label className="inline">Rules read the column
-            <select value={roleColumn} onChange={(e) => setRoleColumn(e.target.value)}>
-              <option value="">Choose a column</option>
-              {source.columns.map((c) => <option key={c}>{c}</option>)}
-            </select>
+            <Select ariaLabel="Role column" menuTitle="Column the rules read" value={roleColumn} onChange={setRoleColumn}
+              options={[{ value: "", label: "Choose a column" }, ...source.columns.map((c) => ({ value: c, label: c, note: valuesOf(c) || "No values in the first rows" }))]} />
           </label>
           {rules.map((r, i) => <div key={i} className="rule">
             <span>If it is or lists</span>
             <input aria-label={`Rule ${i + 1} value`} list="rule-values" value={r.value} onChange={(e) => setRules(rules.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} />
             <span>→</span>
-            <select aria-label={`Rule ${i + 1} role`} value={r.role} onChange={(e) => setRules(rules.map((x, j) => j === i ? { ...x, role: e.target.value as Role } : x))}>
-              {ROLES.map((x) => <option key={x}>{x}</option>)}
-            </select>
+            <Select<Role> ariaLabel={`Rule ${i + 1} role`} menuTitle="Role" value={r.role} onChange={(next) => setRules(rules.map((x, j) => j === i ? { ...x, role: next } : x))} options={ROLES.map((r) => ({ value: r, label: r, note: ROLE_NOTE[r] }))} />
             <button type="button" className="icon push" aria-label={`Remove rule ${i + 1}`} onClick={() => setRules(rules.filter((_, j) => j !== i))}>✕</button>
           </div>)}
           <datalist id="rule-values">{rulesValues.map((v) => <option key={v} value={v} />)}</datalist>

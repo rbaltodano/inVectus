@@ -7,8 +7,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSP
 import { DOT_FLICKER_MS } from "../dot-flicker";
 import IntegrationIcon, { hasIntegrationMark } from "../IntegrationIcon";
 import { useFlickerDelays } from "../dot-flicker";
+import Select from "../Select";
 import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbulb, ListChecks, Map as MapIcon, NotebookText, Search, Sheet, Table2, X, type LucideIcon } from "lucide-react";
-import { api, inTauri } from "../api";
+import { api, inTauri, fmt } from "../api";
 import { ErrorLine, useAction } from "../App";
 import Link from "../Link";
 
@@ -33,11 +34,11 @@ const CATEGORIES: { id: Category; label: string; short: string; about: string }[
   { id: "databases", label: "Databases", short: "Databases", about: "Direct database sources." },
 ];
 
-const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
-  { id: "all", label: "Any status" },
-  { id: "connected", label: "Connected" },
-  { id: "token", label: "Needs a token" },
-  { id: "ready", label: "No setup" },
+const STATUS_FILTERS: { id: StatusFilter; label: string; note: string }[] = [
+  { id: "all", label: "Any status", note: "Every integration" },
+  { id: "connected", label: "Connected", note: "Token saved; ready to import" },
+  { id: "token", label: "Needs a token", note: "Connect it once to use it" },
+  { id: "ready", label: "No setup", note: "Built in; works now" },
 ];
 
 /** One card. Token cards (Notion, Zotero…) come from TOKEN_INTEGRATIONS; the rest are fixed. */
@@ -142,9 +143,8 @@ export default function Integrations() {
         </div>
         <label className="integrations-status" data-active={status !== "all"}>
           <span>Status</span>
-          <select value={status} onChange={(e) => applyFilter({ category, status: e.target.value as StatusFilter })}>
-            {STATUS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-          </select>
+          <Select<StatusFilter> variant="bare" ariaLabel="Status" menuTitle="Status" value={status} onChange={(next) => applyFilter({ category, status: next })}
+            options={STATUS_FILTERS.map((f) => ({ value: f.id, label: f.label, note: f.note, meta: fmt(ENTRIES.filter((e) => (category === "all" || e.category === category) && statusOk(e, f.id)).length) }))} />
         </label>
       </div>
       {visible.length === 0 && <p className="integrations-empty" role="status">No integrations match these filters. <button type="button" className="text-btn" onClick={clear}>Clear filters</button></p>}

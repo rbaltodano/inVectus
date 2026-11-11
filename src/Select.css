@@ -1,0 +1,25 @@
+/* The app's dropdown (Select.tsx): a trigger, and a list in the style of the agent menu. */
+.select-trigger { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.select-trigger:disabled { opacity: .45; cursor: default; }
+.select-trigger.field { width: 100%; min-height: 36px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg); font-size: 14px; }
+.select-trigger.field:hover:not(:disabled), .select-trigger.field[aria-expanded="true"] { border-color: rgba(var(--ink-rgb), .45); }
+.select-trigger.bare { padding: 0; border: none; background: none; letter-spacing: inherit; text-transform: inherit; }
+.select-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-chevron { flex: none; color: var(--dim); transition: transform .15s; }
+.select-trigger[aria-expanded="true"] .select-chevron { transform: rotate(180deg); }
+.select-icon { display: flex; flex: none; }
+
+.select-menu { position: fixed; z-index: 120; overflow-y: auto; border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg); box-shadow: 0 20px 60px var(--shadow);
+  animation: item-flicker 150ms step-end backwards; font-family: var(--sans); text-transform: none; letter-spacing: 0; }
+.select-menu-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font: 400 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.select-option { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; cursor: pointer; }
+.select-option:last-child { border-bottom: none; }
+.select-option.active { background: var(--hover-fill); }
+.select-option[aria-selected="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+.select-option[aria-disabled="true"] { opacity: .45; cursor: default; }
+.select-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.select-option-text > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-option-note { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-option-meta { flex: none; font: 400 11px var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+.select-option-check { width: 14px; flex: none; color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .select-menu { animation: none; } .select-chevron { transition: none; } }

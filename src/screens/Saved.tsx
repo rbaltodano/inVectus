@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, KIND_LABEL, VERDICTS, verdictLabel, when, type SavedOverview } from "../api";
+import { api, KIND_LABEL, VERDICTS, verdictLabel, when, type SavedOverview, fmt } from "../api";
 import AgentAttribution from "../AgentAttribution";
 import { ErrorLine, tableKey, useAction, type Ctx } from "../App";
 import LineArt from "../LineArt";
+import Select from "../Select";
 
 // DuckDB TIMESTAMP records are UTC; attach the zone before formatting in local time.
 const recordedAt = (value: string | null) => when(value ? `${value}Z` : null);
@@ -38,10 +39,10 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
   return <div className="saved-page stack">
     <div className="row wrap"><span className="section">Saved</span><span className="dim small push">Kept in this project</span></div>
     {project.tables.length > 1 && <label>Collection / index
-      <select value={table ? tableKey(table) : ""} onChange={(e) => {
-        const picked = project.tables.find((t) => tableKey(t) === e.target.value);
-        if (picked) ctx.pickTable(picked);
-      }}>{project.tables.map((t) => <option key={tableKey(t)} value={tableKey(t)}>{t.collection} · {t.model_key}</option>)}</select>
+      <Select ariaLabel="Collection / index" menuTitle="Collection and index" value={table ? tableKey(table) : ""}
+        onChange={(key) => { const picked = project.tables.find((t) => tableKey(t) === key); if (picked) ctx.pickTable(picked); }}
+        options={project.tables.map((t) => ({ value: tableKey(t), label: `${t.collection} · ${t.model_key}`,
+          note: [`${fmt(t.vectors)} vectors`, t.regions ? "mapped" : "no map", t.regions?.scanned ? "gaps scored" : null].filter(Boolean).join(" · ") }))} />
     </label>}
     {table && <p className="dim small saved-scope">{table.collection} · {table.model_key}</p>}
     {!tref && <div className="empty-state"><LineArt kind="venn" /><span className="dim">Save gaps and decisions here once a collection is indexed and scanned.</span><button type="button" className="text-btn" onClick={() => ctx.push({ kind: "index" })}>Open Collections</button></div>}
@@ -72,7 +73,9 @@ export default function SavedPage({ ctx, active }: { ctx: Ctx; active: boolean }
       </section>
       <section className="saved-section" aria-labelledby="saved-decisions">
         <div className="row wrap"><h2 id="saved-decisions" className="section">02 / Decision log</h2>
-          <label className="saved-filter push"><span className="sr-only">Filter decisions</span><select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="">All decisions</option>{VERDICTS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+          <label className="saved-filter push"><span className="sr-only">Filter decisions</span><Select ariaLabel="Filter decisions" menuTitle="Show decisions" value={filter} onChange={setFilter}
+            options={[{ value: "", label: "All decisions", meta: fmt(saved.decisions.length) },
+              ...VERDICTS.map(([id, label]) => ({ value: id, label, meta: fmt(saved.decisions.filter((d) => d.verdict.verdict === id).length) }))]} /></label>
         </div>
         <p className="dim small">Your latest decision for each gap. Selected opportunities appear first.</p>
         {decisions.length === 0 && <p className="dim small">{saved.decisions.length ? "No decisions with this status." : "No decisions yet. Decisions and notes you save while reviewing evidence appear here automatically."}</p>}

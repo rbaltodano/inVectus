@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, Fragment, type CSSProperties, typ
 import { api, fmt, local, year, KIND_LABEL, verdictLabel, type CheckResult, type GapKind, type Role, type SearchResult, type Weights } from "../api";
 import { ErrorLine, useAction, type Ctx, type Page } from "../App";
 import Link from "../Link";
+import Select from "../Select";
 import Import from "./Import";
 import AddData from "./AddData";
 import Collections from "./Collections";
@@ -15,7 +16,6 @@ import { recordSearch } from "../StarPrompt";
 import LineArt from "../LineArt";
 import { weightsKey } from "./Settings";
 import { ArrowLeft } from "lucide-react";
-import filterChevron from "../assets/figma/search-filter-chevron.svg?no-inline";
 import resultDivider from "../assets/figma/search-result-divider.svg?no-inline";
 import { MatrixLoader } from "../IndexingIndicator";
 
@@ -127,16 +127,13 @@ function SearchPage({ ctx, initial, active }: { ctx: Ctx; initial?: string; acti
       {busy && <span role="status" aria-label="Searching"><MatrixLoader /></span>}
       <label className="search-scope">
         <span className="sr-only">Compare with</span>
-        <select value={scope} disabled={busy} onChange={(e) => {
-          const next = e.target.value as Role | "";
-          setScope(next);
-          if (result) search(next);
-        }}>
-          <option value="">All items</option>
-          <option value="coverage" disabled={!coll?.by_role.coverage}>Coverage</option>
-          <option value="demand" disabled={!coll?.by_role.demand}>Demand</option>
-        </select>
-        <img src={filterChevron} alt="" aria-hidden="true" />
+        <Select<Role | ""> variant="bare" ariaLabel="Compare with" menuTitle="Compare with" value={scope} disabled={busy}
+          onChange={(next) => { setScope(next); if (result) search(next); }}
+          options={[
+            { value: "", label: "All items", note: "Everything in this collection", meta: coll ? fmt(coll.items) : undefined },
+            { value: "coverage", label: "Coverage", note: "Items that answer a need", meta: fmt(coll?.by_role.coverage ?? 0), disabled: !coll?.by_role.coverage },
+            { value: "demand", label: "Demand", note: "Items that ask for or need something", meta: fmt(coll?.by_role.demand ?? 0), disabled: !coll?.by_role.demand },
+          ]} />
       </label>
     </form>
     <div className="search-content">

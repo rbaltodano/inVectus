@@ -942,7 +942,7 @@ pub fn tools() -> Value {
         {
             "name": "verify_gap",
             "description": "Check a gap against the project's outside sources (PubMed and OpenAlex by \
-                default; Semantic Scholar, arXiv and US patents when chosen). Uses the network, so it is \
+                default; Semantic Scholar and arXiv when chosen). Uses the network, so it is \
                 refused unless the project's network switch is on (the person turns it on in \
                 the app); results are cached in the project.",
             "inputSchema": { "type": "object", "properties": {

@@ -25,8 +25,6 @@ pub enum Source {
     OpenAlex,
     SemanticScholar,
     Arxiv,
-    /// US patents (USPTO PatentSearch API; needs a free API key in the keychain).
-    PatentsView,
 }
 
 impl Source {
@@ -36,15 +34,13 @@ impl Source {
             Self::OpenAlex => "openalex",
             Self::SemanticScholar => "semanticscholar",
             Self::Arxiv => "arxiv",
-            Self::PatentsView => "patentsview",
         }
     }
-    pub const ALL: [Source; 5] = [
+    pub const ALL: [Source; 4] = [
         Self::PubMed,
         Self::OpenAlex,
         Self::SemanticScholar,
         Self::Arxiv,
-        Self::PatentsView,
     ];
     /// The query exactly as this source receives it.
     pub fn query(self, q: &KeywordQuery) -> String {
@@ -53,7 +49,6 @@ impl Source {
             Self::OpenAlex => q.openalex(),
             Self::SemanticScholar => q.semantic_scholar(),
             Self::Arxiv => q.arxiv(),
-            Self::PatentsView => q.patentsview(),
         }
     }
     /// Minimum time between requests (PubMed allows 3 per second without a key).
@@ -65,8 +60,6 @@ impl Source {
             Self::SemanticScholar => Duration::from_millis(1100),
             // arXiv asks for one request every three seconds.
             Self::Arxiv => Duration::from_millis(3000),
-            // PatentSearch allows 45 requests a minute per key.
-            Self::PatentsView => Duration::from_millis(1400),
         }
     }
 }
@@ -79,10 +72,7 @@ impl std::str::FromStr for Source {
             "openalex" => Ok(Self::OpenAlex),
             "semanticscholar" | "semantic-scholar" | "s2" => Ok(Self::SemanticScholar),
             "arxiv" => Ok(Self::Arxiv),
-            "patentsview" | "patents" | "uspto" => Ok(Self::PatentsView),
-            other => bail!(
-                "unknown source {other:?} (pubmed, openalex, semanticscholar, arxiv, patentsview)"
-            ),
+            other => bail!("unknown source {other:?} (pubmed, openalex, semanticscholar, arxiv)"),
         }
     }
 }
@@ -168,28 +158,6 @@ impl KeywordQuery {
             })
             .collect::<Vec<_>>()
             .join(" + ")
-    }
-
-    /// PatentSearch `q`: each term as a phrase in the title or abstract; OR within a group, AND
-    /// between groups. Patents are not reviews, so `reviews_only` does not apply.
-    pub fn patentsview(&self) -> String {
-        let groups: Vec<serde_json::Value> = self
-            .groups
-            .iter()
-            .filter(|g| !g.is_empty())
-            .map(|g| {
-                let terms: Vec<serde_json::Value> = g
-                    .iter()
-                    .flat_map(|t| {
-                        let t = t.replace('"', "");
-                        ["patent_title", "patent_abstract"]
-                            .map(|f| serde_json::json!({ "_text_phrase": { f: t } }))
-                    })
-                    .collect();
-                serde_json::json!({ "_or": terms })
-            })
-            .collect();
-        serde_json::json!({ "_and": groups }).to_string()
     }
 
     /// arXiv search_query: terms in title or abstract (`all:`), AND between groups.
@@ -288,7 +256,7 @@ pub fn parse_openalex(v: &serde_json::Value) -> Result<(u64, Vec<ExternalHit>)> 
 }
 
 /// Last request time per source, shared across threads.
-static LAST: Mutex<[Option<Instant>; 5]> = Mutex::new([None; 5]);
+static LAST: Mutex<[Option<Instant>; 4]> = Mutex::new([None; 4]);
 
 fn get_json(source: Source, url: &str, params: &[(&str, &str)]) -> Result<serde_json::Value> {
     invectus_core::net::ensure_online(&format!("{} verification", source.name()))?;
@@ -421,31 +389,6 @@ pub fn search(
                 fetched_at: now(),
             }
         }
-        Source::PatentsView => {
-            let key = invectus_core::secrets::get("patentsview")?.context(
-                "PatentsView needs a free API key: add it in Integrations (or set \
-                 INVECTUS_PATENTSVIEW_TOKEN)",
-            )?;
-            let fields = r#"["patent_id","patent_title","patent_date"]"#;
-            let opts = format!(r#"{{"size":{max}}}"#);
-            let text = get_text_with(
-                source,
-                "https://search.patentsview.org/api/v1/patent/",
-                &[("q", q.as_str()), ("f", fields), ("o", opts.as_str())],
-                &[("X-Api-Key", key.as_str())],
-            )?;
-            let v: serde_json::Value =
-                serde_json::from_str(&text).context("PatentsView returned invalid JSON")?;
-            let (total, hits) = parse_patentsview(&v)?;
-            SourceResult {
-                source: source.name().into(),
-                query: q,
-                total: Some(total),
-                hits,
-                cached: false,
-                fetched_at: now(),
-            }
-        }
         Source::Arxiv => {
             // arXiv has no review filter: a reviews-only check still lists preprints.
             let xml = get_text(
@@ -524,40 +467,6 @@ pub fn parse_semantic_scholar(v: &serde_json::Value) -> Result<(u64, Vec<Externa
         })
         .collect();
     Ok((v["total"].as_u64().unwrap_or(0), hits))
-}
-
-/// Parse a PatentSearch reply: (total, hits) linking to Google Patents.
-pub fn parse_patentsview(v: &serde_json::Value) -> Result<(u64, Vec<ExternalHit>)> {
-    if v["error"].as_bool() == Some(true) {
-        bail!(
-            "PatentsView refused the query: {}",
-            v["message"].as_str().unwrap_or("no message")
-        );
-    }
-    let patents = v["patents"]
-        .as_array()
-        .context("no patents in PatentsView reply")?;
-    let hits = patents
-        .iter()
-        .filter_map(|p| {
-            let id = p["patent_id"].as_str()?.to_string();
-            Some(ExternalHit {
-                source: "patentsview".into(),
-                title: p["patent_title"].as_str()?.trim().to_string(),
-                year: p["patent_date"]
-                    .as_str()
-                    .and_then(|d| d.get(..4)?.parse().ok()),
-                url: Some(format!("https://patents.google.com/patent/US{id}")),
-                kinds: vec!["patent".into()],
-                id,
-            })
-        })
-        .collect();
-    let total = v["total_hits"]
-        .as_u64()
-        .or(v["count"].as_u64())
-        .unwrap_or(0);
-    Ok((total, hits))
 }
 
 /// Parse an arXiv Atom feed: (total, hits). A small reader for the fixed feed shape, not a
@@ -672,17 +581,6 @@ mod tests {
             q.semantic_scholar(),
             "(corneal | \"cross-linking\") + (\"choroidal thickness\")"
         );
-        let pq: serde_json::Value = serde_json::from_str(&q.patentsview()).unwrap();
-        assert_eq!(pq["_and"].as_array().unwrap().len(), 2);
-        assert_eq!(
-            pq["_and"][0]["_or"][0],
-            serde_json::json!({"_text_phrase": {"patent_title": "corneal"}})
-        );
-        assert_eq!(
-            pq["_and"][0]["_or"].as_array().unwrap().len(),
-            4,
-            "title and abstract per term"
-        );
         assert_eq!(
             q.arxiv(),
             "(all:corneal OR all:\"cross-linking\") AND (all:\"choroidal thickness\")"
@@ -750,19 +648,6 @@ mod tests {
         assert_eq!(hits[0].year, Some(2021));
         assert_eq!(hits[1].year, None);
         assert!(parse_arxiv("<html>").is_err());
-        let pv = serde_json::json!({"error": false, "count": 1, "total_hits": 9, "patents": [
-            {"patent_id": "11223344", "patent_title": "Cross-linking device", "patent_date": "2022-05-03"},
-            {"patent_id": "x"}
-        ]});
-        let (n, hits) = parse_patentsview(&pv).unwrap();
-        assert_eq!((n, hits.len()), (9, 1));
-        assert_eq!(hits[0].year, Some(2022));
-        assert_eq!(
-            hits[0].url.as_deref(),
-            Some("https://patents.google.com/patent/US11223344")
-        );
-        assert!(parse_patentsview(&serde_json::json!({"error": true, "message": "bad"})).is_err());
-        assert!(parse_pubmed_search(&serde_json::json!({})).is_err());
     }
 
     #[test]

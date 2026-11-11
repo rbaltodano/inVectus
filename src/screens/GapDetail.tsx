@@ -16,7 +16,7 @@ const TERM_LABEL: Record<string, string> = {
 /** Momentum is a log-linear yearly rate; show it as percent growth per year. */
 const growth = (m: number) => { const pct = (Math.exp(m) - 1) * 100; return `${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%`; };
 
-const SOURCE_NAMES: Record<string, string> = { pubmed: "PubMed", openalex: "OpenAlex", semanticscholar: "Semantic Scholar", arxiv: "arXiv", patentsview: "US patents" };
+const SOURCE_NAMES: Record<string, string> = { pubmed: "PubMed", openalex: "OpenAlex", semanticscholar: "Semantic Scholar", arxiv: "arXiv" };
 /** "PubMed and OpenAlex", "PubMed, OpenAlex and arXiv". */
 function sourceNames(ids: string[]): string {
   const names = ids.map((id) => SOURCE_NAMES[id] ?? id);

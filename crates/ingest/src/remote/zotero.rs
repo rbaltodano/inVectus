@@ -31,8 +31,8 @@ fn check(status: u16, v: &Value, what: &str) -> Result<()> {
     match status {
         200 => Ok(()),
         403 => bail!(
-            "Zotero refused the API key for {what}: check it in Integrations, and that it can \
-             read this library (for a group, allow group access when creating the key)"
+            "Zotero refused the API key: check it in Integrations, and that it can read this \
+             library (for a group, allow group access when creating the key)"
         ),
         404 => bail!("Zotero has no {what} (check the collection or group link)"),
         _ => bail!(

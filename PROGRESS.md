@@ -2917,3 +2917,30 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   a new "Outside checks" section.
 - **Unverified:** neither API was called; PatentSearch query and reply shapes and Productboard
   paging come from their documentation.
+
+## 2026-11-10 — Live checks of the integrations (no accounts); US patents removed
+
+Run from this Mac (arm64 macOS) with the release CLI on scratch projects; owner away, so no
+real accounts were used.
+
+- **Google Sheets, verified live:** Google's public sample sheet
+  (`1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms`, gid 0) pulled 30 rows; the snapshot and
+  `.json` record were written; import under `--offline` read the snapshot (30 items). Refused
+  with the network switch off, refused with `--offline`; a missing sheet gave the "no sheet at
+  this link" error. A private (unshared) sheet was not tried.
+- **arXiv and Semantic Scholar, verified live:** `gaps verify --sources arxiv,semanticscholar`
+  on a copy of `demo.invectus` (gap 1) returned 4,423 and 59,487 matches, 20 fetched each,
+  re-ranked locally (29 s, mostly arXiv's 3 s spacing). arXiv years match the feed's first-version
+  dates.
+- **Token services, endpoints reached with fake tokens:** Notion, Zotero, Airtable, Typeform,
+  Tally, Canny and Productboard each answered with an auth error that maps to the intended
+  message; a missing token gives the "not connected" message. Successful pulls (real data and
+  paging) remain **unverified** for all seven.
+- **Keychain (macOS), verified:** `integrations token zotero` refused a malformed key, saved a
+  valid-looking one (visible to `security find-generic-password`), the pull used it, and
+  `integrations disconnect zotero` removed it.
+- **US patents removed:** `search.patentsview.org` does not resolve; PatentsView's search API was
+  shut down on 2026-03-20 when it moved to the USPTO Open Data Portal. The PatentsView check was
+  taken out the same day it was added. The ODP replacement is on the roadmap (its docs pages are
+  JavaScript-only and could not be read here).
+- Fixed: the Zotero refusal message wording; the CLI ends its progress line before an error.

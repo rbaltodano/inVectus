@@ -1,8 +1,7 @@
 # Integrations: data sources, outside checks and exports
 
 Status (2026-11-10): data sources Excel, Google Sheets, Notion, Zotero, Airtable, Typeform,
-Tally, Canny and Productboard, and outside checks Semantic Scholar, arXiv and US patents
-(PatentsView), are implemented in the engine,
+Tally, Canny and Productboard, and outside checks Semantic Scholar and arXiv, are implemented in the engine,
 CLI, desktop app and agent tools. Excel is tested against a fixture; **no online source or check
 has been run against its live service** (unit tests cover link parsing, value flattening, reply
 parsing and the snapshot round trip only).
@@ -86,7 +85,7 @@ parsing and the snapshot round trip only).
   `created`, `url`. Features: `feature_id`, `name`, `description`, `type`, `status`, `parent`,
   `timeframe_start`, `timeframe_end`, `archived`, `url`.
 
-## Outside checks: Semantic Scholar, arXiv, US patents
+## Outside checks: Semantic Scholar, arXiv
 
 - Chosen per project in Settings → Network (`verify_sources` in `project.json`; default PubMed
   and OpenAlex). The CLI's `gaps verify --sources` overrides it; agents use the project's choice.
@@ -94,10 +93,9 @@ parsing and the snapshot round trip only).
   for review-only checks; one request a second (shared free pool).
 - arXiv: Atom API, `all:` terms, one request every three seconds; no review filter (a review-only
   check still lists preprints). The feed is read with a small fixed-shape reader.
-- US patents: USPTO PatentSearch API (`search.patentsview.org/api/v1/patent/`) with a free API
-  key (keychain name `patentsview`); each term as a phrase in the title or abstract; links go to
-  Google Patents. 45 requests a minute per key. Lens.org (worldwide) needs an approved token and
-  Google Patents has no API, so both are left for later.
+- US patents were built against the PatentsView PatentSearch API and removed the same day: that
+  API was shut down on 2026-03-20 when PatentsView moved to the USPTO Open Data Portal
+  (`search.patentsview.org` no longer resolves). A replacement needs the ODP API docs and key.
 
 ## Interfaces
 
@@ -134,7 +132,7 @@ nothing outbound without a separate approval. All are beyond SPEC v1 (owner deci
 | Support desks: Zendesk, Intercom | demand vs help articles | OAuth / token | planned |
 | Issue trackers: Jira, Linear, GitHub Issues | demand | token | planned |
 | **Outside checks**: Semantic Scholar, arXiv | verification | none | done (opt-in per project) |
-| **Outside checks**: US patents (PatentsView) | verification | free API key | done (opt-in per project) |
+| **Outside checks**: US patents (USPTO Open Data Portal) | verification | ODP API key | planned: PatentsView's search API was retired on 2026-03-20; its ODP successor's docs could not be read (JavaScript-only pages) |
 | **Outside checks**: Lens.org (worldwide patents), Product Hunt | verification | key / approval | planned |
 | **Exports**: gap reports to Notion, Sheets, Slack | output | reuses the connections | planned (outbound: needs explicit approval per send) |
 

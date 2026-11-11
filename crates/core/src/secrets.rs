@@ -15,7 +15,6 @@ pub const NAMES: &[&str] = &[
     "tally",
     "canny",
     "productboard",
-    "patentsview",
 ];
 
 fn check(name: &str) -> Result<()> {

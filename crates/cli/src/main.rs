@@ -202,7 +202,7 @@ enum IntegrationsCommand {
     /// Whether each integration has a token, and where it comes from.
     Status,
     /// Save a token (read from standard input): notion, zotero, airtable, typeform, tally, canny,
-    /// productboard, patentsview.
+    /// productboard.
     Token { name: String },
     /// Remove an integration's saved token.
     Disconnect { name: String },
@@ -492,7 +492,7 @@ enum GapsCommand {
         /// Check the N highest-ranked gaps instead of one.
         #[arg(long, conflicts_with = "id")]
         top: Option<usize>,
-        /// Sources, comma-separated: pubmed, openalex, semanticscholar, arxiv, patentsview (default: the
+        /// Sources, comma-separated: pubmed, openalex, semanticscholar, arxiv (default: the
         /// project's choice, else pubmed,openalex).
         #[arg(long, value_delimiter = ',')]
         sources: Vec<invectus_verify::Source>,
@@ -705,8 +705,10 @@ fn cmd_pull(p: &ProjectArg, spec: &str, network: bool) -> Result<()> {
             cancel: &cancel,
             progress: &mut tick,
         },
-    )?;
+    );
+    // End the progress line before the summary or the error.
     eprintln!();
+    let pulled = pulled?;
     println!(
         "pulled {} rows from {} into {}",
         pulled.rows, pulled.origin, pulled.snapshot

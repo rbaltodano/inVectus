@@ -13,7 +13,6 @@ const VERIFY_SOURCES: [string, string, string][] = [
   ["openalex", "OpenAlex", "Scholarly works across all fields."],
   ["semanticscholar", "Semantic Scholar", "Papers across fields; shared free rate limit, so checks are slower."],
   ["arxiv", "arXiv", "Preprints in physics, computer science, maths and more. Has no review filter."],
-  ["patentsview", "US patents", "Granted US patents (USPTO PatentsView). Needs a free API key in Integrations."],
 ];
 
 /** Gap-score weights per project, kept on this computer; scans read them. */

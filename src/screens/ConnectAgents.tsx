@@ -8,6 +8,7 @@ import { api, inTauri, type AgentAccount, type ClientInfo, type ConnectPlan, typ
 import { ErrorLine, useAction } from "../App";
 import { ago, describe, useAgentActivity } from "../agents";
 import AgentIcon from "../AgentIcon";
+import { useFlickerDelays } from "../dot-flicker";
 import { clientName, registerClients } from "../agentIdentity";
 /** The id the backend takes for a client that is not listed. */
 const CUSTOM_ID = "custom";
@@ -70,11 +71,12 @@ export default function ConnectAgents() {
     ? "Adds inVectus to the file you named."
     : clients.find((c) => c.id === plan?.client)?.how;
 
+  const flicker = useFlickerDelays();
   const card = (c: ClientInfo) => {
     const s = statusOf(c.id);
     const connected = !!(s?.connected && s.matches_this_install);
     const account = s?.client_found ? accountText(accounts[c.id]) : null;
-    return <li key={c.id} className="integration-card" data-connected={connected}>
+    return <li key={c.id} className="integration-card" style={flicker(c.id)} data-connected={connected}>
       <div className="integration-card-top">
         <span className="integration-mark"><AgentIcon client={c.id} size={22} /></span>
         {connected
@@ -92,7 +94,7 @@ export default function ConnectAgents() {
     <details className="connect-more">
       <summary>More clients{more.length ? ` (${more.length})` : ""}</summary>
       <ul className="integration-grid" data-code="AG" aria-label="More AI agent clients">{more.map(card)}</ul>
-      <div className="integration-card integration-card-wide">
+      <div className="integration-card integration-card-wide" style={flicker("other")}>
         <div className="integration-card-top"><span className="integration-mark"><AgentIcon client={null} size={22} /></span></div>
         <div className="integration-name">Other client</div>
         <p className="integration-desc">Any client that reads MCP servers from a JSON file. The entry is <code>{"{ \"command\": …, \"args\": [\"mcp\"] }"}</code> under the key you name.</p>

@@ -6,11 +6,13 @@ import { createPortal } from "react-dom";
 import { Bot, Check, ChevronDown, Plus, X } from "lucide-react";
 import { AgentMark, LAST_AGENT, useAgentOptions } from "./agentOptions";
 import { api, local, type ProjectInfo } from "./api";
+import { useFlickerDelays } from "./dot-flicker";
 import ConnectAgents from "./screens/ConnectAgents";
 import "./AgentChip.css";
 
 export default function AgentChip({ project, setProject }: { project: ProjectInfo; setProject: (p: ProjectInfo) => void }) {
   const { agents, refresh } = useAgentOptions();
+  const flicker = useFlickerDelays();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,7 +50,7 @@ export default function AgentChip({ project, setProject }: { project: ProjectInf
     {open && createPortal(<div ref={popup} className="agent-menu" style={{ top: place.top, right: place.right }} role="dialog" aria-label="Agent for this project">
       <div className="agent-menu-head">Agent for this project</div>
       <div role="radiogroup" aria-label="Agents">
-        {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={a.id === project.agent} className="agent-menu-row" disabled={busy} onClick={() => void choose(a.id)}>
+        {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={a.id === project.agent} className="agent-menu-row flicker-in" style={flicker(a.id)} disabled={busy} onClick={() => void choose(a.id)}>
           <span className="agent-menu-mark"><AgentMark id={a.id} /></span>
           <span className="agent-menu-text"><span>{a.name}</span><span className="agent-menu-note">{a.note}</span></span>
           <span className="agent-menu-check">{a.id === project.agent && <Check size={14} aria-hidden="true" />}</span>

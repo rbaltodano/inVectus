@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Folder } from "lucide-react";
 import { AgentMark, LAST_AGENT, useAgentOptions } from "../agentOptions";
+import { useFlickerDelays } from "../dot-flicker";
 import { api, inTauri, local, pickDirectory, type JobInfo, type ProjectInfo } from "../api";
 import type { Page } from "../App";
 import SourcePicker, { type Picked } from "../SourcePicker";
@@ -25,6 +26,7 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const { agents, fallback } = useAgentOptions();
+  const flicker = useFlickerDelays();
 
   useEffect(() => {
     if (!inTauri) return;
@@ -83,7 +85,7 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
       <h2 id="np-agent"><span className="np-step">03</span>Agent for this project</h2>
       <p className="dim small">Who writes gap descriptions, region names and paraphrases. You can change it later.</p>
       <div className="np-agents" role="radiogroup" aria-labelledby="np-agent">
-        {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={agent === a.id} className="np-agent" onClick={() => { setAgent(a.id); setAgentPicked(true); }}>
+        {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={agent === a.id} className="np-agent flicker-in" style={flicker(a.id)} onClick={() => { setAgent(a.id); setAgentPicked(true); }}>
           <span className="np-agent-mark"><AgentMark id={a.id} /></span>
           <span className="np-agent-text"><span className="np-agent-name">{a.name}</span><span className="np-agent-note">{a.note}</span></span>
         </button>)}

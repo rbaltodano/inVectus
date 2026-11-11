@@ -1,11 +1,11 @@
 // Where data comes from: a file, a folder, or an integration whose token is saved. Used by the
 // New project screen and by Add to Dataset. Several sources can be chosen; each chosen tile is
 // highlighted in the accent colour. Link-based sources ask for their link in a dialog.
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, FileSpreadsheet, FolderOpen } from "lucide-react";
 import { api, inTauri, pickSource } from "./api";
-import { DOT_DELAY_MS } from "./dot-flicker";
+import { useFlickerDelays } from "./dot-flicker";
 import IntegrationIcon, { type IntegrationMarkName } from "./IntegrationIcon";
 import { baseName } from "./paths";
 import "./SourcePicker.css";
@@ -52,8 +52,7 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
 }) {
   const [tokens, setTokens] = useState<Record<string, string | null>>({});
   const [editing, setEditing] = useState<Source>();
-  // Each tile flickers in after its own random delay, like the data circle's squares.
-  const [delays] = useState(() => SOURCES.map(() => Math.random() * DOT_DELAY_MS));
+  const flicker = useFlickerDelays(); // each tile flickers in after its own random delay
   const [error, setError] = useState<string>();
   useEffect(() => { if (inTauri) api.integrationTokens().then(setTokens).catch(() => undefined); }, []);
 
@@ -75,8 +74,7 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
       {shown.map((s) => {
         const p = chosen(s.id);
         return <li key={s.id}>
-          <button type="button" className="np-source" aria-pressed={!!p} disabled={disabled} onClick={() => void choose(s)}
-            style={{ animationDelay: `${delays[SOURCES.indexOf(s)]}ms` } as CSSProperties}>
+          <button type="button" className="np-source flicker-in" aria-pressed={!!p} disabled={disabled} onClick={() => void choose(s)} style={flicker(s.id)}>
             <span className="np-source-mark">{s.mark ? <IntegrationIcon name={s.mark} size={20} />
               : s.id === "file" ? <FileSpreadsheet size={20} strokeWidth={1.5} aria-hidden="true" />
               : <FolderOpen size={20} strokeWidth={1.5} aria-hidden="true" />}</span>

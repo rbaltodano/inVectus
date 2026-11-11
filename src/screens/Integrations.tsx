@@ -3,9 +3,10 @@
 // read locally; Google Sheets (shared by link), Notion, Zotero and Airtable (tokens in the
 // keychain) are pulled into a project only when the person asks, then imported offline
 // (docs/integrations.md).
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { DOT_FLICKER_MS } from "../dot-flicker";
 import IntegrationIcon, { hasIntegrationMark } from "../IntegrationIcon";
+import { useFlickerDelays } from "../dot-flicker";
 import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbulb, ListChecks, Map as MapIcon, NotebookText, Search, Sheet, Table2, X, type LucideIcon } from "lucide-react";
 import { api, inTauri } from "../api";
 import { ErrorLine, useAction } from "../App";
@@ -104,10 +105,11 @@ export default function Integrations() {
       .forEach((el) => el.style.setProperty("--card-delay", `${diagonalDelay(el, root)}ms`));
   }, [round]);
 
+  const flicker = useFlickerDelays();
   const card = (e: Entry) => e.token
-    ? <TokenCard key={e.id} it={e.token} label={e.code} from={tokens === undefined ? undefined : tokens[e.token.id] ?? null}
+    ? <TokenCard key={e.id} style={flicker(e.id)} it={e.token} label={e.code} from={tokens === undefined ? undefined : tokens[e.token.id] ?? null}
       onChange={(from) => setTokens((t) => ({ ...t, [e.token!.id]: from }))} />
-    : <li key={e.id} className="integration-card" data-disabled={e.muted || undefined} data-label={e.code}>
+    : <li key={e.id} className="integration-card" style={flicker(e.id)} data-disabled={e.muted || undefined} data-label={e.code}>
       <div className="integration-card-top">
         <span className="integration-mark">{hasIntegrationMark(e.id) ? <IntegrationIcon name={e.id} /> : e.icon && <e.icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span>
         <span className={`integration-badge${e.muted ? " integration-badge-muted" : ""}`} data-tone={e.muted ? undefined : "ink"}>{e.badge}</span>
@@ -269,7 +271,7 @@ const ENTRIES: Entry[] = [
     desc: "Until then, export a table to CSV, Parquet or Excel and import the file." },
 ];
 
-function TokenCard({ it, from, onChange, label }: { it: TokenIntegration; from: string | null | undefined; onChange: (from: string | null) => void; label: string }) {
+function TokenCard({ it, from, onChange, label, style }: { it: TokenIntegration; from: string | null | undefined; onChange: (from: string | null) => void; label: string; style: CSSProperties }) {
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState("");
   const action = useAction();
@@ -279,7 +281,7 @@ function TokenCard({ it, from, onChange, label }: { it: TokenIntegration; from: 
   const disconnect = () => action.run(async () => { onChange(await api.setIntegrationToken(it.id, "")); });
   const titleId = `${it.id}-connect-title`;
 
-  return <li className="integration-card" data-connected={connected} data-label={label}>
+  return <li className="integration-card" style={style} data-connected={connected} data-label={label}>
     <div className="integration-card-top">
       <span className="integration-mark">{hasIntegrationMark(it.id) ? <IntegrationIcon name={it.id} /> : <Icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span>
       {connected

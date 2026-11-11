@@ -1,5 +1,5 @@
 // Who can do a project's writing work: the connected agent clients and the on-device model,
-// each labelled Cloud or Local. Shared by the New project screen and the project header.
+// Shared by the New project screen and the project header.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Cpu } from "lucide-react";
 import AgentIcon, { markFor } from "./AgentIcon";

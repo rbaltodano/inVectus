@@ -4,8 +4,6 @@
 .agent-chip:hover, .agent-chip[aria-expanded="true"] { border-color: rgba(var(--ink-rgb), .45); }
 .agent-chip-mark { width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; flex: none; }
 .agent-chip-chev { color: var(--dim); }
-.agent-where { font: 500 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--dim); flex: none; }
-.agent-where.local { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 
 .agent-menu { position: fixed; z-index: 100; width: 320px; max-width: calc(100vw - 16px); border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg);
   box-shadow: 0 20px 60px var(--shadow); overflow: hidden; animation: item-flicker 150ms step-end backwards; }

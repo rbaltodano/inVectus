@@ -86,7 +86,6 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
         {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={agent === a.id} className="np-agent" onClick={() => { setAgent(a.id); setAgentPicked(true); }}>
           <span className="np-agent-mark"><AgentMark id={a.id} /></span>
           <span className="np-agent-text"><span className="np-agent-name">{a.name}</span><span className="np-agent-note">{a.note}</span></span>
-          <span className={`np-agent-where ${a.local ? "local" : "cloud"}`}>{a.local ? "Local" : "Cloud"}</span>
         </button>)}
       </div>
       {agents.length === 1 && <p className="dim small">No agent apps are connected. <button type="button" className="text-btn" onClick={onAgents}>Connect one on Agents</button></p>}

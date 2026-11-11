@@ -1,5 +1,5 @@
 // The project header's agent pill: who does this project's writing work. Opens a list of the
-// connected agents and the on-device model (Cloud or Local); "Add new agent" opens the Agents
+// connected agents and the on-device model; "Add new agent" opens the Agents
 // page's connect screen in a dialog.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -43,7 +43,6 @@ export default function AgentChip({ project, setProject }: { project: ProjectInf
       title="Agent for this project: who writes gap descriptions, region names and paraphrases">
       <span className="agent-chip-mark">{current ? <AgentMark id={current.id} size={14} /> : <Bot size={14} strokeWidth={1.5} aria-hidden="true" />}</span>
       <span>{current?.name ?? (project.agent ? project.agent : "Choose agent")}</span>
-      {current && <span className={`agent-where ${current.local ? "local" : "cloud"}`}>{current.local ? "Local" : "Cloud"}</span>}
       <ChevronDown size={12} aria-hidden="true" className="agent-chip-chev" />
     </button>
     {open && createPortal(<div ref={popup} className="agent-menu" style={{ top: place.top, right: place.right }} role="dialog" aria-label="Agent for this project">
@@ -52,7 +51,6 @@ export default function AgentChip({ project, setProject }: { project: ProjectInf
         {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={a.id === project.agent} className="agent-menu-row" disabled={busy} onClick={() => void choose(a.id)}>
           <span className="agent-menu-mark"><AgentMark id={a.id} /></span>
           <span className="agent-menu-text"><span>{a.name}</span><span className="agent-menu-note">{a.note}</span></span>
-          <span className={`agent-where ${a.local ? "local" : "cloud"}`}>{a.local ? "Local" : "Cloud"}</span>
           <span className="agent-menu-check">{a.id === project.agent && <Check size={14} aria-hidden="true" />}</span>
         </button>)}
       </div>

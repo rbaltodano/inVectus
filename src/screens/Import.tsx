@@ -8,7 +8,7 @@ import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
 
 const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
-const REMOTE_NAMES: Record<string, string> = { google_sheet: "Google Sheets", notion: "Notion", zotero: "Zotero", airtable: "Airtable" };
+const REMOTE_NAMES: Record<string, string> = { google_sheet: "Google Sheets", notion: "Notion", zotero: "Zotero", airtable: "Airtable", typeform: "Typeform", tally: "Tally", canny: "Canny" };
 type Step = 0 | 1 | 2 | 3;
 
 interface Rule { value: string; role: Role }
@@ -162,8 +162,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           <button type="button" className="btn" disabled={busy} onClick={() => choose(true)}>Choose folder…</button>
         </div>
         <div className="row wrap center w-full">
-          <input aria-label="Path to a file or folder, or a Google Sheets, Notion, Zotero or Airtable link" className="grow" value={path} onChange={(e) => setPath(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && path.trim() && look(path.trim())} placeholder="/Users/you/data/papers.csv, or a Google Sheets, Notion, Zotero or Airtable link" />
+          <input aria-label="Path to a file or folder, or a link to an online source" className="grow" value={path} onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && path.trim() && look(path.trim())} placeholder="/Users/you/data/papers.csv, or a link from Google Sheets, Notion, Zotero, Airtable, Typeform or Tally" />
           <button type="button" className="btn" disabled={!path.trim() || busy} onClick={() => look(path.trim())}>{busy ? "Reading…" : "Use this"}</button>
         </div>
       </section>
@@ -180,6 +180,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           {source.kind === "notion" && " Needs the Notion token from Integrations, and the database shared with your integration in Notion (••• → Connections)."}
           {source.kind === "zotero" && " Needs your Zotero API key from Integrations. Notes and attachments are skipped."}
           {source.kind === "airtable" && " Needs your Airtable token from Integrations, with read access to this base."}
+          {(source.kind === "typeform" || source.kind === "tally") && ` Needs your ${remoteName} token from Integrations. Only completed responses are pulled.`}
+          {source.kind === "canny" && " Needs your Canny API key from Integrations."}
           {!ctx.project.network_enabled && " This project's network switch is off: turn it on in Settings → Network first."}
         </div>
       </div>}

@@ -182,6 +182,16 @@ async fn set_network(state: State<'_, AppState>, enabled: bool) -> CmdResult<Pro
     off_thread(move || orch::set_network(&session, &board, enabled)).await
 }
 
+/// Choose the outside sources gap checks use in the open project.
+#[tauri::command]
+async fn set_verify_sources(
+    state: State<'_, AppState>,
+    sources: Vec<String>,
+) -> CmdResult<ProjectInfo> {
+    let (session, board) = (state.session.clone(), state.board.clone());
+    off_thread(move || orch::set_verify_sources(&session, &board, sources)).await
+}
+
 #[tauri::command]
 async fn set_agent_model(
     state: State<'_, AppState>,
@@ -512,7 +522,7 @@ async fn describe_gap(
     .await
 }
 
-/// Check a gap against PubMed and OpenAlex (network; cached in the project). `network` allows
+/// Check a gap against the project's outside sources (network; cached in the project). `network` allows
 /// this call to use the network when the project's switch is off.
 #[tauri::command]
 async fn verify_gap(
@@ -535,7 +545,7 @@ async fn verify_gap(
                 gap_id,
                 &invectus_verify::VerifyOptions {
                     allow_network: network,
-                    ..Default::default()
+                    ..invectus_verify::VerifyOptions::for_project(&s.project)
                 },
             )
         })
@@ -712,6 +722,7 @@ pub fn run() {
             inspect_source,
             pull_source,
             integration_tokens,
+            set_verify_sources,
             set_integration_token,
             set_network,
             set_agent_model,

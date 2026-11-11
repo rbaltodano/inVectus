@@ -1004,3 +1004,5 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .integration-modal-actions { justify-content: flex-end; gap: 8px; padding-top: 6px; }
 .integration-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--text-2); line-height: 1.55; }
 .integration-modal label { display: flex; flex-direction: column; gap: 6px; }
+.settings-sources { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; border: none; }
+.settings-sources legend { margin-bottom: 8px; font-size: 13px; font-weight: 500; color: var(--text); }

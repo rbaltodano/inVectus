@@ -9,8 +9,13 @@
 //!   one row per page with its properties as columns, plus the page's text as `body`.
 //! - Zotero: a library or collection through the Web API v3 with an API key ([`zotero`]).
 //! - Airtable: a table (optionally a view) with a personal access token ([`airtable`]).
+//! - Typeform and Tally: a form's completed responses, one row per response ([`typeform`],
+//!   [`tally`]); Canny: feature-request posts with status and votes ([`canny`]).
 
 mod airtable;
+mod canny;
+mod tally;
+mod typeform;
 mod zotero;
 
 use crate::source::Source;
@@ -93,6 +98,24 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
             let rows = t.1.len();
             (write_csv(&t.0, &t.1), rows)
         }
+        Source::Typeform { form_id, .. } => {
+            let token = need_token(cx, "Typeform", "TYPEFORM")?;
+            let t = typeform::responses(form_id, &token, cx)?;
+            let rows = t.1.len();
+            (write_csv(&t.0, &t.1), rows)
+        }
+        Source::Tally { form_id, .. } => {
+            let token = need_token(cx, "Tally", "TALLY")?;
+            let t = tally::submissions(form_id, &token, cx)?;
+            let rows = t.1.len();
+            (write_csv(&t.0, &t.1), rows)
+        }
+        Source::Canny { board, .. } => {
+            let token = need_token(cx, "Canny", "CANNY")?;
+            let t = canny::posts(board.as_deref(), &token, cx)?;
+            let rows = t.1.len();
+            (write_csv(&t.0, &t.1), rows)
+        }
         other => bail!("{} is a local source; nothing to pull", other.describe()),
     };
     let snapshot = source.path();
@@ -141,16 +164,47 @@ impl Paced {
 
     /// `(status, JSON body)`; the caller turns statuses other than 200 into errors.
     pub(crate) fn get(&mut self, url: &str, headers: &[(&str, &str)]) -> Result<(u16, Value)> {
+        self.request(url, headers, None)
+    }
+
+    /// POST a JSON body (Canny puts its key in the body); same pacing and retries as GET.
+    pub(crate) fn post_json(&mut self, url: &str, body: &Value) -> Result<(u16, Value)> {
+        self.request(url, &[], Some(body))
+    }
+
+    fn request(
+        &mut self,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Option<&Value>,
+    ) -> Result<(u16, Value)> {
+        let method = if body.is_some() { "POST" } else { "GET" };
         for attempt in 0..5u32 {
             if let Some(t) = self.last {
                 std::thread::sleep(self.spacing.saturating_sub(t.elapsed()));
             }
             self.last = Some(Instant::now());
-            let mut req = self.agent.get(url).header("User-Agent", USER_AGENT);
-            for (k, v) in headers {
-                req = req.header(*k, *v);
+            let resp = match body {
+                Some(b) => {
+                    let mut req = self
+                        .agent
+                        .post(url)
+                        .header("User-Agent", USER_AGENT)
+                        .header("Content-Type", "application/json");
+                    for (k, v) in headers {
+                        req = req.header(*k, *v);
+                    }
+                    req.send(serde_json::to_string(b)?)
+                }
+                None => {
+                    let mut req = self.agent.get(url).header("User-Agent", USER_AGENT);
+                    for (k, v) in headers {
+                        req = req.header(*k, *v);
+                    }
+                    req.call()
+                }
             }
-            let resp = req.call().with_context(|| format!("GET {url}"))?;
+            .with_context(|| format!("{method} {url}"))?;
             let status = resp.status().as_u16();
             let wait = ["retry-after", "backoff"].iter().find_map(|h| {
                 resp.headers()

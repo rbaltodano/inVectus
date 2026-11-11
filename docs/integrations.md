@@ -1,9 +1,10 @@
 # Integrations: data sources, outside checks and exports
 
-Status (2026-11-10): Excel, Google Sheets, Notion, Zotero and Airtable are implemented in the
-engine, CLI, desktop app and agent tools. Excel is tested against a fixture; the four online
-pulls are **not yet tested against the live services** (unit tests cover link parsing, value
-flattening and the snapshot round trip only).
+Status (2026-11-10): data sources Excel, Google Sheets, Notion, Zotero, Airtable, Typeform,
+Tally and Canny, and outside checks Semantic Scholar and arXiv, are implemented in the engine,
+CLI, desktop app and agent tools. Excel is tested against a fixture; **no online source or check
+has been run against its live service** (unit tests cover link parsing, value flattening, reply
+parsing and the snapshot round trip only).
 
 ## Model: pull, then work offline
 
@@ -62,9 +63,31 @@ flattening and the snapshot round trip only).
   with ", "; collaborators by name, attachments by file name. Requests are spaced 220 ms (five a
   second per base is Airtable's limit).
 
+## Typeform, Tally, Canny
+
+- Typeform: personal access token (`tfp_…`, scopes `forms:read`, `responses:read`); source is
+  the form's share or edit link or `typeform:<id>`. Columns: `response_id`, `submitted_at`, one
+  per question in form order (group questions included), then `hidden_<name>`.
+- Tally: API key (`tly-…`); source is `tally.so/r/<id>` or `tally:<id>`. Columns:
+  `submission_id`, `submitted_at`, one per question; choice option ids become labels when the
+  question lists its options. The answer formats are inferred from Tally's docs (untested).
+- Canny: the secret API key; source is `canny:all` or `canny:board:<id, URL name or name>`.
+  Columns: `post_id`, `title`, `details`, `status`, `votes`, `comments`, `board`, `category`,
+  `tags`, `author`, `created`, `eta`, `url`. Canny takes the key in the request body (POST).
+- Only completed form responses are pulled.
+
+## Outside checks: Semantic Scholar and arXiv
+
+- Chosen per project in Settings → Network (`verify_sources` in `project.json`; default PubMed
+  and OpenAlex). The CLI's `gaps verify --sources` overrides it; agents use the project's choice.
+- Semantic Scholar: Graph API bulk search, no key, `+`/`|` query syntax, `publicationTypes=Review`
+  for review-only checks; one request a second (shared free pool).
+- arXiv: Atom API, `all:` terms, one request every three seconds; no review filter (a review-only
+  check still lists preprints). The feed is read with a small fixed-shape reader.
+
 ## Interfaces
 
-| Where | Excel | Google Sheets, Notion, Zotero, Airtable |
+| Where | Excel | Online sources |
 |---|---|---|
 | CLI | `invectus import file.xlsx --sheet Tab …` | `invectus pull -p P <link> [--network]`, then `invectus import -p P <link> …` |
 | App | Add to Dataset (file picker or path) | Add to Dataset: paste link → Pull → map columns; Collections: Pull and update |
@@ -84,8 +107,10 @@ nothing outbound without a separate approval. All are beyond SPEC v1 (owner deci
 | Notion databases | either | internal token | done |
 | Zotero libraries | coverage (research) | API key | done |
 | Airtable tables | either | personal access token | done |
-| Google Forms, Typeform, Tally responses | demand | OAuth / token | planned |
-| Canny, Productboard requests | demand vs roadmap | token | planned |
+| Typeform, Tally responses | demand | token | done |
+| Google Forms responses | demand | OAuth | planned |
+| Canny feature requests | demand vs roadmap | API key | done |
+| Productboard | demand vs roadmap | token | planned |
 | Mendeley | coverage (research) | OAuth | planned |
 | Confluence, Google Drive, SharePoint folders | coverage (internal docs) | OAuth | planned |
 | App Store / Play reviews, Reddit | demand (public) | public APIs | planned |
@@ -94,14 +119,15 @@ nothing outbound without a separate approval. All are beyond SPEC v1 (owner deci
 | CRMs: HubSpot, Salesforce (deal notes, lost reasons) | demand | OAuth | planned |
 | Support desks: Zendesk, Intercom | demand vs help articles | OAuth / token | planned |
 | Issue trackers: Jira, Linear, GitHub Issues | demand | token | planned |
-| **Outside checks** (beside PubMed, OpenAlex): Semantic Scholar, arXiv, Google Patents / Lens.org, Product Hunt | verification | none / key | planned |
+| **Outside checks**: Semantic Scholar, arXiv | verification | none | done (opt-in per project) |
+| **Outside checks**: Google Patents / Lens.org, Product Hunt | verification | key | planned |
 | **Exports**: gap reports to Notion, Sheets, Slack | output | reuses the connections | planned (outbound: needs explicit approval per send) |
 
-Order: Zotero and Airtable (token, no OAuth, researchers and product teams) → forms and Canny →
-the OAuth-based sources once an OAuth client exists → exports.
+Next: Productboard and patent search (token/key) → the OAuth-based sources once an OAuth client
+exists for each provider → exports.
 
 ## Not done / next
 
-- Live-service tests for Sheets, Notion, Zotero and Airtable (needs test accounts).
+- Live-service tests for every online source and check (needs test accounts).
 - Google sign-in for private sheets; Notion pages under a parent page (not databases).
 - Notion API 2025-09-03 "data sources" (multi-source databases) are not handled.

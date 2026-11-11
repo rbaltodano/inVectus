@@ -19,6 +19,27 @@ pub struct VerifyOptions {
     pub allow_network: bool,
 }
 
+impl VerifyOptions {
+    /// The project's chosen outside sources (unknown names are skipped), else the default pair.
+    pub fn for_project(project: &Project) -> Self {
+        let sources: Vec<Source> = project
+            .config
+            .verify_sources
+            .iter()
+            .flatten()
+            .filter_map(|s| s.parse().ok())
+            .collect();
+        Self {
+            sources: if sources.is_empty() {
+                Self::default().sources
+            } else {
+                sources
+            },
+            ..Self::default()
+        }
+    }
+}
+
 impl Default for VerifyOptions {
     fn default() -> Self {
         Self {
@@ -193,10 +214,7 @@ pub fn verify_gap(
             }
             Err(e) => sources.push(SourceSummary {
                 source: s.name().into(),
-                query: match s {
-                    Source::PubMed => query.pubmed(),
-                    Source::OpenAlex => query.openalex(),
-                },
+                query: s.query(&query),
                 total: None,
                 fetched: 0,
                 cached: false,

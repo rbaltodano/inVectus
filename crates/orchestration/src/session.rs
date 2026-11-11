@@ -161,6 +161,8 @@ pub struct ProjectInfo {
     pub name: String,
     pub warning: Option<String>,
     pub network_enabled: bool,
+    /// Outside sources gap checks use (`pubmed`, `openalex`, `semanticscholar`, `arxiv`).
+    pub verify_sources: Vec<String>,
     pub preferred_agent_model: Option<String>,
     /// `INVECTUS_OFFLINE=1`: every network use is refused whatever the project switch says.
     pub offline_env: bool,
@@ -262,6 +264,11 @@ pub fn project_info(s: &Session, board: &SharedBoard) -> anyhow::Result<ProjectI
         name: s.project.config.name.clone(),
         warning: s.project.storage_warning(),
         network_enabled: s.project.config.network_enabled,
+        verify_sources: invectus_verify::VerifyOptions::for_project(&s.project)
+            .sources
+            .iter()
+            .map(|v| v.name().to_string())
+            .collect(),
         preferred_agent_model: s.project.preferred_agent_model()?,
         offline_env: invectus_core::net::offline(),
         collections,
@@ -349,6 +356,24 @@ pub fn rename_project(session: &Shared, path: &str, name: &str) -> OpResult<Stri
 pub fn set_network(session: &Shared, board: &SharedBoard, enabled: bool) -> OpResult<ProjectInfo> {
     with_session(session, |s| {
         s.project.set_network_enabled(enabled)?;
+        project_info(s, board)
+    })
+}
+
+/// Choose the outside sources gap checks use; every name must be a known source.
+pub fn set_verify_sources(
+    session: &Shared,
+    board: &SharedBoard,
+    sources: Vec<String>,
+) -> OpResult<ProjectInfo> {
+    let parsed = sources
+        .iter()
+        .map(|s| s.parse::<invectus_verify::Source>())
+        .collect::<anyhow::Result<Vec<_>>>()
+        .map_err(err)?;
+    with_session(session, |s| {
+        s.project
+            .set_verify_sources(Some(parsed.iter().map(|v| v.name().to_string()).collect()))?;
         project_info(s, board)
     })
 }

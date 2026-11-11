@@ -16,6 +16,13 @@ const TERM_LABEL: Record<string, string> = {
 /** Momentum is a log-linear yearly rate; show it as percent growth per year. */
 const growth = (m: number) => { const pct = (Math.exp(m) - 1) * 100; return `${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%`; };
 
+const SOURCE_NAMES: Record<string, string> = { pubmed: "PubMed", openalex: "OpenAlex", semanticscholar: "Semantic Scholar", arxiv: "arXiv" };
+/** "PubMed and OpenAlex", "PubMed, OpenAlex and arXiv". */
+function sourceNames(ids: string[]): string {
+  const names = ids.map((id) => SOURCE_NAMES[id] ?? id);
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "outside sources";
+}
+
 export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
   const tref = ctx.tref!;
   const { project } = ctx;
@@ -208,7 +215,7 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           <h2 id="vf">Check outside sources</h2>
           <div className="row wrap">
             <button type="button" className="btn" disabled={verify.busy || offline} onClick={() => verify.run(async () => setVerification(await api.verify(tref, id)))}>
-              {verify.busy ? "Searching…" : outside ? "Check PubMed and OpenAlex again" : "Check PubMed and OpenAlex"}</button>
+              {verify.busy ? "Searching…" : `${outside ? "Check again" : "Check"}: ${sourceNames(ctx.project.verify_sources)}`}</button>
           </div>
           {offline && <div className="note small">Offline: switch the network on (top right) to search outside sources. Results are cached in the project.</div>}
           <ErrorLine error={verify.error} />

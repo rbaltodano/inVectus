@@ -77,7 +77,8 @@ enum Command {
         p: ProjectArg,
         /// A Google Sheets link, Notion database (link or notion:<id>), Zotero library or
         /// collection (zotero.org link, zotero:library, zotero:collection:<KEY>,
-        /// zotero:group:<id>), or Airtable table link.
+        /// zotero:group:<id>), Airtable table link, Typeform or Tally form link, or
+        /// canny:all / canny:board:<name>.
         source: String,
         /// Allow this command to use the network although the project's network switch is off.
         #[arg(long)]
@@ -200,9 +201,9 @@ enum ConnectCommand {
 enum IntegrationsCommand {
     /// Whether each integration has a token, and where it comes from.
     Status,
-    /// Save a token (read from standard input) for notion, zotero or airtable.
+    /// Save a token (read from standard input): notion, zotero, airtable, typeform, tally, canny.
     Token { name: String },
-    /// Remove the saved token of notion, zotero or airtable.
+    /// Remove an integration's saved token.
     Disconnect { name: String },
 }
 
@@ -490,8 +491,9 @@ enum GapsCommand {
         /// Check the N highest-ranked gaps instead of one.
         #[arg(long, conflicts_with = "id")]
         top: Option<usize>,
-        /// Sources, comma-separated.
-        #[arg(long, value_delimiter = ',', default_value = "pubmed,openalex")]
+        /// Sources, comma-separated: pubmed, openalex, semanticscholar, arxiv (default: the
+        /// project's choice, else pubmed,openalex).
+        #[arg(long, value_delimiter = ',')]
         sources: Vec<invectus_verify::Source>,
         /// Allow this command to use the network although the project's network switch is off.
         #[arg(long)]
@@ -2120,7 +2122,11 @@ fn cmd_gaps(c: GapsCommand, models_dir: &Option<PathBuf>) -> Result<()> {
                 (None, None) => bail!("give a gap id or --top N"),
             };
             let opts = invectus_verify::VerifyOptions {
-                sources,
+                sources: if sources.is_empty() {
+                    invectus_verify::VerifyOptions::for_project(&project).sources
+                } else {
+                    sources
+                },
                 max_per_source: max,
                 allow_network: network,
             };

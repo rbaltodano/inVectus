@@ -253,7 +253,7 @@ impl Agent {
                         encoder,
                         a.gap_id,
                         // Never overrides the project's network switch.
-                        &invectus_verify::VerifyOptions::default(),
+                        &invectus_verify::VerifyOptions::for_project(&s.project),
                     )
                 })?;
                 value(&r)
@@ -884,10 +884,10 @@ pub fn tools() -> Value {
             "name": "inspect_source",
             "description": "Columns and sample rows of a CSV/TSV, Parquet, spreadsheet (.xlsx, \
                 .xls, .ods) or folder of text files, to choose the mapping for import_collection. \
-                A Google Sheets, Notion, Zotero or Airtable source reads the copy the person \
+                A pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, Canny) reads the copy the person \
                 pulled into the open project; needs_pull means they have not pulled it yet.",
             "inputSchema": { "type": "object", "properties": {
-                "source": { "type": "string", "description": "File or folder path, Google Sheets, Notion (notion:<id>), Zotero (zotero:library, zotero:collection:<KEY>) or Airtable link." },
+                "source": { "type": "string", "description": "File or folder path, link or spec of a pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, canny:all)." },
                 "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." }
             }, "required": ["source"], "additionalProperties": false },
             "annotations": read_only,
@@ -899,7 +899,7 @@ pub fn tools() -> Value {
                 with job_status). Re-importing updates changed items; unchanged ones are kept.",
             "inputSchema": { "type": "object", "properties": {
                 "project": project, "collection": collection,
-                "source": { "type": "string", "description": "File or folder path, Google Sheets, Notion (notion:<id>), Zotero (zotero:library, zotero:collection:<KEY>) or Airtable link (pulled sources must be pulled by the person first)." },
+                "source": { "type": "string", "description": "File or folder path, link or spec of a pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, canny:all) (pulled sources must be pulled by the person first)." },
                 "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." },
                 "text": { "type": "array", "items": { "type": "string" },
                     "description": "Text column(s), joined in order. Not used for folders." },
@@ -941,7 +941,8 @@ pub fn tools() -> Value {
         },
         {
             "name": "verify_gap",
-            "description": "Check a gap against PubMed and OpenAlex. Uses the network, so it is \
+            "description": "Check a gap against the project's outside sources (PubMed and OpenAlex by \
+                default; Semantic Scholar and arXiv when chosen). Uses the network, so it is \
                 refused unless the project's network switch is on (the person turns it on in \
                 the app); results are cached in the project.",
             "inputSchema": { "type": "object", "properties": {

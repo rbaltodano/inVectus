@@ -48,6 +48,21 @@ pub enum Source {
         view: Option<String>,
         snapshot: PathBuf,
     },
+    /// A Typeform form's completed responses; one row per response.
+    Typeform {
+        form_id: String,
+        snapshot: PathBuf,
+    },
+    /// A Tally form's completed submissions; one row per submission.
+    Tally {
+        form_id: String,
+        snapshot: PathBuf,
+    },
+    /// Canny feature-request posts: one board (by id, URL name or name) or all boards.
+    Canny {
+        board: Option<String>,
+        snapshot: PathBuf,
+    },
 }
 
 pub const EXCEL_EXTENSIONS: &[&str] = &["xlsx", "xlsm", "xlsb", "xls", "ods"];
@@ -104,7 +119,10 @@ impl Source {
             Source::GoogleSheet { snapshot, .. }
             | Source::Notion { snapshot, .. }
             | Source::Zotero { snapshot, .. }
-            | Source::Airtable { snapshot, .. } => snapshot,
+            | Source::Airtable { snapshot, .. }
+            | Source::Typeform { snapshot, .. }
+            | Source::Tally { snapshot, .. }
+            | Source::Canny { snapshot, .. } => snapshot,
         }
     }
 
@@ -159,15 +177,67 @@ impl Source {
                 view,
             }));
         }
+        let snap = |kind: &str, name: &str| {
+            project_root
+                .join("sources")
+                .join(kind)
+                .join(format!("{name}.csv"))
+        };
+        if let Some(id) = form_id(
+            spec,
+            "typeform:",
+            &[".typeform.com/to/", "admin.typeform.com/form/"],
+        )? {
+            return Ok(Some(Source::Typeform {
+                snapshot: snap("typeform", &id),
+                form_id: id,
+            }));
+        }
+        if let Some(id) = form_id(spec, "tally:", &["tally.so/r/", "tally.so/forms/"])? {
+            return Ok(Some(Source::Tally {
+                snapshot: snap("tally", &id),
+                form_id: id,
+            }));
+        }
+        if let Some(rest) = spec.strip_prefix("canny:") {
+            let board = match rest.trim() {
+                "" | "all" => None,
+                r => match r.strip_prefix("board:") {
+                    Some(b) if !b.trim().is_empty() => Some(b.trim().to_string()),
+                    _ => bail!("expected canny:all or canny:board:<id or name>, got {spec:?}"),
+                },
+            };
+            let name = match &board {
+                Some(b) => b
+                    .chars()
+                    .map(|c| {
+                        if c.is_ascii_alphanumeric() {
+                            c.to_ascii_lowercase()
+                        } else {
+                            '-'
+                        }
+                    })
+                    .collect::<String>(),
+                None => "all".into(),
+            };
+            return Ok(Some(Source::Canny {
+                snapshot: snap("canny", &name),
+                board,
+            }));
+        }
         Ok(None)
     }
 
-    /// The integration whose token a pull needs (`notion`, `zotero`, `airtable`).
+    /// The integration whose token a pull needs (`notion`, `zotero`, `airtable`, `typeform`,
+    /// `tally`, `canny`).
     pub fn integration(&self) -> Option<&'static str> {
         match self {
             Source::Notion { .. } => Some("notion"),
             Source::Zotero { .. } => Some("zotero"),
             Source::Airtable { .. } => Some("airtable"),
+            Source::Typeform { .. } => Some("typeform"),
+            Source::Tally { .. } => Some("tally"),
+            Source::Canny { .. } => Some("canny"),
             _ => None,
         }
     }
@@ -180,6 +250,9 @@ impl Source {
                 | Source::Notion { .. }
                 | Source::Zotero { .. }
                 | Source::Airtable { .. }
+                | Source::Typeform { .. }
+                | Source::Tally { .. }
+                | Source::Canny { .. }
         )
     }
 
@@ -216,6 +289,12 @@ impl Source {
                 Some(v) => format!("airtable:{base_id}/{table}/{v}"),
                 None => format!("airtable:{base_id}/{table}"),
             }),
+            Source::Typeform { form_id, .. } => Some(format!("typeform:{form_id}")),
+            Source::Tally { form_id, .. } => Some(format!("tally:{form_id}")),
+            Source::Canny { board, .. } => Some(match board {
+                Some(b) => format!("canny:board:{b}"),
+                None => "canny:all".into(),
+            }),
             _ => None,
         }
     }
@@ -231,6 +310,9 @@ impl Source {
             Source::Notion { .. } => "notion",
             Source::Zotero { .. } => "zotero",
             Source::Airtable { .. } => "airtable",
+            Source::Typeform { .. } => "typeform",
+            Source::Tally { .. } => "tally",
+            Source::Canny { .. } => "canny",
         }
     }
 
@@ -255,6 +337,12 @@ impl Source {
                 }
             }
             Source::Airtable { base_id, table, .. } => format!("Airtable table {base_id}/{table}"),
+            Source::Typeform { form_id, .. } => format!("Typeform form {form_id}"),
+            Source::Tally { form_id, .. } => format!("Tally form {form_id}"),
+            Source::Canny { board, .. } => match board {
+                Some(b) => format!("Canny board {b}"),
+                None => "all Canny boards".into(),
+            },
             other => other.path().display().to_string(),
         }
     }
@@ -348,6 +436,28 @@ fn zotero_library(spec: &str) -> Result<Option<(String, Option<String>)>> {
     Ok(Some((library, collection)))
 }
 
+/// A form id from `<prefix><id>` or a link containing one of `markers` followed by the id.
+fn form_id(spec: &str, prefix: &str, markers: &[&str]) -> Result<Option<String>> {
+    let raw = if let Some(r) = spec.strip_prefix(prefix) {
+        r
+    } else if let Some(r) = markers
+        .iter()
+        .find_map(|m| spec.find(m).map(|i| &spec[i + m.len()..]))
+    {
+        r
+    } else {
+        return Ok(None);
+    };
+    let id: String = raw
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric())
+        .collect();
+    if id.len() < 4 {
+        bail!("no form id in {spec:?}; copy the form's share or edit link");
+    }
+    Ok(Some(id))
+}
+
 /// `(base, table, view)` from an airtable.com link or `airtable:<app…>/<tbl…>[/<viw…>]`.
 fn airtable_table(spec: &str) -> Result<Option<(String, String, Option<String>)>> {
     let rest = if let Some(r) = spec.strip_prefix("airtable:") {
@@ -429,7 +539,10 @@ pub fn read(source: &Source, limit: Option<usize>) -> Result<Table> {
         Source::GoogleSheet { snapshot, .. }
         | Source::Notion { snapshot, .. }
         | Source::Zotero { snapshot, .. }
-        | Source::Airtable { snapshot, .. } => {
+        | Source::Airtable { snapshot, .. }
+        | Source::Typeform { snapshot, .. }
+        | Source::Tally { snapshot, .. }
+        | Source::Canny { snapshot, .. } => {
             if !snapshot.is_file() {
                 bail!(
                     "{} has not been pulled into this project yet; pull it first (Pull in the \
@@ -892,6 +1005,39 @@ mod tests {
             assert_eq!(again.remote_spec().unwrap(), spec, "the spec round-trips");
         }
         assert!(Source::parse_remote("https://airtable.com/appAAAAAAAAAAAAAA", root).is_err());
+    }
+
+    #[test]
+    fn remote_specs_parse_forms_and_canny() {
+        let root = Path::new("/p");
+        let kind_id = |spec: &str| {
+            let s = Source::parse_remote(spec, root).unwrap().unwrap();
+            let again = Source::parse_remote(&s.remote_spec().unwrap(), root)
+                .unwrap()
+                .unwrap();
+            assert_eq!(again, s, "{spec} round-trips");
+            (s.kind(), s.remote_spec().unwrap())
+        };
+        assert_eq!(
+            kind_id("https://acme.typeform.com/to/AbC123xy?utm=x"),
+            ("typeform", "typeform:AbC123xy".into())
+        );
+        assert_eq!(
+            kind_id("https://admin.typeform.com/form/AbC123xy/results"),
+            ("typeform", "typeform:AbC123xy".into())
+        );
+        assert_eq!(
+            kind_id("https://tally.so/r/w4Ex9z"),
+            ("tally", "tally:w4Ex9z".into())
+        );
+        assert_eq!(kind_id("tally:w4Ex9z"), ("tally", "tally:w4Ex9z".into()));
+        assert_eq!(kind_id("canny:all"), ("canny", "canny:all".into()));
+        assert_eq!(
+            kind_id("canny:board:Feature Requests"),
+            ("canny", "canny:board:Feature Requests".into())
+        );
+        assert!(Source::parse_remote("canny:boards", root).is_err());
+        assert!(Source::parse_remote("tally:x", root).is_err());
     }
 
     #[test]

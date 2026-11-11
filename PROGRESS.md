@@ -2894,3 +2894,16 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   `invectus integrations token|disconnect <name>`; Integrations page cards for each.
 - **Unverified:** neither service was called (no test accounts). Unit tests cover link parsing,
   spec round trips and value flattening.
+
+## 2026-11-10 — Typeform, Tally, Canny sources; Semantic Scholar and arXiv checks
+
+- Data sources `Source::Typeform`, `Source::Tally`, `Source::Canny` (tokens `typeform`,
+  `tally`, `canny` in the keychain), pulled into project snapshots; Integrations cards and
+  import hints for each. Canny boards resolve by id, URL name or name.
+- Outside checks: `invectus_verify::Source::{SemanticScholar, Arxiv}`; per-project choice
+  (`ProjectConfig.verify_sources`, Settings → Network checkboxes, `set_verify_sources`); gap
+  detail button names the chosen sources. Defaults unchanged (PubMed, OpenAlex).
+- **Unverified:** none of these services was called. Tally's answer value formats and Semantic
+  Scholar's bulk-search syntax are taken from their documentation, not from live replies.
+- **Spec conflict to review:** extra verification connectors are post-v1 in SPEC ("every
+  connector beyond PubMed and Steam is post-v1"); they are opt-in and off by default.

@@ -31,7 +31,7 @@ export interface JobInfo {
 export interface MissingModel { key: string; repo: string; megabytes: number }
 export interface IndexPlan { models: string[]; missing: MissingModel[]; notes: string[] }
 export interface ProjectInfo {
-  root: string; name: string; warning: string | null; network_enabled: boolean; offline_env: boolean;
+  root: string; name: string; warning: string | null; network_enabled: boolean; offline_env: boolean; verify_sources: string[];
   preferred_agent_model?: string | null;
   collections: Collection[]; tables: TableInfo[]; activity: JobRecord[]; running: JobInfo | null;
 }
@@ -40,7 +40,7 @@ export interface LlmInfo { key: string; repo: string; megabytes: number; install
 
 export interface PullRecord { origin: string; snapshot: string; rows: number; bytes: number; sha256: string; pulled_at: number }
 export interface SourceInfo {
-  kind: "csv" | "parquet" | "folder" | "excel" | "google_sheet" | "notion" | "zotero" | "airtable"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number;
+  kind: "csv" | "parquet" | "folder" | "excel" | "google_sheet" | "notion" | "zotero" | "airtable" | "typeform" | "tally" | "canny"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number;
   /** Spreadsheet tabs and the one read. */
   sheets: string[]; sheet: string | null;
   /** Pulled sources (Google Sheets, Notion, Zotero, Airtable): needs_pull until the first pull. */
@@ -152,11 +152,12 @@ export const api = {
   info: () => invoke<ProjectInfo>("project_info"),
   rename: (path: string, name: string) => invoke<string>("rename_project", { path, name }),
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
+  setVerifySources: (sources: string[]) => invoke<ProjectInfo>("set_verify_sources", { sources }),
   setAgentModel: (project: string, model: string | null) => invoke<ProjectInfo>("set_agent_model", { project, model }),
   inspect: (path: string, sheet?: string | null) => invoke<SourceInfo>("inspect_source", { path, sheet: sheet ?? null }),
   /** Network: pull a Google Sheet or Notion database into the open project (a background job). */
   pullSource: (spec: string) => invoke<JobInfo>("pull_source", { spec }),
-  /** Token-based integrations (notion, zotero, airtable) → where the token comes from, or null. */
+  /** Token-based integrations (notion, zotero, airtable, typeform, tally, canny) → token source, or null. */
   integrationTokens: () => invoke<Record<string, string | null>>("integration_tokens"),
   setIntegrationToken: (name: string, token: string) => invoke<string | null>("set_integration_token", { name, token }),
   preview: (form: ImportForm, rows = 20) => invoke<Preview>("preview_import", { form, rows }),

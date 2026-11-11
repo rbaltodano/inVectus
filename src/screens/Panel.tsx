@@ -236,7 +236,7 @@ function GapsPage({ ctx, active }: { ctx: Ctx; active: boolean }) {
     </button>)}
     </div>}
     {shown.length > 0 && <div className="row wrap small">
-      <button type="button" className="text-btn" disabled={busy || offline} title={offline ? "Switch the network on to check PubMed and OpenAlex" : undefined} onClick={verifyTop}>{msg ?? "Verify top 5"}</button>
+      <button type="button" className="text-btn" disabled={busy || offline} title={offline ? "Switch the network on to check outside sources" : undefined} onClick={verifyTop}>{msg ?? "Verify top 5"}</button>
       <button type="button" className="text-btn" disabled={busy} onClick={() => run(async () => setMsg(`Saved to ${await api.exportGaps(tref, "markdown")}`))}>Export Markdown</button>
       <button type="button" className="text-btn" disabled={busy} onClick={() => run(async () => setMsg(`Saved to ${await api.exportGaps(tref, "csv")}`))}>Export CSV</button>
     </div>}

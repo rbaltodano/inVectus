@@ -2,7 +2,7 @@
 export const SETTINGS_SECTIONS = [
   { id: "appearance", label: "Appearance", scope: "app", description: "Make inVectus feel at home on your computer.", keywords: "theme light dark system colors" },
   { id: "models", label: "Models", scope: "app", description: "Manage the local models shared by your projects.", keywords: "embedding bge nomic download install language model llm gemma size dimensions" },
-  { id: "network", label: "Network", scope: "project", description: "Choose when this project can use outside sources.", keywords: "offline online privacy pubmed openalex verification cache downloads" },
+  { id: "network", label: "Network", scope: "project", description: "Choose when this project can use outside sources.", keywords: "offline online privacy pubmed openalex semantic scholar arxiv outside sources verification cache downloads" },
   { id: "scoring", label: "Gap scoring", scope: "project", description: "Adjust how gaps are ranked for this project.", keywords: "weights demand per coverage item since last momentum share newer than stale bridges closeness little in between recent saturation penalty reset defaults" },
   { id: "calibration", label: "Calibration", scope: "project", description: "Keep collection-level verdicts calibrated to your data.", keywords: "verdict recalibrate auc sample language model collection" },
   { id: "embedding", label: "Embedding details", scope: "project", description: "Inspect the embedding spaces used by this project.", keywords: "space id runtime origin vectors ann partitions dimensions collection model" },

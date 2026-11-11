@@ -8,6 +8,13 @@ import { DownloadConsent } from "../models";
 import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 
+const VERIFY_SOURCES: [string, string, string][] = [
+  ["pubmed", "PubMed", "Biomedical literature (NCBI)."],
+  ["openalex", "OpenAlex", "Scholarly works across all fields."],
+  ["semanticscholar", "Semantic Scholar", "Papers across fields; shared free rate limit, so checks are slower."],
+  ["arxiv", "arXiv", "Preprints in physics, computer science, maths and more. Has no review filter."],
+];
+
 /** Gap-score weights per project, kept on this computer; scans read them. */
 export const weightsKey = (root: string) => `invectus.weights.${root}`;
 
@@ -144,7 +151,19 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
                 <span><b>Offline</b><div className="muted small">Blocks model downloads and outside-source checks for this project. Import, indexing, search, map, gaps and descriptions always run offline.</div></span>
               </label>
               {project.offline_env && <div className="note small">INVECTUS_OFFLINE is set: every network use is refused whatever this switch says.</div>}
-              <div className="muted small">Outside sources for checking gaps: PubMed and OpenAlex. Results are cached in the project for 7 days.</div>
+              <fieldset className="settings-sources">
+                <legend>Outside sources for checking gaps</legend>
+                {VERIFY_SOURCES.map(([id, label, note]) => {
+                  const on = project.verify_sources.includes(id);
+                  const last = on && project.verify_sources.length === 1;
+                  return <label key={id} className="check top">
+                    <input type="checkbox" checked={on} disabled={busy || last} title={last ? "Keep at least one source" : undefined}
+                      onChange={() => run(async () => setProject(await api.setVerifySources(on ? project.verify_sources.filter((s) => s !== id) : [...project.verify_sources, id])))} />
+                    <span><b>{label}</b><div className="muted small">{note}</div></span>
+                  </label>;
+                })}
+              </fieldset>
+              <div className="muted small">Results are cached in the project for 7 days.</div>
             </section>}
 
           </div>

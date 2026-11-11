@@ -1,4 +1,5 @@
-//! Outside sources for verification (SPEC §6.6): PubMed (E-utilities) and OpenAlex. Requests are
+//! Outside sources for verification (SPEC §6.6): PubMed (E-utilities), OpenAlex, Semantic
+//! Scholar (Graph API, no key) and arXiv (Atom API; preprints, no review filter). Requests are
 //! explicit, rate-limited, retried with backoff, refused offline, and cached in the project
 //! (`cache/verify/`, 7 days), so repeating a verification needs no network.
 
@@ -22,6 +23,8 @@ const CACHE_DAYS: u64 = 7;
 pub enum Source {
     PubMed,
     OpenAlex,
+    SemanticScholar,
+    Arxiv,
 }
 
 impl Source {
@@ -29,6 +32,23 @@ impl Source {
         match self {
             Self::PubMed => "pubmed",
             Self::OpenAlex => "openalex",
+            Self::SemanticScholar => "semanticscholar",
+            Self::Arxiv => "arxiv",
+        }
+    }
+    pub const ALL: [Source; 4] = [
+        Self::PubMed,
+        Self::OpenAlex,
+        Self::SemanticScholar,
+        Self::Arxiv,
+    ];
+    /// The query exactly as this source receives it.
+    pub fn query(self, q: &KeywordQuery) -> String {
+        match self {
+            Self::PubMed => q.pubmed(),
+            Self::OpenAlex => q.openalex(),
+            Self::SemanticScholar => q.semantic_scholar(),
+            Self::Arxiv => q.arxiv(),
         }
     }
     /// Minimum time between requests (PubMed allows 3 per second without a key).
@@ -36,6 +56,10 @@ impl Source {
         match self {
             Self::PubMed => Duration::from_millis(400),
             Self::OpenAlex => Duration::from_millis(150),
+            // The unauthenticated pool is shared; one request a second avoids most 429s.
+            Self::SemanticScholar => Duration::from_millis(1100),
+            // arXiv asks for one request every three seconds.
+            Self::Arxiv => Duration::from_millis(3000),
         }
     }
 }
@@ -46,7 +70,9 @@ impl std::str::FromStr for Source {
         match s.to_ascii_lowercase().as_str() {
             "pubmed" => Ok(Self::PubMed),
             "openalex" => Ok(Self::OpenAlex),
-            other => bail!("unknown source {other:?} (pubmed, openalex)"),
+            "semanticscholar" | "semantic-scholar" | "s2" => Ok(Self::SemanticScholar),
+            "arxiv" => Ok(Self::Arxiv),
+            other => bail!("unknown source {other:?} (pubmed, openalex, semanticscholar, arxiv)"),
         }
     }
 }
@@ -119,6 +145,32 @@ impl KeywordQuery {
     /// OpenAlex full-text search syntax (filters are separate parameters).
     pub fn openalex(&self) -> String {
         self.boolean("")
+    }
+
+    /// Semantic Scholar's bulk search takes `+` (AND), `|` (OR) and quoted phrases.
+    pub fn semantic_scholar(&self) -> String {
+        self.groups
+            .iter()
+            .filter(|g| !g.is_empty())
+            .map(|g| {
+                let terms: Vec<String> = g.iter().map(|t| quote(t)).collect();
+                format!("({})", terms.join(" | "))
+            })
+            .collect::<Vec<_>>()
+            .join(" + ")
+    }
+
+    /// arXiv search_query: terms in title or abstract (`all:`), AND between groups.
+    pub fn arxiv(&self) -> String {
+        self.groups
+            .iter()
+            .filter(|g| !g.is_empty())
+            .map(|g| {
+                let terms: Vec<String> = g.iter().map(|t| format!("all:{}", quote(t))).collect();
+                format!("({})", terms.join(" OR "))
+            })
+            .collect::<Vec<_>>()
+            .join(" AND ")
     }
 }
 
@@ -204,7 +256,7 @@ pub fn parse_openalex(v: &serde_json::Value) -> Result<(u64, Vec<ExternalHit>)> 
 }
 
 /// Last request time per source, shared across threads.
-static LAST: Mutex<[Option<Instant>; 2]> = Mutex::new([None, None]);
+static LAST: Mutex<[Option<Instant>; 4]> = Mutex::new([None; 4]);
 
 fn get_json(source: Source, url: &str, params: &[(&str, &str)]) -> Result<serde_json::Value> {
     invectus_core::net::ensure_online(&format!("{} verification", source.name()))?;
@@ -261,10 +313,7 @@ pub fn search(
     query: &KeywordQuery,
     max: usize,
 ) -> Result<SourceResult> {
-    let q = match source {
-        Source::PubMed => query.pubmed(),
-        Source::OpenAlex => query.openalex(),
-    };
+    let q = source.query(query);
     let key = format!("{}|{q}|{}|{max}", source.name(), query.reviews_only);
     let path = cache_path(project, source, &key);
     if let Ok(bytes) = std::fs::read(&path)
@@ -316,6 +365,51 @@ pub fn search(
                 fetched_at: now(),
             }
         }
+        Source::SemanticScholar => {
+            let mut params = vec![
+                ("query", q.as_str()),
+                ("fields", "title,year,externalIds,url,publicationTypes"),
+            ];
+            if query.reviews_only {
+                params.push(("publicationTypes", "Review"));
+            }
+            let v = get_json(
+                source,
+                "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+                &params,
+            )?;
+            let (total, mut hits) = parse_semantic_scholar(&v)?;
+            hits.truncate(max);
+            SourceResult {
+                source: source.name().into(),
+                query: q,
+                total: Some(total),
+                hits,
+                cached: false,
+                fetched_at: now(),
+            }
+        }
+        Source::Arxiv => {
+            // arXiv has no review filter: a reviews-only check still lists preprints.
+            let xml = get_text(
+                source,
+                "https://export.arxiv.org/api/query",
+                &[
+                    ("search_query", q.as_str()),
+                    ("max_results", max_s.as_str()),
+                    ("sortBy", "relevance"),
+                ],
+            )?;
+            let (total, hits) = parse_arxiv(&xml)?;
+            SourceResult {
+                source: source.name().into(),
+                query: q,
+                total: Some(total),
+                hits,
+                cached: false,
+                fetched_at: now(),
+            }
+        }
         Source::OpenAlex => {
             let mut params = vec![("search", q.as_str()), ("per-page", max_s.as_str())];
             if query.reviews_only {
@@ -340,6 +434,112 @@ pub fn search(
     Ok(result)
 }
 
+/// Parse a Semantic Scholar bulk-search reply: (total, hits). Reviews are marked by
+/// `publicationTypes` ("Review").
+pub fn parse_semantic_scholar(v: &serde_json::Value) -> Result<(u64, Vec<ExternalHit>)> {
+    let data = v["data"]
+        .as_array()
+        .context("no data in Semantic Scholar reply")?;
+    let hits = data
+        .iter()
+        .filter_map(|p| {
+            let id = p["paperId"].as_str()?.to_string();
+            let title = p["title"].as_str()?.trim().to_string();
+            let doi = p["externalIds"]["DOI"].as_str();
+            Some(ExternalHit {
+                source: "semanticscholar".into(),
+                url: doi
+                    .map(|d| format!("https://doi.org/{d}"))
+                    .or_else(|| p["url"].as_str().map(String::from))
+                    .or_else(|| Some(format!("https://www.semanticscholar.org/paper/{id}"))),
+                year: p["year"].as_i64().map(|y| y as i32),
+                kinds: p["publicationTypes"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|t| t.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                id,
+                title,
+            })
+        })
+        .collect();
+    Ok((v["total"].as_u64().unwrap_or(0), hits))
+}
+
+/// Parse an arXiv Atom feed: (total, hits). A small reader for the fixed feed shape, not a
+/// general XML parser.
+pub fn parse_arxiv(xml: &str) -> Result<(u64, Vec<ExternalHit>)> {
+    if !xml.contains("<feed") {
+        bail!("arXiv did not return a feed");
+    }
+    fn tag<'a>(s: &'a str, name: &str) -> Option<&'a str> {
+        let open = s.find(&format!("<{name}"))?;
+        let start = open + s[open..].find('>')? + 1;
+        let end = start + s[start..].find(&format!("</{name}>"))?;
+        Some(&s[start..end])
+    }
+    fn unescape(s: &str) -> String {
+        s.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&amp;", "&")
+    }
+    let total = tag(xml, "opensearch:totalResults")
+        .and_then(|t| t.trim().parse().ok())
+        .unwrap_or(0);
+    let hits = xml
+        .split("<entry>")
+        .skip(1)
+        .filter_map(|e| {
+            let url = tag(e, "id")?.trim().to_string();
+            let id = url.rsplit("/abs/").next().unwrap_or(&url).to_string();
+            Some(ExternalHit {
+                source: "arxiv".into(),
+                title: unescape(tag(e, "title")?),
+                year: tag(e, "published").and_then(|p| p.get(..4)?.parse().ok()),
+                kinds: vec!["preprint".into()],
+                url: Some(url),
+                id,
+            })
+        })
+        .collect();
+    Ok((total, hits))
+}
+
+fn get_text(source: Source, url: &str, params: &[(&str, &str)]) -> Result<String> {
+    invectus_core::net::ensure_online(&format!("{} verification", source.name()))?;
+    let mut last_err = None;
+    for attempt in 0..3 {
+        {
+            let mut last = LAST.lock().unwrap();
+            let slot = &mut last[source as usize];
+            if let Some(t) = *slot {
+                std::thread::sleep(source.spacing().saturating_sub(t.elapsed()));
+            }
+            *slot = Some(Instant::now());
+        }
+        let mut req = ureq::get(url).header("User-Agent", USER_AGENT);
+        for (k, v) in params {
+            req = req.query(*k, *v);
+        }
+        match req.call() {
+            Ok(resp) => return Ok(resp.into_body().read_to_string()?),
+            Err(e) => {
+                last_err = Some(e);
+                std::thread::sleep(Duration::from_secs(2 << attempt));
+            }
+        }
+    }
+    Err(last_err.expect("at least one attempt")).with_context(|| format!("GET {url}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,6 +561,14 @@ mod tests {
         assert_eq!(
             q.openalex(),
             "(corneal OR \"cross-linking\") AND (\"choroidal thickness\")"
+        );
+        assert_eq!(
+            q.semantic_scholar(),
+            "(corneal | \"cross-linking\") + (\"choroidal thickness\")"
+        );
+        assert_eq!(
+            q.arxiv(),
+            "(all:corneal OR all:\"cross-linking\") AND (all:\"choroidal thickness\")"
         );
     }
 
@@ -397,6 +605,34 @@ mod tests {
         assert_eq!(hits[0].url.as_deref(), Some("https://doi.org/10.1/x"));
         assert_eq!(hits[1].url.as_deref(), Some("https://openalex.org/W2"));
         assert!(parse_openalex(&serde_json::json!({})).is_err());
+        let s2 = serde_json::json!({"total": 12, "data": [
+            {"paperId": "abc", "title": "A survey", "year": 2022,
+             "externalIds": {"DOI": "10.2/y"}, "publicationTypes": ["Review"]},
+            {"paperId": "def", "title": "No doi", "year": null, "externalIds": {}},
+            {"paperId": "ghi"}
+        ]});
+        let (n, hits) = parse_semantic_scholar(&s2).unwrap();
+        assert_eq!((n, hits.len()), (12, 2));
+        assert_eq!(hits[0].url.as_deref(), Some("https://doi.org/10.2/y"));
+        assert_eq!(hits[0].kinds, vec!["Review"]);
+        assert_eq!(
+            hits[1].url.as_deref(),
+            Some("https://www.semanticscholar.org/paper/def")
+        );
+        let feed = r#"<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+          <opensearch:totalResults xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">5</opensearch:totalResults>
+          <entry><id>http://arxiv.org/abs/2101.00001v2</id><published>2021-01-01T00:00:00Z</published>
+          <title>Corneal   cross-linking
+            &amp; thickness</title></entry>
+          <entry><id>http://arxiv.org/abs/2202.00002v1</id><title>Second</title></entry>
+        </feed>"#;
+        let (n, hits) = parse_arxiv(feed).unwrap();
+        assert_eq!((n, hits.len()), (5, 2));
+        assert_eq!(hits[0].title, "Corneal cross-linking & thickness");
+        assert_eq!(hits[0].id, "2101.00001v2");
+        assert_eq!(hits[0].year, Some(2021));
+        assert_eq!(hits[1].year, None);
+        assert!(parse_arxiv("<html>").is_err());
         assert!(parse_pubmed_search(&serde_json::json!({})).is_err());
     }
 

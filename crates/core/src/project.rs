@@ -18,6 +18,10 @@ pub struct ProjectConfig {
     /// Requested model for future MCP agent work; the agent client controls execution.
     #[serde(default)]
     pub preferred_agent_model: Option<String>,
+    /// Outside sources gap checks use (`pubmed`, `openalex`, `semanticscholar`, `arxiv`);
+    /// `None`: PubMed and OpenAlex.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify_sources: Option<Vec<String>>,
 }
 
 pub struct Project {
@@ -46,6 +50,7 @@ impl Project {
             name,
             network_enabled: false,
             preferred_agent_model: None,
+            verify_sources: None,
         };
         write_json_atomic(&root.join("project.json"), &config)?;
         let store = Store::open(&root.join("project.duckdb"))?;
@@ -74,6 +79,15 @@ impl Project {
     /// Turn the project's network switch on or off and save `project.json`.
     pub fn set_network_enabled(&mut self, enabled: bool) -> Result<()> {
         self.config.network_enabled = enabled;
+        write_json_atomic(&self.root.join("project.json"), &self.config)
+    }
+
+    /// Choose the outside sources gap checks use (`None`: the default pair) and save it.
+    pub fn set_verify_sources(&mut self, sources: Option<Vec<String>>) -> Result<()> {
+        if sources.as_ref().is_some_and(|s| s.is_empty()) {
+            bail!("choose at least one outside source");
+        }
+        self.config.verify_sources = sources;
         write_json_atomic(&self.root.join("project.json"), &self.config)
     }
 

@@ -522,14 +522,18 @@ pub fn set_integration_token(name: &str, token: &str) -> OpResult<Option<&'stati
             "notion" => (t.starts_with("ntn_") || t.starts_with("secret_")) && t.len() >= 20,
             "airtable" => t.starts_with("pat") && t.len() >= 40,
             "zotero" => t.len() == 24 && t.chars().all(|c| c.is_ascii_alphanumeric()),
-            _ => true,
+            "typeform" => t.starts_with("tfp_") && t.len() >= 20,
+            "tally" => t.starts_with("tly-") && t.len() >= 12,
+            _ => t.len() >= 16,
         };
         if !looks_right {
             let hint = match name {
                 "notion" => "Notion integration secrets start with ntn_",
                 "airtable" => "Airtable personal access tokens start with pat",
                 "zotero" => "Zotero API keys are 24 letters and digits",
-                _ => "",
+                "typeform" => "Typeform personal access tokens start with tfp_",
+                "tally" => "Tally API keys start with tly-",
+                _ => "it is too short",
             };
             return Err(format!("that does not look like a {name} token ({hint})"));
         }

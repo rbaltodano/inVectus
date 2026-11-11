@@ -3,7 +3,7 @@
 // keychain) are pulled into a project only when the person asks, then imported offline
 // (docs/integrations.md).
 import { useEffect, useState, type ReactNode } from "react";
-import { BookMarked, Database, FileSpreadsheet, NotebookText, Sheet, Table2, type LucideIcon } from "lucide-react";
+import { BookMarked, ClipboardList, Database, FileSpreadsheet, Lightbulb, ListChecks, NotebookText, Sheet, Table2, type LucideIcon } from "lucide-react";
 import { api, inTauri } from "../api";
 import { ErrorLine, useAction } from "../App";
 import Link from "../Link";
@@ -65,7 +65,7 @@ export default function Integrations() {
 }
 
 interface TokenIntegration {
-  id: "notion" | "zotero" | "airtable"; name: string; icon: LucideIcon; about: string; use: string;
+  id: "notion" | "zotero" | "airtable" | "typeform" | "tally" | "canny"; name: string; icon: LucideIcon; about: string; use: string;
   placeholder: string; label: string; steps: ReactNode[];
 }
 
@@ -98,6 +98,33 @@ const TOKEN_INTEGRATIONS: TokenIntegration[] = [
       <>Create a token at <Link url="https://airtable.com/create/tokens">airtable.com/create/tokens</Link> with the <code>data.records:read</code> scope.</>,
       <>Under Access, add the bases you want to import from.</>,
       <>Copy the token (it starts with <code>pat</code>) and paste it below.</>,
+    ],
+  },
+  {
+    id: "typeform", name: "Typeform", icon: ClipboardList, label: "Personal access token", placeholder: "tfp_…",
+    about: "Import a form's completed responses: one item per response, one column per question.",
+    use: "Paste the form's share or edit link in Add to Dataset.",
+    steps: [
+      <>Create a token at <Link url="https://admin.typeform.com/user/tokens">admin.typeform.com/user/tokens</Link> with the <code>forms:read</code> and <code>responses:read</code> scopes.</>,
+      <>Copy the token (it starts with <code>tfp_</code>) and paste it below.</>,
+    ],
+  },
+  {
+    id: "tally", name: "Tally", icon: ListChecks, label: "API key", placeholder: "tly-…",
+    about: "Import a form's completed submissions: one item per submission, one column per question.",
+    use: "Paste the form's share link (tally.so/r/…) in Add to Dataset.",
+    steps: [
+      <>In Tally, open Settings → API keys and create a key.</>,
+      <>Copy the key (it starts with <code>tly-</code>) and paste it below.</>,
+    ],
+  },
+  {
+    id: "canny", name: "Canny", icon: Lightbulb, label: "Secret API key", placeholder: "Canny API key",
+    about: "Import feature requests with their status and votes: what people ask for, next to what you build.",
+    use: "In Add to Dataset, type canny:all, or canny:board: and the board's name.",
+    steps: [
+      <>In Canny, open Settings → API &amp; Webhooks and copy the secret API key.</>,
+      <>Paste it below. It is read only here: inVectus never writes to Canny.</>,
     ],
   },
 ];

@@ -10,7 +10,14 @@ import { useFlickerDelays } from "./dot-flicker";
 import ConnectAgents from "./screens/ConnectAgents";
 import "./AgentChip.css";
 
+/** The project header's pill: saves the choice to the open project. */
 export default function AgentChip({ project, setProject }: { project: ProjectInfo; setProject: (p: ProjectInfo) => void }) {
+  return <AgentPicker value={project.agent ?? undefined}
+    onChoose={async (id) => { setProject(await api.setProjectAgent(project.root, id)); }} />;
+}
+
+/** The pill and its menu. `onChoose` decides what choosing means (save it, or keep it for later). */
+export function AgentPicker({ value, onChoose }: { value?: string; onChoose: (id: string) => Promise<void> | void }) {
   const { agents, refresh } = useAgentOptions();
   const flicker = useFlickerDelays();
   const [open, setOpen] = useState(false);
@@ -20,7 +27,7 @@ export default function AgentChip({ project, setProject }: { project: ProjectInf
   const [place, setPlace] = useState({ top: 0, right: 0 });
   const trigger = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
-  const current = agents.find((a) => a.id === project.agent);
+  const current = agents.find((a) => a.id === value);
 
   useEffect(() => {
     if (!open) return;
@@ -35,7 +42,7 @@ export default function AgentChip({ project, setProject }: { project: ProjectInf
 
   const choose = async (id: string) => {
     setBusy(true); setError(undefined);
-    try { setProject(await api.setProjectAgent(project.root, id)); local.set(LAST_AGENT, id); setOpen(false); }
+    try { await onChoose(id); local.set(LAST_AGENT, id); setOpen(false); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   };
@@ -44,16 +51,16 @@ export default function AgentChip({ project, setProject }: { project: ProjectInf
     <button type="button" ref={trigger} className="agent-chip" aria-haspopup="dialog" aria-expanded={open} onClick={() => { refresh(); setOpen(!open); }}
       title="Agent for this project: who writes gap descriptions, region names and paraphrases">
       <span className="agent-chip-mark">{current ? <AgentMark id={current.id} size={14} /> : <Bot size={14} strokeWidth={1.5} aria-hidden="true" />}</span>
-      <span>{current?.name ?? (project.agent ? project.agent : "Choose agent")}</span>
+      <span>{current?.name ?? (value ?? "Choose agent")}</span>
       <ChevronDown size={12} aria-hidden="true" className="agent-chip-chev" />
     </button>
     {open && createPortal(<div ref={popup} className="agent-menu" style={{ top: place.top, right: place.right }} role="dialog" aria-label="Agent for this project">
       <div className="agent-menu-head">Agent for this project</div>
       <div role="radiogroup" aria-label="Agents">
-        {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={a.id === project.agent} className="agent-menu-row flicker-in" style={flicker(a.id)} disabled={busy} onClick={() => void choose(a.id)}>
+        {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={a.id === value} className="agent-menu-row flicker-in" style={flicker(a.id)} disabled={busy} onClick={() => void choose(a.id)}>
           <span className="agent-menu-mark"><AgentMark id={a.id} /></span>
           <span className="agent-menu-text"><span>{a.name}</span><span className="agent-menu-note">{a.note}</span></span>
-          <span className="agent-menu-check">{a.id === project.agent && <Check size={14} aria-hidden="true" />}</span>
+          <span className="agent-menu-check">{a.id === value && <Check size={14} aria-hidden="true" />}</span>
         </button>)}
       </div>
       <button type="button" className="agent-menu-row agent-menu-add" onClick={() => { setOpen(false); setAdding(true); }}>

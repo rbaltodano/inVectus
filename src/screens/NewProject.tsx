@@ -2,8 +2,8 @@
 // integrations), and who does the project's writing work (an agent, or the on-device model).
 import { useEffect, useState } from "react";
 import { Folder } from "lucide-react";
-import { AgentMark, LAST_AGENT, useAgentOptions } from "../agentOptions";
-import { useFlickerDelays } from "../dot-flicker";
+import { LAST_AGENT, useAgentOptions } from "../agentOptions";
+import { AgentPicker } from "../AgentChip";
 import { api, inTauri, local, pickDirectory, type JobInfo, type ProjectInfo } from "../api";
 import type { Page } from "../App";
 import SourcePicker, { type Picked } from "../SourcePicker";
@@ -13,11 +13,10 @@ import "./NewProject.css";
 interface Props {
   onCreated: (p: ProjectInfo, first?: Page) => void;
   onIntegrations: () => void;
-  onAgents: () => void;
   blocked?: JobInfo;
 }
 
-export default function NewProject({ onCreated, onIntegrations, onAgents, blocked }: Props) {
+export default function NewProject({ onCreated, onIntegrations, blocked }: Props) {
   const [name, setName] = useState("");
   const [dir, setDir] = useState("");
   const [sources, setSources] = useState<Picked[]>([]);
@@ -26,7 +25,6 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const { agents, fallback } = useAgentOptions();
-  const flicker = useFlickerDelays();
 
   useEffect(() => {
     if (!inTauri) return;
@@ -63,6 +61,8 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
         <h1><input className="np-title" autoFocus aria-label="Project name" value={name} placeholder={stem || "New project"}
           onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }} /></h1>
         <p className="dim new-project-lede">A project is a folder on this computer: one dataset, its index and map, and your decisions.</p></div>
+      {/* The agent for this project, as in the project header; saved when the project is created. */}
+      <div className="np-agent-pick"><AgentPicker value={agent} onChoose={(id) => { setAgent(id); setAgentPicked(true); }} /></div>
     </div>
 
     <section className="new-project-section" aria-labelledby="np-where">
@@ -81,17 +81,6 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
       <SourcePicker picked={sources} onChange={setSources} onIntegrations={onIntegrations} disabled={!!blocked} />
     </section>
 
-    <section className="new-project-section" aria-labelledby="np-agent">
-      <h2 id="np-agent"><span className="np-step">03</span>Agent for this project</h2>
-      <p className="dim small">Who writes gap descriptions, region names and paraphrases. You can change it later.</p>
-      <div className="np-agents" role="radiogroup" aria-labelledby="np-agent">
-        {agents.map((a) => <button key={a.id} type="button" role="radio" aria-checked={agent === a.id} className="np-agent flicker-in" style={flicker(a.id)} onClick={() => { setAgent(a.id); setAgentPicked(true); }}>
-          <span className="np-agent-mark"><AgentMark id={a.id} /></span>
-          <span className="np-agent-text"><span className="np-agent-name">{a.name}</span><span className="np-agent-note">{a.note}</span></span>
-        </button>)}
-      </div>
-      {agents.length === 1 && <p className="dim small">No agent apps are connected. <button type="button" className="text-btn" onClick={onAgents}>Connect one on Agents</button></p>}
-    </section>
 
     <div className="new-project-actions">
       {error && <p className="err" role="alert">{error}</p>}

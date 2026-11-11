@@ -241,7 +241,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         onEnter={enter} onPick={openRecent} onNew={() => setRoute({ view: "new" })} onOpen={openProject} onProjects={() => setRoute({ view: "projects" })} />}
       {route.view === "projects" && <ProjectsPage current={project} recent={recent} job={job}
         onPick={openRecent} onNew={() => setRoute({ view: "new" })} onOpen={openProject} onForget={(root) => { forget(root); setRecent(recentProjects()); }} />}
-      {route.view === "new" && <NewProject onCreated={opened} onIntegrations={() => setRoute({ view: "integrations" })} onAgents={() => setRoute({ view: "agents" })} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
+      {route.view === "new" && <NewProject onCreated={opened} onIntegrations={() => setRoute({ view: "integrations" })} blocked={isRunning(job) && !!job!.project ? job : undefined} />}
       {route.view === "integrations" && <Integrations />}
       {route.view === "agents" && <Agents />}
       {route.view === "settings" && <Settings project={project} setProject={setProject} />}

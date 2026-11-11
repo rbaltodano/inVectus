@@ -1,4 +1,5 @@
-// Integrations: data sources and outside checks (AI agents have their own page, Agents.tsx). Excel is
+// Integrations: data sources and outside checks by category, with search and filters (AI agents
+// have their own page, Agents.tsx). Excel is
 // read locally; Google Sheets (shared by link), Notion, Zotero and Airtable (tokens in the
 // keychain) are pulled into a project only when the person asks, then imported offline
 // (docs/integrations.md).
@@ -8,22 +9,61 @@ import { api, inTauri } from "../api";
 import { ErrorLine, useAction } from "../App";
 import Link from "../Link";
 
+type Category = "tables" | "docs" | "research" | "forms" | "product" | "databases";
+type StatusFilter = "all" | "connected" | "token" | "ready";
+
+const CATEGORIES: { id: Category; label: string; short: string; about: string }[] = [
+  { id: "tables", label: "Spreadsheets & tables", short: "Tables", about: "Rows from files and table tools; each row becomes an item." },
+  { id: "docs", label: "Docs & notes", short: "Docs", about: "Pages from your team's notes and wikis." },
+  { id: "research", label: "Research", short: "Research", about: "Your reference library, and the scholarly indexes gap checks search." },
+  { id: "forms", label: "Forms & surveys", short: "Forms", about: "Open-text answers: what people say they need." },
+  { id: "product", label: "Product feedback", short: "Feedback", about: "Feature requests and customer notes, next to what you plan to build." },
+  { id: "databases", label: "Databases", short: "Databases", about: "Direct database sources." },
+];
+
+const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
+  { id: "all", label: "Any status" },
+  { id: "connected", label: "Connected" },
+  { id: "token", label: "Needs a token" },
+  { id: "ready", label: "No setup" },
+];
+
+/** One card. Token cards (Notion, Zotero…) come from TOKEN_INTEGRATIONS; the rest are fixed. */
+interface Entry {
+  id: string; name: string; category: Category; code: string; keywords: string;
+  token?: TokenIntegration;
+  icon?: LucideIcon; desc?: string; badge?: string; muted?: boolean;
+}
+
 export default function Integrations() {
   // undefined while loading; each integration's token source, or null when not connected.
   const [tokens, setTokens] = useState<Record<string, string | null>>();
   useEffect(() => { if (inTauri) api.integrationTokens().then(setTokens).catch(() => setTokens({})); else setTokens({}); }, []);
   const [query, setQuery] = useState("");
-  // Every word must appear in the card's name, description or keywords.
+  const [category, setCategory] = useState<Category | "all">("all");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  // Every word must appear in the card's name, description, category or keywords.
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  const shown = (...text: string[]) => { const t = text.join(" ").toLowerCase(); return terms.every((w) => t.includes(w)); };
-  const tokenCards = TOKEN_INTEGRATIONS.filter((it) => shown(it.name, it.about, it.use, it.keywords));
-  const builtIn = {
-    excel: shown("Excel xlsx xls ods spreadsheet OpenDocument file local Built in"),
-    sheets: shown("Google Sheets spreadsheet link shared Link import"),
-    databases: shown("Databases SQL Postgres MySQL SQLite DuckDB Coming later"),
-    scholarly: shown("Scholarly sources PubMed OpenAlex Semantic Scholar arXiv papers research Built in"),
-  };
-  const anyData = builtIn.excel || builtIn.sheets || builtIn.databases || tokenCards.length > 0;
+  const text = (e: Entry) => [e.name, e.desc, e.keywords, e.token?.about, e.token?.use, e.token?.keywords, CATEGORIES.find((c) => c.id === e.category)!.label].join(" ").toLowerCase();
+  const connected = (e: Entry) => !!e.token && !!tokens?.[e.token.id];
+  const statusOk = (e: Entry) => status === "all" || (status === "connected" ? connected(e) : status === "token" ? !!e.token && !connected(e) : !e.token && !e.muted);
+  const searched = ENTRIES.filter((e) => terms.every((w) => text(e).includes(w)) && statusOk(e));
+  const visible = searched.filter((e) => category === "all" || e.category === category);
+  const filtered = !!query.trim() || category !== "all" || status !== "all";
+  const clear = () => { setQuery(""); setCategory("all"); setStatus("all"); };
+
+  const card = (e: Entry) => e.token
+    ? <TokenCard key={e.id} it={e.token} label={e.code} from={tokens === undefined ? undefined : tokens[e.token.id] ?? null}
+      onChange={(from) => setTokens((t) => ({ ...t, [e.token!.id]: from }))} />
+    : <li key={e.id} className="integration-card" data-disabled={e.muted || undefined} data-label={e.code}>
+      <div className="integration-card-top">
+        <span className="integration-mark">{e.icon && <e.icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span>
+        <span className={`integration-badge${e.muted ? " integration-badge-muted" : ""}`} data-tone={e.muted ? undefined : "ink"}>{e.badge}</span>
+      </div>
+      <div className="integration-name">{e.name}</div>
+      <p className="integration-desc">{e.desc}</p>
+    </li>;
+
   return <div className="page integrations-page">
     <div className="integrations-inner">
       <header className="integrations-header integrations-header-row">
@@ -38,57 +78,34 @@ export default function Integrations() {
           {query && <button type="button" aria-label="Clear integrations search" onClick={() => setQuery("")}><X size={13} aria-hidden="true" /></button>}
         </div>
       </header>
-      {!anyData && !builtIn.scholarly && <p className="integrations-empty" role="status">No integrations match “{query.trim()}”.</p>}
-      {anyData && <section aria-labelledby="i-data" className="integrations-section">
-        <div className="integrations-section-head">
-          <h2 id="i-data">Data sources</h2>
-          <p>Bring rows in as a collection. Online sources are pulled once, when you ask, and then work offline.</p>
+      <div className="integrations-filters">
+        <div role="group" aria-label="Category" className="integrations-chips">
+          {[{ id: "all" as const, short: "All", label: "All categories" }, ...CATEGORIES].map((c) => {
+            const n = c.id === "all" ? searched.length : searched.filter((e) => e.category === c.id).length;
+            return <button key={c.id} type="button" className="integrations-chip" aria-pressed={category === c.id} disabled={n === 0 && category !== c.id}
+              title={c.label} onClick={() => setCategory(c.id)}>{c.short}<span className="integrations-chip-count">{n}</span></button>;
+          })}
         </div>
-        <ul className="integration-grid" data-code="DS">
-          {builtIn.excel && <li className="integration-card" data-label="DS-01">
-            <div className="integration-card-top">
-              <span className="integration-mark"><FileSpreadsheet size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className="integration-badge" data-tone="ink">Built in</span>
-            </div>
-            <div className="integration-name">Excel</div>
-            <p className="integration-desc">Import .xlsx, .xls or .ods files from Add to Dataset and pick the sheet. Read on this computer.</p>
-          </li>}
-          {builtIn.sheets && <li className="integration-card" data-label="DS-02">
-            <div className="integration-card-top">
-              <span className="integration-mark"><Sheet size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className="integration-badge" data-tone="ink">Link import</span>
-            </div>
-            <div className="integration-name">Google Sheets</div>
-            <p className="integration-desc">Paste a sheet's link in Add to Dataset. The sheet must be shared as “Anyone with the link”; no sign-in.</p>
-          </li>}
-          {tokenCards.map((it) => <TokenCard key={it.id} it={it} label={`DS-${String(TOKEN_INTEGRATIONS.indexOf(it) + 3).padStart(2, "0")}`} from={tokens === undefined ? undefined : tokens[it.id] ?? null}
-            onChange={(from) => setTokens((t) => ({ ...t, [it.id]: from }))} />)}
-          {builtIn.databases && <li className="integration-card" data-disabled="true" data-label={`DS-${String(TOKEN_INTEGRATIONS.length + 3).padStart(2, "0")}`}>
-            <div className="integration-card-top">
-              <span className="integration-mark"><Database size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className="integration-badge integration-badge-muted">Coming later</span>
-            </div>
-            <div className="integration-name">Databases</div>
-            <p className="integration-desc">Until then, export a table to CSV, Parquet or Excel and import the file.</p>
-          </li>}
-        </ul>
-      </section>}
-      {builtIn.scholarly && <section aria-labelledby="i-checks" className="integrations-section">
-        <div className="integrations-section-head">
-          <h2 id="i-checks">Outside checks</h2>
-          <p>Where a gap check looks for existing work. Choose them per project in Settings → Network; they run only when that project's network switch is on.</p>
-        </div>
-        <ul className="integration-grid" data-code="OC">
-          <li className="integration-card" data-label="OC-01">
-            <div className="integration-card-top">
-              <span className="integration-mark"><Library size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className="integration-badge" data-tone="ink">Built in</span>
-            </div>
-            <div className="integration-name">Scholarly sources</div>
-            <p className="integration-desc">PubMed and OpenAlex by default; Semantic Scholar and arXiv when you turn them on. No keys needed.</p>
-          </li>
-        </ul>
-      </section>}
+        <label className="integrations-status" data-active={status !== "all"}>
+          <span>Status</span>
+          <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+            {STATUS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        </label>
+      </div>
+      {visible.length === 0 && <p className="integrations-empty" role="status">No integrations match these filters. <button type="button" className="text-btn" onClick={clear}>Clear filters</button></p>}
+      {CATEGORIES.map((c) => {
+        const items = visible.filter((e) => e.category === c.id);
+        if (items.length === 0) return null;
+        return <section key={c.id} aria-labelledby={`i-${c.id}`} className="integrations-section">
+          <div className="integrations-section-head">
+            <h2 id={`i-${c.id}`}>{c.label}<span className="integrations-section-count">{String(items.length).padStart(2, "0")}</span></h2>
+            <p>{c.about}</p>
+          </div>
+          <ul className="integration-grid">{items.map(card)}</ul>
+        </section>;
+      })}
+      {!filtered && <p className="integrations-footnote">Online sources are pulled once, when you ask, and then work offline. Outside checks run only when a project's network switch is on.</p>}
     </div>
   </div>;
 }
@@ -174,6 +191,27 @@ const TOKEN_INTEGRATIONS: TokenIntegration[] = [
       <>Paste it below. inVectus only reads notes and features.</>,
     ],
   },
+];
+
+const token = (id: TokenIntegration["id"]) => TOKEN_INTEGRATIONS.find((t) => t.id === id)!;
+
+// Codes stay fixed per integration (DS: data source, OC: outside check), whatever is filtered.
+const ENTRIES: Entry[] = [
+  { id: "excel", name: "Excel", category: "tables", code: "DS-01", icon: FileSpreadsheet, badge: "Built in", keywords: "xlsx xls ods spreadsheet OpenDocument file local",
+    desc: "Import .xlsx, .xls or .ods files from Add to Dataset and pick the sheet. Read on this computer." },
+  { id: "sheets", name: "Google Sheets", category: "tables", code: "DS-02", icon: Sheet, badge: "Link import", keywords: "spreadsheet link shared google",
+    desc: "Paste a sheet's link in Add to Dataset. The sheet must be shared as “Anyone with the link”; no sign-in." },
+  { id: "airtable", name: "Airtable", category: "tables", code: "DS-03", token: token("airtable"), keywords: "" },
+  { id: "notion", name: "Notion", category: "docs", code: "DS-04", token: token("notion"), keywords: "" },
+  { id: "zotero", name: "Zotero", category: "research", code: "DS-05", token: token("zotero"), keywords: "" },
+  { id: "scholarly", name: "Scholarly sources", category: "research", code: "OC-01", icon: Library, badge: "Built in", keywords: "outside check gap verify PubMed OpenAlex Semantic Scholar arXiv papers",
+    desc: "Outside check. PubMed and OpenAlex by default; Semantic Scholar and arXiv when you turn them on in Settings → Network. No keys needed." },
+  { id: "typeform", name: "Typeform", category: "forms", code: "DS-06", token: token("typeform"), keywords: "" },
+  { id: "tally", name: "Tally", category: "forms", code: "DS-07", token: token("tally"), keywords: "" },
+  { id: "canny", name: "Canny", category: "product", code: "DS-08", token: token("canny"), keywords: "" },
+  { id: "productboard", name: "Productboard", category: "product", code: "DS-09", token: token("productboard"), keywords: "" },
+  { id: "databases", name: "Databases", category: "databases", code: "DS-10", icon: Database, badge: "Coming later", muted: true, keywords: "SQL Postgres MySQL SQLite DuckDB",
+    desc: "Until then, export a table to CSV, Parquet or Excel and import the file." },
 ];
 
 function TokenCard({ it, from, onChange, label }: { it: TokenIntegration; from: string | null | undefined; onChange: (from: string | null) => void; label: string }) {

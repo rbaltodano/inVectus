@@ -2907,3 +2907,13 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   Scholar's bulk-search syntax are taken from their documentation, not from live replies.
 - **Spec conflict to review:** extra verification connectors are post-v1 in SPEC ("every
   connector beyond PubMed and Steam is post-v1"); they are opt-in and off by default.
+
+## 2026-11-10 — Productboard source; US patents (PatentsView) check
+
+- `Source::Productboard` (`productboard:notes` or `productboard:features`, access token) pulled
+  into project snapshots; Integrations card.
+- `invectus_verify::Source::PatentsView`: USPTO PatentSearch API with a free key (keychain
+  `patentsview`), opt-in per project ("US patents" in Settings → Network); Integrations page has
+  a new "Outside checks" section.
+- **Unverified:** neither API was called; PatentSearch query and reply shapes and Productboard
+  paging come from their documentation.

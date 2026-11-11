@@ -8,7 +8,7 @@ import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
 
 const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
-const REMOTE_NAMES: Record<string, string> = { google_sheet: "Google Sheets", notion: "Notion", zotero: "Zotero", airtable: "Airtable", typeform: "Typeform", tally: "Tally", canny: "Canny" };
+const REMOTE_NAMES: Record<string, string> = { google_sheet: "Google Sheets", notion: "Notion", zotero: "Zotero", airtable: "Airtable", typeform: "Typeform", tally: "Tally", canny: "Canny", productboard: "Productboard" };
 type Step = 0 | 1 | 2 | 3;
 
 interface Rule { value: string; role: Role }
@@ -182,6 +182,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           {source.kind === "airtable" && " Needs your Airtable token from Integrations, with read access to this base."}
           {(source.kind === "typeform" || source.kind === "tally") && ` Needs your ${remoteName} token from Integrations. Only completed responses are pulled.`}
           {source.kind === "canny" && " Needs your Canny API key from Integrations."}
+          {source.kind === "productboard" && " Needs your Productboard token from Integrations."}
           {!ctx.project.network_enabled && " This project's network switch is off: turn it on in Settings → Network first."}
         </div>
       </div>}

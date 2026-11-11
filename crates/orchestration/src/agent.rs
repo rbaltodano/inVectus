@@ -887,7 +887,7 @@ pub fn tools() -> Value {
                 A pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, Canny) reads the copy the person \
                 pulled into the open project; needs_pull means they have not pulled it yet.",
             "inputSchema": { "type": "object", "properties": {
-                "source": { "type": "string", "description": "File or folder path, link or spec of a pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, canny:all)." },
+                "source": { "type": "string", "description": "File or folder path, link or spec of a pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, canny:all, productboard:notes)." },
                 "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." }
             }, "required": ["source"], "additionalProperties": false },
             "annotations": read_only,
@@ -899,7 +899,7 @@ pub fn tools() -> Value {
                 with job_status). Re-importing updates changed items; unchanged ones are kept.",
             "inputSchema": { "type": "object", "properties": {
                 "project": project, "collection": collection,
-                "source": { "type": "string", "description": "File or folder path, link or spec of a pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, canny:all) (pulled sources must be pulled by the person first)." },
+                "source": { "type": "string", "description": "File or folder path, link or spec of a pulled source (Google Sheets, Notion, Zotero, Airtable, Typeform, Tally, canny:all, productboard:notes) (pulled sources must be pulled by the person first)." },
                 "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." },
                 "text": { "type": "array", "items": { "type": "string" },
                     "description": "Text column(s), joined in order. Not used for folders." },
@@ -942,7 +942,7 @@ pub fn tools() -> Value {
         {
             "name": "verify_gap",
             "description": "Check a gap against the project's outside sources (PubMed and OpenAlex by \
-                default; Semantic Scholar and arXiv when chosen). Uses the network, so it is \
+                default; Semantic Scholar, arXiv and US patents when chosen). Uses the network, so it is \
                 refused unless the project's network switch is on (the person turns it on in \
                 the app); results are cached in the project.",
             "inputSchema": { "type": "object", "properties": {

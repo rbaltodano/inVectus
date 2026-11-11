@@ -3,7 +3,7 @@
 // keychain) are pulled into a project only when the person asks, then imported offline
 // (docs/integrations.md).
 import { useEffect, useState, type ReactNode } from "react";
-import { BookMarked, ClipboardList, Database, FileSpreadsheet, Lightbulb, ListChecks, NotebookText, Sheet, Table2, type LucideIcon } from "lucide-react";
+import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbulb, ListChecks, Map as MapIcon, NotebookText, Sheet, Stamp, Table2, type LucideIcon } from "lucide-react";
 import { api, inTauri } from "../api";
 import { ErrorLine, useAction } from "../App";
 import Link from "../Link";
@@ -41,7 +41,7 @@ export default function Integrations() {
             <div className="integration-name">Google Sheets</div>
             <p className="integration-desc">Paste a sheet's link in Add to Dataset. The sheet must be shared as “Anyone with the link”; no sign-in.</p>
           </li>
-          {TOKEN_INTEGRATIONS.map((it) => <TokenCard key={it.id} it={it} from={tokens === undefined ? undefined : tokens[it.id] ?? null}
+          {TOKEN_INTEGRATIONS.filter((it) => it.id !== "patentsview").map((it) => <TokenCard key={it.id} it={it} from={tokens === undefined ? undefined : tokens[it.id] ?? null}
             onChange={(from) => setTokens((t) => ({ ...t, [it.id]: from }))} />)}
           <li className="integration-card" data-disabled="true">
             <div className="integration-card-top">
@@ -51,6 +51,24 @@ export default function Integrations() {
             <div className="integration-name">Databases</div>
             <p className="integration-desc">Until then, export a table to CSV, Parquet or Excel and import the file.</p>
           </li>
+        </ul>
+      </section>
+      <section aria-labelledby="i-checks" className="integrations-section">
+        <div className="integrations-section-head">
+          <h2 id="i-checks">Outside checks</h2>
+          <p>Where a gap check looks for existing work. Choose them per project in Settings → Network; they run only when that project's network switch is on.</p>
+        </div>
+        <ul className="integration-grid">
+          <li className="integration-card">
+            <div className="integration-card-top">
+              <span className="integration-mark"><Library size={22} strokeWidth={1.5} aria-hidden="true" /></span>
+              <span className="integration-badge">Built in</span>
+            </div>
+            <div className="integration-name">Scholarly sources</div>
+            <p className="integration-desc">PubMed and OpenAlex by default; Semantic Scholar and arXiv when you turn them on. No keys needed.</p>
+          </li>
+          {TOKEN_INTEGRATIONS.filter((it) => it.id === "patentsview").map((it) => <TokenCard key={it.id} it={it} from={tokens === undefined ? undefined : tokens[it.id] ?? null}
+            onChange={(from) => setTokens((t) => ({ ...t, [it.id]: from }))} />)}
         </ul>
       </section>
       <section aria-labelledby="i-agents" className="integrations-section">
@@ -65,7 +83,7 @@ export default function Integrations() {
 }
 
 interface TokenIntegration {
-  id: "notion" | "zotero" | "airtable" | "typeform" | "tally" | "canny"; name: string; icon: LucideIcon; about: string; use: string;
+  id: "notion" | "zotero" | "airtable" | "typeform" | "tally" | "canny" | "productboard" | "patentsview"; name: string; icon: LucideIcon; about: string; use: string;
   placeholder: string; label: string; steps: ReactNode[];
 }
 
@@ -125,6 +143,24 @@ const TOKEN_INTEGRATIONS: TokenIntegration[] = [
     steps: [
       <>In Canny, open Settings → API &amp; Webhooks and copy the secret API key.</>,
       <>Paste it below. It is read only here: inVectus never writes to Canny.</>,
+    ],
+  },
+  {
+    id: "productboard", name: "Productboard", icon: MapIcon, label: "Access token", placeholder: "Productboard token",
+    about: "Import customer notes (what people ask for) or features (what you plan to build).",
+    use: "In Add to Dataset, type productboard:notes or productboard:features.",
+    steps: [
+      <>In Productboard, open Settings → Integrations → Public API and create an access token.</>,
+      <>Paste it below. inVectus only reads notes and features.</>,
+    ],
+  },
+  {
+    id: "patentsview", name: "US patents", icon: Stamp, label: "PatentsView API key", placeholder: "API key",
+    about: "Check gaps against granted US patents (USPTO PatentsView). Needs a free API key.",
+    use: "Turn on “US patents” in a project's Settings → Network.",
+    steps: [
+      <>Request a free API key from PatentsView (USPTO); the steps are in its <Link url="https://search.patentsview.org/docs/">API documentation</Link>.</>,
+      <>Paste the key below once it arrives by email.</>,
     ],
   },
 ];

@@ -78,7 +78,7 @@ enum Command {
         /// A Google Sheets link, Notion database (link or notion:<id>), Zotero library or
         /// collection (zotero.org link, zotero:library, zotero:collection:<KEY>,
         /// zotero:group:<id>), Airtable table link, Typeform or Tally form link, or
-        /// canny:all / canny:board:<name>.
+        /// canny:all / canny:board:<name>, or productboard:notes / productboard:features.
         source: String,
         /// Allow this command to use the network although the project's network switch is off.
         #[arg(long)]
@@ -201,7 +201,8 @@ enum ConnectCommand {
 enum IntegrationsCommand {
     /// Whether each integration has a token, and where it comes from.
     Status,
-    /// Save a token (read from standard input): notion, zotero, airtable, typeform, tally, canny.
+    /// Save a token (read from standard input): notion, zotero, airtable, typeform, tally, canny,
+    /// productboard, patentsview.
     Token { name: String },
     /// Remove an integration's saved token.
     Disconnect { name: String },
@@ -491,7 +492,7 @@ enum GapsCommand {
         /// Check the N highest-ranked gaps instead of one.
         #[arg(long, conflicts_with = "id")]
         top: Option<usize>,
-        /// Sources, comma-separated: pubmed, openalex, semanticscholar, arxiv (default: the
+        /// Sources, comma-separated: pubmed, openalex, semanticscholar, arxiv, patentsview (default: the
         /// project's choice, else pubmed,openalex).
         #[arg(long, value_delimiter = ',')]
         sources: Vec<invectus_verify::Source>,

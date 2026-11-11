@@ -40,7 +40,7 @@ export interface LlmInfo { key: string; repo: string; megabytes: number; install
 
 export interface PullRecord { origin: string; snapshot: string; rows: number; bytes: number; sha256: string; pulled_at: number }
 export interface SourceInfo {
-  kind: "csv" | "parquet" | "folder" | "excel" | "google_sheet" | "notion" | "zotero" | "airtable" | "typeform" | "tally" | "canny"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number;
+  kind: "csv" | "parquet" | "folder" | "excel" | "google_sheet" | "notion" | "zotero" | "airtable" | "typeform" | "tally" | "canny" | "productboard"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number;
   /** Spreadsheet tabs and the one read. */
   sheets: string[]; sheet: string | null;
   /** Pulled sources (Google Sheets, Notion, Zotero, Airtable): needs_pull until the first pull. */

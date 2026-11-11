@@ -63,6 +63,11 @@ pub enum Source {
         board: Option<String>,
         snapshot: PathBuf,
     },
+    /// Productboard `notes` (customer feedback: demand) or `features` (the roadmap: coverage).
+    Productboard {
+        entity: String,
+        snapshot: PathBuf,
+    },
 }
 
 pub const EXCEL_EXTENSIONS: &[&str] = &["xlsx", "xlsm", "xlsb", "xls", "ods"];
@@ -122,7 +127,8 @@ impl Source {
             | Source::Airtable { snapshot, .. }
             | Source::Typeform { snapshot, .. }
             | Source::Tally { snapshot, .. }
-            | Source::Canny { snapshot, .. } => snapshot,
+            | Source::Canny { snapshot, .. }
+            | Source::Productboard { snapshot, .. } => snapshot,
         }
     }
 
@@ -225,6 +231,17 @@ impl Source {
                 board,
             }));
         }
+        if let Some(rest) = spec.strip_prefix("productboard:") {
+            let entity = match rest.trim() {
+                "notes" | "" => "notes",
+                "features" => "features",
+                _ => bail!("expected productboard:notes or productboard:features, got {spec:?}"),
+            };
+            return Ok(Some(Source::Productboard {
+                snapshot: snap("productboard", entity),
+                entity: entity.into(),
+            }));
+        }
         Ok(None)
     }
 
@@ -238,6 +255,7 @@ impl Source {
             Source::Typeform { .. } => Some("typeform"),
             Source::Tally { .. } => Some("tally"),
             Source::Canny { .. } => Some("canny"),
+            Source::Productboard { .. } => Some("productboard"),
             _ => None,
         }
     }
@@ -253,6 +271,7 @@ impl Source {
                 | Source::Typeform { .. }
                 | Source::Tally { .. }
                 | Source::Canny { .. }
+                | Source::Productboard { .. }
         )
     }
 
@@ -295,6 +314,7 @@ impl Source {
                 Some(b) => format!("canny:board:{b}"),
                 None => "canny:all".into(),
             }),
+            Source::Productboard { entity, .. } => Some(format!("productboard:{entity}")),
             _ => None,
         }
     }
@@ -313,6 +333,7 @@ impl Source {
             Source::Typeform { .. } => "typeform",
             Source::Tally { .. } => "tally",
             Source::Canny { .. } => "canny",
+            Source::Productboard { .. } => "productboard",
         }
     }
 
@@ -343,6 +364,7 @@ impl Source {
                 Some(b) => format!("Canny board {b}"),
                 None => "all Canny boards".into(),
             },
+            Source::Productboard { entity, .. } => format!("Productboard {entity}"),
             other => other.path().display().to_string(),
         }
     }
@@ -542,7 +564,8 @@ pub fn read(source: &Source, limit: Option<usize>) -> Result<Table> {
         | Source::Airtable { snapshot, .. }
         | Source::Typeform { snapshot, .. }
         | Source::Tally { snapshot, .. }
-        | Source::Canny { snapshot, .. } => {
+        | Source::Canny { snapshot, .. }
+        | Source::Productboard { snapshot, .. } => {
             if !snapshot.is_file() {
                 bail!(
                     "{} has not been pulled into this project yet; pull it first (Pull in the \
@@ -1037,6 +1060,15 @@ mod tests {
             ("canny", "canny:board:Feature Requests".into())
         );
         assert!(Source::parse_remote("canny:boards", root).is_err());
+        assert_eq!(
+            kind_id("productboard:features"),
+            ("productboard", "productboard:features".into())
+        );
+        assert_eq!(
+            kind_id("productboard:"),
+            ("productboard", "productboard:notes".into())
+        );
+        assert!(Source::parse_remote("productboard:users", root).is_err());
         assert!(Source::parse_remote("tally:x", root).is_err());
     }
 

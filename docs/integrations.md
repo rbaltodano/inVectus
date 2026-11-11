@@ -1,7 +1,8 @@
 # Integrations: data sources, outside checks and exports
 
 Status (2026-11-10): data sources Excel, Google Sheets, Notion, Zotero, Airtable, Typeform,
-Tally and Canny, and outside checks Semantic Scholar and arXiv, are implemented in the engine,
+Tally, Canny and Productboard, and outside checks Semantic Scholar, arXiv and US patents
+(PatentsView), are implemented in the engine,
 CLI, desktop app and agent tools. Excel is tested against a fixture; **no online source or check
 has been run against its live service** (unit tests cover link parsing, value flattening, reply
 parsing and the snapshot round trip only).
@@ -76,7 +77,16 @@ parsing and the snapshot round trip only).
   `tags`, `author`, `created`, `eta`, `url`. Canny takes the key in the request body (POST).
 - Only completed form responses are pulled.
 
-## Outside checks: Semantic Scholar and arXiv
+## Productboard
+
+- Access token (Settings → Integrations → Public API), sent with `X-Version: 1`. Source
+  `productboard:notes` (customer feedback: demand) or `productboard:features` (roadmap:
+  coverage). HTML content becomes plain text.
+- Notes: `note_id`, `title`, `content`, `customer`, `company`, `tags`, `features`, `source`,
+  `created`, `url`. Features: `feature_id`, `name`, `description`, `type`, `status`, `parent`,
+  `timeframe_start`, `timeframe_end`, `archived`, `url`.
+
+## Outside checks: Semantic Scholar, arXiv, US patents
 
 - Chosen per project in Settings → Network (`verify_sources` in `project.json`; default PubMed
   and OpenAlex). The CLI's `gaps verify --sources` overrides it; agents use the project's choice.
@@ -84,6 +94,10 @@ parsing and the snapshot round trip only).
   for review-only checks; one request a second (shared free pool).
 - arXiv: Atom API, `all:` terms, one request every three seconds; no review filter (a review-only
   check still lists preprints). The feed is read with a small fixed-shape reader.
+- US patents: USPTO PatentSearch API (`search.patentsview.org/api/v1/patent/`) with a free API
+  key (keychain name `patentsview`); each term as a phrase in the title or abstract; links go to
+  Google Patents. 45 requests a minute per key. Lens.org (worldwide) needs an approved token and
+  Google Patents has no API, so both are left for later.
 
 ## Interfaces
 
@@ -110,7 +124,7 @@ nothing outbound without a separate approval. All are beyond SPEC v1 (owner deci
 | Typeform, Tally responses | demand | token | done |
 | Google Forms responses | demand | OAuth | planned |
 | Canny feature requests | demand vs roadmap | API key | done |
-| Productboard | demand vs roadmap | token | planned |
+| Productboard notes and features | demand vs roadmap | token | done |
 | Mendeley | coverage (research) | OAuth | planned |
 | Confluence, Google Drive, SharePoint folders | coverage (internal docs) | OAuth | planned |
 | App Store / Play reviews, Reddit | demand (public) | public APIs | planned |
@@ -120,11 +134,12 @@ nothing outbound without a separate approval. All are beyond SPEC v1 (owner deci
 | Support desks: Zendesk, Intercom | demand vs help articles | OAuth / token | planned |
 | Issue trackers: Jira, Linear, GitHub Issues | demand | token | planned |
 | **Outside checks**: Semantic Scholar, arXiv | verification | none | done (opt-in per project) |
-| **Outside checks**: Google Patents / Lens.org, Product Hunt | verification | key | planned |
+| **Outside checks**: US patents (PatentsView) | verification | free API key | done (opt-in per project) |
+| **Outside checks**: Lens.org (worldwide patents), Product Hunt | verification | key / approval | planned |
 | **Exports**: gap reports to Notion, Sheets, Slack | output | reuses the connections | planned (outbound: needs explicit approval per send) |
 
-Next: Productboard and patent search (token/key) → the OAuth-based sources once an OAuth client
-exists for each provider → exports.
+Next: the OAuth-based sources once an OAuth client exists for each provider (Google Forms and
+Drive, Confluence, SharePoint, CRMs, Slack, Mendeley) → Lens.org and Product Hunt → exports.
 
 ## Not done / next
 

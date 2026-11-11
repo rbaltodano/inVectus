@@ -10,10 +10,12 @@
 //! - Zotero: a library or collection through the Web API v3 with an API key ([`zotero`]).
 //! - Airtable: a table (optionally a view) with a personal access token ([`airtable`]).
 //! - Typeform and Tally: a form's completed responses, one row per response ([`typeform`],
-//!   [`tally`]); Canny: feature-request posts with status and votes ([`canny`]).
+//!   [`tally`]); Canny: feature-request posts with status and votes ([`canny`]); Productboard:
+//!   customer notes or features ([`productboard`]).
 
 mod airtable;
 mod canny;
+mod productboard;
 mod tally;
 mod typeform;
 mod zotero;
@@ -107,6 +109,12 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
         Source::Tally { form_id, .. } => {
             let token = need_token(cx, "Tally", "TALLY")?;
             let t = tally::submissions(form_id, &token, cx)?;
+            let rows = t.1.len();
+            (write_csv(&t.0, &t.1), rows)
+        }
+        Source::Productboard { entity, .. } => {
+            let token = need_token(cx, "Productboard", "PRODUCTBOARD")?;
+            let t = productboard::entities(entity, &token, cx)?;
             let rows = t.1.len();
             (write_csv(&t.0, &t.1), rows)
         }

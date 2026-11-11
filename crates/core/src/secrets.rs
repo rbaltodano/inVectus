@@ -7,7 +7,16 @@ use anyhow::{Context, Result, bail};
 const SERVICE: &str = "app.invectus.integrations";
 
 /// Integrations that keep a token.
-pub const NAMES: &[&str] = &["notion", "zotero", "airtable", "typeform", "tally", "canny"];
+pub const NAMES: &[&str] = &[
+    "notion",
+    "zotero",
+    "airtable",
+    "typeform",
+    "tally",
+    "canny",
+    "productboard",
+    "patentsview",
+];
 
 fn check(name: &str) -> Result<()> {
     if !NAMES.contains(&name) {

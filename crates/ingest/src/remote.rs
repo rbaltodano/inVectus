@@ -7,6 +7,11 @@
 //!   fetched without signing in.
 //! - Notion: a database queried with an internal integration token (Notion API 2022-06-28),
 //!   one row per page with its properties as columns, plus the page's text as `body`.
+//! - Zotero: a library or collection through the Web API v3 with an API key ([`zotero`]).
+//! - Airtable: a table (optionally a view) with a personal access token ([`airtable`]).
+
+mod airtable;
+mod zotero;
 
 use crate::source::Source;
 use anyhow::{Context, Result, bail};
@@ -38,9 +43,10 @@ pub struct Pulled {
     pub pulled_at: u64,
 }
 
-/// What a pull may use besides the network: the Notion token, progress and cancellation.
+/// What a pull may use besides the network: the integration's token
+/// ([`Source::integration`]), progress and cancellation.
 pub struct PullContext<'a> {
-    pub notion_token: Option<String>,
+    pub token: Option<String>,
     pub cancel: &'a CancelToken,
     /// `(phase, done, total)`; `total` is 0 when unknown.
     pub progress: &'a mut dyn FnMut(&str, usize, usize),
@@ -61,13 +67,31 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
             (csv, rows)
         }
         Source::Notion { database_id, .. } => {
-            let token = cx.notion_token.clone().context(
-                "Notion is not connected: add an integration token in Integrations (or set \
-                 INVECTUS_NOTION_TOKEN)",
-            )?;
+            let token = need_token(cx, "Notion", "NOTION")?;
             let table = notion_database(database_id, &token, cx)?;
             let rows = table.1.len();
             (write_csv(&table.0, &table.1), rows)
+        }
+        Source::Zotero {
+            library,
+            collection,
+            ..
+        } => {
+            let token = need_token(cx, "Zotero", "ZOTERO")?;
+            let table = zotero::items(library, collection.as_deref(), &token, cx)?;
+            let rows = table.1.len();
+            (write_csv(&table.0, &table.1), rows)
+        }
+        Source::Airtable {
+            base_id,
+            table,
+            view,
+            ..
+        } => {
+            let token = need_token(cx, "Airtable", "AIRTABLE")?;
+            let t = airtable::records(base_id, table, view.as_deref(), &token, cx)?;
+            let rows = t.1.len();
+            (write_csv(&t.0, &t.1), rows)
         }
         other => bail!("{} is a local source; nothing to pull", other.describe()),
     };
@@ -88,6 +112,73 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
         serde_json::to_vec_pretty(&json!({ "source": source, "pull": &pulled }))?,
     )?;
     Ok(pulled)
+}
+
+fn need_token(cx: &PullContext, name: &str, env: &str) -> Result<String> {
+    cx.token.clone().with_context(|| {
+        format!(
+            "{name} is not connected: add its token in Integrations (or set \
+             INVECTUS_{env}_TOKEN)"
+        )
+    })
+}
+
+/// GET requests to one API, spaced and retried on rate limits (429) and server errors.
+pub(crate) struct Paced {
+    agent: ureq::Agent,
+    spacing: Duration,
+    last: Option<Instant>,
+}
+
+impl Paced {
+    pub(crate) fn new(spacing: Duration) -> Self {
+        Self {
+            agent: agent(),
+            spacing,
+            last: None,
+        }
+    }
+
+    /// `(status, JSON body)`; the caller turns statuses other than 200 into errors.
+    pub(crate) fn get(&mut self, url: &str, headers: &[(&str, &str)]) -> Result<(u16, Value)> {
+        for attempt in 0..5u32 {
+            if let Some(t) = self.last {
+                std::thread::sleep(self.spacing.saturating_sub(t.elapsed()));
+            }
+            self.last = Some(Instant::now());
+            let mut req = self.agent.get(url).header("User-Agent", USER_AGENT);
+            for (k, v) in headers {
+                req = req.header(*k, *v);
+            }
+            let resp = req.call().with_context(|| format!("GET {url}"))?;
+            let status = resp.status().as_u16();
+            let wait = ["retry-after", "backoff"].iter().find_map(|h| {
+                resp.headers()
+                    .get(*h)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.trim().parse::<u64>().ok())
+            });
+            if status == 429 || status >= 500 {
+                std::thread::sleep(Duration::from_secs(wait.unwrap_or(1 << attempt).min(60)));
+                continue;
+            }
+            let text = resp
+                .into_body()
+                .read_to_string()
+                .context("reading the answer")?;
+            let v = if text.trim().is_empty() {
+                Value::Null
+            } else {
+                serde_json::from_str(&text).unwrap_or(Value::String(text))
+            };
+            if let Some(w) = wait {
+                // Zotero's Backoff: slow down before the next request.
+                std::thread::sleep(Duration::from_secs(w.min(60)));
+            }
+            return Ok((status, v));
+        }
+        bail!("the service kept refusing requests (rate limit); try again in a minute")
+    }
 }
 
 /// The record of the last pull of `source`, if any.
@@ -415,7 +506,7 @@ fn property_text(p: &Value) -> String {
     }
 }
 
-fn fmt_number(f: f64) -> String {
+pub(crate) fn fmt_number(f: f64) -> String {
     if f.fract() == 0.0 && f.abs() < 1e15 {
         format!("{}", f as i64)
     } else {
@@ -468,7 +559,7 @@ fn page_text(n: &mut Notion, block: &str, depth: usize, out: &mut Vec<String>) -
 
 // ---- CSV -----------------------------------------------------------------------------------
 
-fn write_csv(columns: &[String], rows: &[Vec<String>]) -> String {
+pub(crate) fn write_csv(columns: &[String], rows: &[Vec<String>]) -> String {
     fn field(out: &mut String, s: &str) {
         if s.contains([',', '"', '\n', '\r']) {
             out.push('"');
@@ -564,7 +655,7 @@ mod tests {
         let cancel = CancelToken::default();
         let mut tick = |_: &str, _: usize, _: usize| {};
         let mut cx = PullContext {
-            notion_token: None,
+            token: None,
             cancel: &cancel,
             progress: &mut tick,
         };

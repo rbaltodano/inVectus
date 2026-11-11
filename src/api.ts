@@ -40,10 +40,10 @@ export interface LlmInfo { key: string; repo: string; megabytes: number; install
 
 export interface PullRecord { origin: string; snapshot: string; rows: number; bytes: number; sha256: string; pulled_at: number }
 export interface SourceInfo {
-  kind: "csv" | "parquet" | "folder" | "excel" | "google_sheet" | "notion"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number;
+  kind: "csv" | "parquet" | "folder" | "excel" | "google_sheet" | "notion" | "zotero" | "airtable"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number;
   /** Spreadsheet tabs and the one read. */
   sheets: string[]; sheet: string | null;
-  /** Pulled sources (Google Sheets, Notion): needs_pull until the first pull. */
+  /** Pulled sources (Google Sheets, Notion, Zotero, Airtable): needs_pull until the first pull. */
   remote: boolean; needs_pull: boolean; last_pull: PullRecord | null;
 }
 export interface ImportForm {
@@ -156,8 +156,9 @@ export const api = {
   inspect: (path: string, sheet?: string | null) => invoke<SourceInfo>("inspect_source", { path, sheet: sheet ?? null }),
   /** Network: pull a Google Sheet or Notion database into the open project (a background job). */
   pullSource: (spec: string) => invoke<JobInfo>("pull_source", { spec }),
-  notionStatus: () => invoke<string | null>("notion_status"),
-  setNotionToken: (token: string) => invoke<string | null>("set_notion_token", { token }),
+  /** Token-based integrations (notion, zotero, airtable) → where the token comes from, or null. */
+  integrationTokens: () => invoke<Record<string, string | null>>("integration_tokens"),
+  setIntegrationToken: (name: string, token: string) => invoke<string | null>("set_integration_token", { name, token }),
   preview: (form: ImportForm, rows = 20) => invoke<Preview>("preview_import", { form, rows }),
   importCollection: (form: ImportForm) => invoke<ImportOutcome>("import_collection", { form }),
   reimport: (collection: string) => invoke<ImportOutcome>("reimport_collection", { collection }),

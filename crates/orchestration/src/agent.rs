@@ -884,10 +884,10 @@ pub fn tools() -> Value {
             "name": "inspect_source",
             "description": "Columns and sample rows of a CSV/TSV, Parquet, spreadsheet (.xlsx, \
                 .xls, .ods) or folder of text files, to choose the mapping for import_collection. \
-                A Google Sheets link or Notion database (notion:<id>) reads the copy the person \
+                A Google Sheets, Notion, Zotero or Airtable source reads the copy the person \
                 pulled into the open project; needs_pull means they have not pulled it yet.",
             "inputSchema": { "type": "object", "properties": {
-                "source": { "type": "string", "description": "File or folder path, Google Sheets link, or notion:<database id>." },
+                "source": { "type": "string", "description": "File or folder path, Google Sheets, Notion (notion:<id>), Zotero (zotero:library, zotero:collection:<KEY>) or Airtable link." },
                 "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." }
             }, "required": ["source"], "additionalProperties": false },
             "annotations": read_only,
@@ -899,7 +899,7 @@ pub fn tools() -> Value {
                 with job_status). Re-importing updates changed items; unchanged ones are kept.",
             "inputSchema": { "type": "object", "properties": {
                 "project": project, "collection": collection,
-                "source": { "type": "string", "description": "File or folder path, Google Sheets link, or notion:<database id> (pulled sources must be pulled by the person first)." },
+                "source": { "type": "string", "description": "File or folder path, Google Sheets, Notion (notion:<id>), Zotero (zotero:library, zotero:collection:<KEY>) or Airtable link (pulled sources must be pulled by the person first)." },
                 "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." },
                 "text": { "type": "array", "items": { "type": "string" },
                     "description": "Text column(s), joined in order. Not used for folders." },

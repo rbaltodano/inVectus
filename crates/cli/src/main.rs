@@ -75,13 +75,16 @@ enum Command {
     Pull {
         #[command(flatten)]
         p: ProjectArg,
-        /// A docs.google.com/spreadsheets link, a Notion database link, or notion:<id>.
+        /// A Google Sheets link, Notion database (link or notion:<id>), Zotero library or
+        /// collection (zotero.org link, zotero:library, zotero:collection:<KEY>,
+        /// zotero:group:<id>), or Airtable table link.
         source: String,
         /// Allow this command to use the network although the project's network switch is off.
         #[arg(long)]
         network: bool,
     },
-    /// Tokens for integrations that need one (Notion), kept in the system keychain.
+    /// Tokens for integrations that need one (Notion, Zotero, Airtable), kept in the system
+    /// keychain.
     Integrations {
         #[command(subcommand)]
         command: IntegrationsCommand,
@@ -197,10 +200,10 @@ enum ConnectCommand {
 enum IntegrationsCommand {
     /// Whether each integration has a token, and where it comes from.
     Status,
-    /// Save a Notion internal integration token (read from standard input).
-    NotionToken,
-    /// Remove the saved Notion token.
-    NotionDisconnect,
+    /// Save a token (read from standard input) for notion, zotero or airtable.
+    Token { name: String },
+    /// Remove the saved token of notion, zotero or airtable.
+    Disconnect { name: String },
 }
 
 #[derive(Args)]
@@ -680,9 +683,9 @@ fn cmd_pull(p: &ProjectArg, spec: &str, network: bool) -> Result<()> {
     if !source.is_remote() {
         bail!("{} is a local file; import it directly", source.describe());
     }
-    let notion_token = match source {
-        Source::Notion { .. } => invectus_core::secrets::get("notion")?,
-        _ => None,
+    let token = match source.integration() {
+        Some(name) => invectus_core::secrets::get(name)?,
+        None => None,
     };
     let cancel = invectus_core::CancelToken::default();
     let mut tick = |phase: &str, done: usize, total: usize| {
@@ -695,7 +698,7 @@ fn cmd_pull(p: &ProjectArg, spec: &str, network: bool) -> Result<()> {
     let pulled = invectus_ingest::remote::pull(
         &source,
         &mut invectus_ingest::remote::PullContext {
-            notion_token,
+            token,
             cancel: &cancel,
             progress: &mut tick,
         },
@@ -722,15 +725,19 @@ fn cmd_integrations(command: IntegrationsCommand) -> Result<()> {
                 }
             }
         }
-        IntegrationsCommand::NotionToken => {
+        IntegrationsCommand::Token { name } => {
             let mut token = String::new();
             std::io::stdin().read_line(&mut token)?;
-            invectus_orchestration::set_notion_token(token.trim()).map_err(anyhow::Error::msg)?;
-            println!("saved the Notion token in the system keychain");
+            if token.trim().is_empty() {
+                bail!("no token on standard input");
+            }
+            invectus_orchestration::set_integration_token(&name, token.trim())
+                .map_err(anyhow::Error::msg)?;
+            println!("saved the {name} token in the system keychain");
         }
-        IntegrationsCommand::NotionDisconnect => {
-            invectus_core::secrets::delete("notion")?;
-            println!("removed the Notion token");
+        IntegrationsCommand::Disconnect { name } => {
+            invectus_core::secrets::delete(&name)?;
+            println!("removed the {name} token");
         }
     }
     Ok(())

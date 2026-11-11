@@ -156,16 +156,24 @@ async fn pull_source(
     off_thread(move || orch::start_pull(&emit, &session, &board, &spec, false)).await
 }
 
-/// Where the Notion token comes from (`keychain`, `environment`), or `None`.
+/// Token-based integrations and where each token comes from (`keychain`, `environment`).
 #[tauri::command]
-async fn notion_status() -> CmdResult<Option<String>> {
-    off_thread(|| orch::notion_status().map(|s| s.map(String::from))).await
+async fn integration_tokens() -> CmdResult<std::collections::BTreeMap<String, Option<String>>> {
+    off_thread(|| {
+        orch::integration_tokens().map(|m| {
+            m.into_iter()
+                .map(|(k, v)| (k, v.map(String::from)))
+                .collect()
+        })
+    })
+    .await
 }
 
-/// Save the Notion token in the system keychain; an empty token removes it.
+/// Save an integration's token in the system keychain; an empty token removes it.
 #[tauri::command]
-async fn set_notion_token(token: String) -> CmdResult<Option<String>> {
-    off_thread(move || orch::set_notion_token(&token).map(|s| s.map(String::from))).await
+async fn set_integration_token(name: String, token: String) -> CmdResult<Option<String>> {
+    off_thread(move || orch::set_integration_token(&name, &token).map(|s| s.map(String::from)))
+        .await
 }
 
 #[tauri::command]
@@ -703,8 +711,8 @@ pub fn run() {
             rename_project,
             inspect_source,
             pull_source,
-            notion_status,
-            set_notion_token,
+            integration_tokens,
+            set_integration_token,
             set_network,
             set_agent_model,
             list_llms,

@@ -475,9 +475,9 @@ pub fn start_pull(
         }
         Ok((source, s.project.root.display().to_string()))
     })?;
-    let notion_token = match source {
-        Source::Notion { .. } => invectus_core::secrets::get("notion").map_err(err)?,
-        _ => None,
+    let token = match source.integration() {
+        Some(name) => invectus_core::secrets::get(name).map_err(err)?,
+        None => None,
     };
     let label = format!("Pulling {}", source.describe());
     let info = JobInfo::new("pull", Some(root), label);
@@ -487,7 +487,7 @@ pub fn start_pull(
         info,
         Box::new(move |cancel, tick| {
             let mut cx = invectus_ingest::remote::PullContext {
-                notion_token,
+                token,
                 cancel,
                 progress: tick,
             };
@@ -497,27 +497,45 @@ pub fn start_pull(
     )
 }
 
-/// Whether Notion has a token, and where it comes from (`keychain` or `environment`).
-pub fn notion_status() -> OpResult<Option<&'static str>> {
-    invectus_core::secrets::source("notion").map_err(err)
+/// Each token-based integration and where its token comes from (`keychain`, `environment`),
+/// or `None` when it is not connected.
+pub fn integration_tokens() -> OpResult<std::collections::BTreeMap<String, Option<&'static str>>> {
+    invectus_core::secrets::NAMES
+        .iter()
+        .map(|n| {
+            Ok((
+                n.to_string(),
+                invectus_core::secrets::source(n).map_err(err)?,
+            ))
+        })
+        .collect()
 }
 
-/// Save (or, with an empty token, remove) the Notion integration token in the keychain.
-/// Nothing is sent to Notion here; the token is first used by a pull.
-pub fn set_notion_token(token: &str) -> OpResult<Option<&'static str>> {
-    if token.trim().is_empty() {
-        invectus_core::secrets::delete("notion").map_err(err)?;
+/// Save (or, with an empty token, remove) an integration's token in the keychain. Nothing is
+/// sent to the service here; the token is first used by a pull.
+pub fn set_integration_token(name: &str, token: &str) -> OpResult<Option<&'static str>> {
+    let t = token.trim();
+    if t.is_empty() {
+        invectus_core::secrets::delete(name).map_err(err)?;
     } else {
-        let t = token.trim();
-        if !(t.starts_with("ntn_") || t.starts_with("secret_")) || t.len() < 20 {
-            return Err(err(anyhow::anyhow!(
-                "that does not look like a Notion integration token (they start with ntn_ or \
-                 secret_)"
-            )));
+        let looks_right = match name {
+            "notion" => (t.starts_with("ntn_") || t.starts_with("secret_")) && t.len() >= 20,
+            "airtable" => t.starts_with("pat") && t.len() >= 40,
+            "zotero" => t.len() == 24 && t.chars().all(|c| c.is_ascii_alphanumeric()),
+            _ => true,
+        };
+        if !looks_right {
+            let hint = match name {
+                "notion" => "Notion integration secrets start with ntn_",
+                "airtable" => "Airtable personal access tokens start with pat",
+                "zotero" => "Zotero API keys are 24 letters and digits",
+                _ => "",
+            };
+            return Err(format!("that does not look like a {name} token ({hint})"));
         }
-        invectus_core::secrets::set("notion", t).map_err(err)?;
+        invectus_core::secrets::set(name, t).map_err(err)?;
     }
-    notion_status()
+    invectus_core::secrets::source(name).map_err(err)
 }
 
 /// Register a job on the board and run it on its own thread. Every change is emitted carrying

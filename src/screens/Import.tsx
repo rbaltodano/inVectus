@@ -8,6 +8,7 @@ import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
 
 const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
+const REMOTE_NAMES: Record<string, string> = { google_sheet: "Google Sheets", notion: "Notion", zotero: "Zotero", airtable: "Airtable" };
 type Step = 0 | 1 | 2 | 3;
 
 interface Rule { value: string; role: Role }
@@ -52,7 +53,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     const guessed = guessMapping(s.columns);
     setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url: guessed.url });
     setRoleColumn(guessed.role);
-    if (!collectionRef.current) setCollection(s.kind === "google_sheet" ? "google-sheet" : s.kind === "notion" ? "notion" : collectionIdFromPath(p));
+    if (!collectionRef.current) setCollection(s.remote ? s.kind.replace("_", "-") : collectionIdFromPath(p));
     return true;
   });
   // Pulling (network) runs as a job; when it ends, read the fresh snapshot.
@@ -92,7 +93,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     chunk_tokens: chunk.tokens, chunk_token_overlap: chunk.tokenOverlap,
     chunk_chars: chunk.chars, chunk_overlap: chunk.overlap, limit: null, sheet,
   };
-  const remoteName = source?.kind === "google_sheet" ? "Google Sheets" : source?.kind === "notion" ? "Notion" : "";
+  const remoteName = source?.remote ? REMOTE_NAMES[source.kind] ?? source.kind : "";
   const sourceName = remoteName ? `${remoteName} source` : baseName(path) + (sheet && (source?.sheets.length ?? 0) > 1 ? ` · ${sheet}` : "");
   const formKey = JSON.stringify(form);
 
@@ -161,8 +162,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           <button type="button" className="btn" disabled={busy} onClick={() => choose(true)}>Choose folder…</button>
         </div>
         <div className="row wrap center w-full">
-          <input aria-label="Path to a file or folder, or a Google Sheets or Notion link" className="grow" value={path} onChange={(e) => setPath(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && path.trim() && look(path.trim())} placeholder="/Users/you/data/papers.csv, or a Google Sheets or Notion link" />
+          <input aria-label="Path to a file or folder, or a Google Sheets, Notion, Zotero or Airtable link" className="grow" value={path} onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && path.trim() && look(path.trim())} placeholder="/Users/you/data/papers.csv, or a Google Sheets, Notion, Zotero or Airtable link" />
           <button type="button" className="btn" disabled={!path.trim() || busy} onClick={() => look(path.trim())}>{busy ? "Reading…" : "Use this"}</button>
         </div>
       </section>
@@ -177,6 +178,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           Pulling uses the network once and saves a copy inside this project; importing, search and gaps then work offline from that copy.
           {source.kind === "google_sheet" && " The sheet must be shared as “Anyone with the link”."}
           {source.kind === "notion" && " Needs the Notion token from Integrations, and the database shared with your integration in Notion (••• → Connections)."}
+          {source.kind === "zotero" && " Needs your Zotero API key from Integrations. Notes and attachments are skipped."}
+          {source.kind === "airtable" && " Needs your Airtable token from Integrations, with read access to this base."}
           {!ctx.project.network_enabled && " This project's network switch is off: turn it on in Settings → Network first."}
         </div>
       </div>}

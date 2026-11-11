@@ -35,6 +35,19 @@ pub enum Source {
         database_id: String,
         snapshot: PathBuf,
     },
+    /// A Zotero library (`user` or `group:<id>`), optionally one collection; one row per item.
+    Zotero {
+        library: String,
+        collection: Option<String>,
+        snapshot: PathBuf,
+    },
+    /// An Airtable table (optionally through a view); one row per record.
+    Airtable {
+        base_id: String,
+        table: String,
+        view: Option<String>,
+        snapshot: PathBuf,
+    },
 }
 
 pub const EXCEL_EXTENSIONS: &[&str] = &["xlsx", "xlsm", "xlsb", "xls", "ods"];
@@ -88,7 +101,10 @@ impl Source {
             | Source::Parquet { path }
             | Source::Folder { path, .. }
             | Source::Excel { path, .. } => path,
-            Source::GoogleSheet { snapshot, .. } | Source::Notion { snapshot, .. } => snapshot,
+            Source::GoogleSheet { snapshot, .. }
+            | Source::Notion { snapshot, .. }
+            | Source::Zotero { snapshot, .. }
+            | Source::Airtable { snapshot, .. } => snapshot,
         }
     }
 
@@ -116,12 +132,55 @@ impl Source {
                 database_id: id,
             }));
         }
+        if let Some((library, collection)) = zotero_library(spec)? {
+            let file = format!(
+                "{}-{}.csv",
+                library.replace(':', "-"),
+                collection.as_deref().unwrap_or("all")
+            );
+            return Ok(Some(Source::Zotero {
+                snapshot: project_root.join("sources").join("zotero").join(file),
+                library,
+                collection,
+            }));
+        }
+        if let Some((base_id, table, view)) = airtable_table(spec)? {
+            let mut file = format!("{base_id}-{table}");
+            if let Some(v) = &view {
+                file.push_str(&format!("-{v}"));
+            }
+            return Ok(Some(Source::Airtable {
+                snapshot: project_root
+                    .join("sources")
+                    .join("airtable")
+                    .join(format!("{file}.csv")),
+                base_id,
+                table,
+                view,
+            }));
+        }
         Ok(None)
+    }
+
+    /// The integration whose token a pull needs (`notion`, `zotero`, `airtable`).
+    pub fn integration(&self) -> Option<&'static str> {
+        match self {
+            Source::Notion { .. } => Some("notion"),
+            Source::Zotero { .. } => Some("zotero"),
+            Source::Airtable { .. } => Some("airtable"),
+            _ => None,
+        }
     }
 
     /// A pulled source (needs a network pull before it can be read).
     pub fn is_remote(&self) -> bool {
-        matches!(self, Source::GoogleSheet { .. } | Source::Notion { .. })
+        matches!(
+            self,
+            Source::GoogleSheet { .. }
+                | Source::Notion { .. }
+                | Source::Zotero { .. }
+                | Source::Airtable { .. }
+        )
     }
 
     /// The spec that names a pulled source again (for "pull and update").
@@ -138,6 +197,25 @@ impl Source {
                     .unwrap_or_default()
             )),
             Source::Notion { database_id, .. } => Some(format!("notion:{database_id}")),
+            Source::Zotero {
+                library,
+                collection,
+                ..
+            } => Some(match (library.as_str(), collection) {
+                ("user", None) => "zotero:library".to_string(),
+                ("user", Some(c)) => format!("zotero:collection:{c}"),
+                (lib, None) => format!("zotero:{lib}"),
+                (lib, Some(c)) => format!("zotero:{lib}/collection:{c}"),
+            }),
+            Source::Airtable {
+                base_id,
+                table,
+                view,
+                ..
+            } => Some(match view {
+                Some(v) => format!("airtable:{base_id}/{table}/{v}"),
+                None => format!("airtable:{base_id}/{table}"),
+            }),
             _ => None,
         }
     }
@@ -151,6 +229,8 @@ impl Source {
             Source::Excel { .. } => "excel",
             Source::GoogleSheet { .. } => "google_sheet",
             Source::Notion { .. } => "notion",
+            Source::Zotero { .. } => "zotero",
+            Source::Airtable { .. } => "airtable",
         }
     }
 
@@ -159,6 +239,22 @@ impl Source {
         match self {
             Source::GoogleSheet { spreadsheet_id, .. } => format!("Google Sheet {spreadsheet_id}"),
             Source::Notion { database_id, .. } => format!("Notion database {database_id}"),
+            Source::Zotero {
+                library,
+                collection,
+                ..
+            } => {
+                let lib = if library == "user" {
+                    "your Zotero library".to_string()
+                } else {
+                    format!("Zotero {}", library.replace(':', " "))
+                };
+                match collection {
+                    Some(c) => format!("{lib} (collection {c})"),
+                    None => lib,
+                }
+            }
+            Source::Airtable { base_id, table, .. } => format!("Airtable table {base_id}/{table}"),
             other => other.path().display().to_string(),
         }
     }
@@ -190,6 +286,92 @@ fn google_sheet_id(spec: &str) -> Result<Option<(String, Option<String>)>> {
         })
         .filter(|g| !g.is_empty());
     Ok(Some((id, gid)))
+}
+
+/// `(library, collection)` from `zotero:library`, `zotero:collection:<KEY>`,
+/// `zotero:group:<id>[/collection:<KEY>]`, or a zotero.org library or collection link.
+fn zotero_library(spec: &str) -> Result<Option<(String, Option<String>)>> {
+    let key_ok = |k: &str| k.len() == 8 && k.chars().all(|c| c.is_ascii_alphanumeric());
+    let mut library = "user".to_string();
+    let mut collection = None;
+    if let Some(rest) = spec.strip_prefix("zotero:") {
+        for part in rest.split('/').filter(|p| !p.is_empty() && *p != "library") {
+            if let Some(id) = part.strip_prefix("group:") {
+                if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+                    bail!("a Zotero group id is a number: {spec:?}");
+                }
+                library = format!("group:{id}");
+            } else if let Some(k) = part.strip_prefix("collection:") {
+                if !key_ok(k) {
+                    bail!("a Zotero collection key has 8 letters or digits: {spec:?}");
+                }
+                collection = Some(k.to_uppercase());
+            } else {
+                bail!(
+                    "expected zotero:library, zotero:collection:<KEY> or zotero:group:<id>, got \
+                     {spec:?}"
+                );
+            }
+        }
+        return Ok(Some((library, collection)));
+    }
+    let lower = spec.to_ascii_lowercase();
+    let Some(path) = [
+        "https://www.zotero.org/",
+        "https://zotero.org/",
+        "zotero.org/",
+    ]
+    .iter()
+    .find_map(|p| lower.strip_prefix(p)) else {
+        return Ok(None);
+    };
+    let parts: Vec<&str> = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or("")
+        .split('/')
+        .collect();
+    if parts.first() == Some(&"groups") {
+        let id = parts.get(1).copied().unwrap_or("");
+        if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+            bail!("this Zotero group link has no group id: {spec}");
+        }
+        library = format!("group:{id}");
+    }
+    if let Some(i) = parts.iter().position(|p| *p == "collections") {
+        let k = parts.get(i + 1).copied().unwrap_or("");
+        if !key_ok(k) {
+            bail!("this Zotero link has no collection key: {spec}");
+        }
+        collection = Some(k.to_uppercase());
+    }
+    Ok(Some((library, collection)))
+}
+
+/// `(base, table, view)` from an airtable.com link or `airtable:<app…>/<tbl…>[/<viw…>]`.
+fn airtable_table(spec: &str) -> Result<Option<(String, String, Option<String>)>> {
+    let rest = if let Some(r) = spec.strip_prefix("airtable:") {
+        r
+    } else if let Some(r) = ["https://airtable.com/", "airtable.com/"]
+        .iter()
+        .find_map(|p| spec.strip_prefix(p))
+    {
+        r.split(['?', '#']).next().unwrap_or("")
+    } else {
+        return Ok(None);
+    };
+    let id = |prefix: &str| {
+        rest.split('/')
+            .find(|p| p.starts_with(prefix) && p.len() == 17)
+            .map(String::from)
+    };
+    match (id("app"), id("tbl")) {
+        (Some(base), Some(table)) => Ok(Some((base, table, id("viw")))),
+        _ => bail!(
+            "copy the link of an Airtable table (it holds an app… base id and a tbl… table id): \
+             {spec}"
+        ),
+    }
 }
 
 /// A Notion database id (32 hex digits, no dashes) from `notion:<id>` or a Notion link.
@@ -244,7 +426,10 @@ pub fn read(source: &Source, limit: Option<usize>) -> Result<Table> {
         Source::Parquet { path } => read_table(path, true, limit),
         Source::Folder { path, extensions } => read_folder(path, extensions, limit),
         Source::Excel { path, sheet } => read_excel(path, sheet.as_deref(), limit),
-        Source::GoogleSheet { snapshot, .. } | Source::Notion { snapshot, .. } => {
+        Source::GoogleSheet { snapshot, .. }
+        | Source::Notion { snapshot, .. }
+        | Source::Zotero { snapshot, .. }
+        | Source::Airtable { snapshot, .. } => {
             if !snapshot.is_file() {
                 bail!(
                     "{} has not been pulled into this project yet; pull it first (Pull in the \
@@ -646,6 +831,67 @@ mod tests {
         assert_eq!(again, s, "the spec round-trips");
         assert!(Source::parse_remote("notion:nothing", root).is_err());
         assert_eq!(Source::parse_remote("/data/x.csv", root).unwrap(), None);
+    }
+
+    #[test]
+    fn remote_specs_parse_zotero_and_airtable() {
+        let root = Path::new("/p");
+        let zot = |spec: &str| match Source::parse_remote(spec, root).unwrap() {
+            Some(Source::Zotero {
+                library,
+                collection,
+                ..
+            }) => (library, collection),
+            other => panic!("{spec}: {other:?}"),
+        };
+        assert_eq!(zot("zotero:library"), ("user".into(), None));
+        assert_eq!(
+            zot("zotero:collection:ab12cd34"),
+            ("user".into(), Some("AB12CD34".into()))
+        );
+        assert_eq!(
+            zot("zotero:group:4711/collection:AB12CD34"),
+            ("group:4711".into(), Some("AB12CD34".into()))
+        );
+        assert_eq!(
+            zot("https://www.zotero.org/someone/collections/AB12CD34"),
+            ("user".into(), Some("AB12CD34".into()))
+        );
+        assert_eq!(
+            zot("https://www.zotero.org/groups/4711/lab/collections/AB12CD34/items"),
+            ("group:4711".into(), Some("AB12CD34".into()))
+        );
+        assert!(Source::parse_remote("zotero:collection:short", root).is_err());
+
+        let s = Source::parse_remote(
+            "https://airtable.com/appAAAAAAAAAAAAAA/tblBBBBBBBBBBBBBB/viwCCCCCCCCCCCCCC?blocks=hide",
+            root,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            s,
+            Source::Airtable {
+                base_id: "appAAAAAAAAAAAAAA".into(),
+                table: "tblBBBBBBBBBBBBBB".into(),
+                view: Some("viwCCCCCCCCCCCCCC".into()),
+                snapshot: root.join(
+                    "sources/airtable/appAAAAAAAAAAAAAA-tblBBBBBBBBBBBBBB-viwCCCCCCCCCCCCCC.csv"
+                ),
+            }
+        );
+        for spec in [
+            s.remote_spec().unwrap(),
+            Source::parse_remote("zotero:group:4711/collection:AB12CD34", root)
+                .unwrap()
+                .unwrap()
+                .remote_spec()
+                .unwrap(),
+        ] {
+            let again = Source::parse_remote(&spec, root).unwrap().unwrap();
+            assert_eq!(again.remote_spec().unwrap(), spec, "the spec round-trips");
+        }
+        assert!(Source::parse_remote("https://airtable.com/appAAAAAAAAAAAAAA", root).is_err());
     }
 
     #[test]

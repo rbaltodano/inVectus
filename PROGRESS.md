@@ -2872,7 +2872,7 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   step (gated by `net::ensure_online`; callers check the project network switch).
   `invectus_core::secrets` keeps the Notion token in the OS keychain (keyring 3).
 - CLI: `invectus import` takes spreadsheets and `--sheet`; new `invectus pull` and
-  `invectus integrations {status,notion-token,notion-disconnect}`.
+  `invectus integrations {status,notion-token,notion-disconnect}` (later renamed `token|disconnect <name>`).
 - App: import screen reads spreadsheets (sheet menu) and pulled sources (Pull button, job
   progress); Collections "Pull and update"; Integrations page lists Excel, Google Sheets, Notion
   (token dialog) and a "Databases: coming later" card above the AI agent cards.
@@ -2883,3 +2883,14 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   keychain). Linux kernel-keyring persistence and Windows Credential Manager untested.
 - **Spec conflict to review:** outside data connectors are beyond SPEC v1 (file/table import
   only; connectors beyond PubMed and Steam are post-v1). They follow the explicit-network rule.
+
+## 2026-11-10 — Zotero and Airtable sources; integrations roadmap
+
+- Roadmap of all proposed integrations (data sources, outside checks, exports) added to
+  [docs/integrations.md](docs/integrations.md), at the owner's request.
+- `Source::Zotero` (Web API v3, API key; library, collection or group) and `Source::Airtable`
+  (personal access token; table or view), pulled into project snapshots like Notion. Token
+  handling is now generic: keychain names `notion`, `zotero`, `airtable`; CLI
+  `invectus integrations token|disconnect <name>`; Integrations page cards for each.
+- **Unverified:** neither service was called (no test accounts). Unit tests cover link parsing,
+  spec round trips and value flattening.

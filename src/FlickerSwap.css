@@ -1,0 +1,10 @@
+/* Old and new values share one grid cell so they swap in place (FlickerSwap.tsx). */
+.fx-swap { display: inline-grid; align-items: center; justify-items: start; }
+.fx-layer { grid-area: 1 / 1; display: inline-flex; align-items: center; white-space: nowrap; }
+.fx-in { animation: item-flicker 150ms step-end backwards; }
+.fx-out { animation: item-flicker-out 150ms step-end forwards; pointer-events: none; }
+.fx-layer.fx-out, .fx-layer .fx-out { user-select: none; }
+@media (prefers-reduced-motion: reduce) {
+  .fx-in { animation: none; }
+  .fx-out { animation: none; visibility: hidden; }
+}

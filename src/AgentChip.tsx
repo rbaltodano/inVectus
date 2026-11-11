@@ -7,6 +7,7 @@ import { Bot, Check, ChevronDown, Plus, X } from "lucide-react";
 import { AgentMark, LAST_AGENT, useAgentOptions } from "./agentOptions";
 import { api, local, type ProjectInfo } from "./api";
 import { useFlickerDelays } from "./dot-flicker";
+import { FlickerSwap, FlickerText } from "./FlickerSwap";
 import ConnectAgents from "./screens/ConnectAgents";
 import "./AgentChip.css";
 
@@ -50,8 +51,9 @@ export function AgentPicker({ value, onChoose }: { value?: string; onChoose: (id
   return <>
     <button type="button" ref={trigger} className="agent-chip" aria-haspopup="dialog" aria-expanded={open} onClick={() => { refresh(); setOpen(!open); }}
       title="Agent for this project: who writes gap descriptions, region names and paraphrases">
-      <span className="agent-chip-mark">{current ? <AgentMark id={current.id} size={14} /> : <Bot size={14} strokeWidth={1.5} aria-hidden="true" />}</span>
-      <span>{current?.name ?? (value ?? "Choose agent")}</span>
+      {/* Choosing another agent flickers the old name and mark out and the new ones in. */}
+      <span className="agent-chip-mark"><FlickerSwap swapKey={current?.id ?? "none"}>{current ? <AgentMark id={current.id} size={14} /> : <Bot size={14} strokeWidth={1.5} aria-hidden="true" />}</FlickerSwap></span>
+      <FlickerText text={current?.name ?? (value ?? "Choose agent")} />
       <ChevronDown size={12} aria-hidden="true" className="agent-chip-chev" />
     </button>
     {open && createPortal(<div ref={popup} className="agent-menu" style={{ top: place.top, right: place.right }} role="dialog" aria-label="Agent for this project">

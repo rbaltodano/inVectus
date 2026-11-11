@@ -7,6 +7,7 @@ import { ErrorLine, useAction, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
 import Select from "../Select";
+import IndexingIndicator from "../IndexingIndicator";
 
 const ROLE_NOTE: Record<Role, string> = { neutral: "Neither asks nor answers; context only", demand: "Asks for or needs something", coverage: "Answers a need" };
 
@@ -183,7 +184,12 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           <span className="muted">{source.last_pull ? `Pulled ${new Date(source.last_pull.pulled_at * 1000).toLocaleString()} · ${fmt(source.last_pull.rows)} rows` : "Not pulled yet"}</span>
           <button type="button" className={`btn ${source.needs_pull ? "primary" : ""} push`} disabled={busy || !!pulling} onClick={pull}>{pulling ? "Pulling…" : source.needs_pull ? `Pull from ${remoteName}` : "Pull again"}</button>
         </div>
-        {pulling && <JobProgress job={pulling} />}
+        {/* The indexing bar: a percentage when the source says how much there is (Notion pages),
+            else a moving bar with the count so far. */}
+        {pulling && <div className="pull-progress">
+          <IndexingIndicator job={pulling} />
+          <span className="muted small mono">{pulling.phase ?? "Starting"}{pulling.done > 0 ? ` · ${fmt(pulling.done)}${pulling.total ? ` of ${fmt(pulling.total)}` : " so far"}` : ""}</span>
+        </div>}
         <div className="muted small">
           Pulling uses the network once and saves a copy inside this project; importing, search and gaps then work offline from that copy.
           {source.kind === "google_sheet" && " The sheet must be shared as “Anyone with the link”."}

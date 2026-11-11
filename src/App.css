@@ -1079,3 +1079,10 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .logo { display: flex; align-items: center; gap: 10px; width: auto; }
 .logo img { width: 100px; flex: none; }
 .dev-badge { font: 500 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 999px; color: var(--accent); }
+/* Pulling a source: the indexing bar at full width, with the phase and count beneath. */
+.pull-progress { display: flex; flex-direction: column; gap: 6px; }
+.pull-progress .indexing-indicator { justify-content: flex-start; padding: 0; border: none; }
+.pull-progress .indexing-bar { flex: 1; width: auto; height: 6px; overflow: hidden; }
+.pull-progress .indexing-bar.indeterminate > span { width: 30% !important; opacity: 1; animation: pull-sweep 1.4s ease-in-out infinite; }
+@keyframes pull-sweep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .pull-progress .indexing-bar.indeterminate > span { animation: none; width: 100% !important; opacity: .5; } }

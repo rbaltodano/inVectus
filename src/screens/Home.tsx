@@ -137,6 +137,9 @@ function MapSlice({ map, gaps, onGap }: { map: MapData; gaps: GapView[]; onGap: 
   const [view, setView] = useState({ s: 1, x: 0, y: 0 });
   const [focus, setFocus] = useState<{ gap: GapView; code: string; area: { x: number; y: number; radius: number } }>();
   const [arrived, setArrived] = useState(false);
+  // The hovered gap, read by the canvas drawing (declared with its card below).
+  const hoverRef = useRef<unknown>();
+  const [hoverTick, setHoverTick] = useState(0);
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
@@ -228,7 +231,7 @@ function MapSlice({ map, gaps, onGap }: { map: MapData; gaps: GapView[]; onGap: 
     for (const m of marks) {
       const [x, y] = toScreen(m.area.x, m.area.y);
       if (!inside(x, y, 7)) continue;
-      const on = focus?.gap === m.gap && arrived;
+      const on = (focus?.gap === m.gap && arrived) || hoverRef.current === m;
       g.fillStyle = bg; g.strokeStyle = on ? accent : ink; g.lineWidth = on ? 2 : 1;
       g.beginPath(); g.arc(x, y, 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
       g.fillStyle = on ? accent : inkA(0.7); g.fillText(m.code, x + 8, y);
@@ -236,21 +239,39 @@ function MapSlice({ map, gaps, onGap }: { map: MapData; gaps: GapView[]; onGap: 
     g.restore();
     g.strokeStyle = ink; g.lineWidth = 1;
     g.beginPath(); g.arc(CX, CY, R - 1, 0, Math.PI * 2); g.stroke();
-  }, [map, marks, w, h, bounds, view, focus, arrived, theme]);
+  }, [map, marks, w, h, bounds, view, focus, arrived, theme, hoverTick]);
 
-  // The focused gap's card, beside its ring (left of it when there is no room on the right).
-  const anchor = focus && arrived ? toScreen(focus.area.x, focus.area.y) : undefined;
+  // A gap's card appears only while its ring is hovered (as on invectus.app); the tour just
+  // zooms to its gap and outlines it. Clicking a ring or its card opens the gap.
+  const [hover, setHoverNow] = useState<(typeof marks)[number]>();
+  // Leaving a ring waits a moment so the pointer can travel to its card.
+  const leaveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const setHover = (m: (typeof marks)[number] | undefined) => {
+    clearTimeout(leaveTimer.current);
+    if (m) setHoverNow(m); else leaveTimer.current = setTimeout(() => setHoverNow(undefined), 250);
+  };
+  useEffect(() => () => clearTimeout(leaveTimer.current), []);
+  useEffect(() => { hoverRef.current = hover; setHoverTick((n) => n + 1); }, [hover]);
+  const ringAt = (x: number, y: number) => marks.find((m) => {
+    const [mx, my] = toScreen(m.area.x, m.area.y);
+    return inside(mx, my, 7) && (mx - x) ** 2 + (my - y) ** 2 <= 12 ** 2;
+  });
+  const local = (e: React.PointerEvent | React.MouseEvent) => { const r = wrap.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
+  const anchor = hover ? toScreen(hover.area.x, hover.area.y) : undefined;
   const cardWidth = 260;
-  const reach = focus && bounds ? Math.max(8, focus.area.radius * k * view.s) + 16 : 0; // clear of the outline
+  const reach = hover ? (hover === focus && arrived ? Math.max(8, hover.area.radius * k * view.s) : 8) + 16 : 0; // clear of the ring or outline
   const left = anchor ? (anchor[0] + reach + cardWidth < w - 12 ? anchor[0] + reach : anchor[0] - reach - cardWidth) : 0;
-  return <div ref={wrap} className="home-slice">
+  return <div ref={wrap} className="home-slice" data-hover={!!hover || undefined}
+    onPointerMove={(e) => { if ((e.target as HTMLElement).closest(".home-gap-card")) { clearTimeout(leaveTimer.current); return; } const [x, y] = local(e); setHover(ringAt(x, y)); }}
+    onPointerLeave={() => setHover(undefined)}
+    onClick={(e) => { const [x, y] = local(e); const m = ringAt(x, y); if (m) onGap(m.gap.gap_id); }}>
     <canvas ref={canvas} style={{ width: w, height: h }} aria-hidden="true" />
-    {focus && anchor && <button ref={card} type="button" className="home-gap-card" style={{ left: Math.max(w * 0.42, left), top: Math.min(h - 150, Math.max(12, anchor[1] - 60)), width: cardWidth }}
-      onClick={() => onGap(focus.gap.gap_id)}>
-      <span className="home-gap-card-code">{focus.code} · {KIND_LABEL[focus.gap.kind]}</span>
-      <b>{focus.gap.label}</b>
-      <span className="home-gap-card-why">{focus.gap.explanation}</span>
-      <span className="home-gap-card-foot">Score {focus.gap.score.toFixed(2)} · open gap ↗</span>
+    {hover && anchor && <button ref={card} type="button" className="home-gap-card" style={{ left: Math.max(w * 0.42, left), top: Math.min(h - 150, Math.max(12, anchor[1] - 60)), width: cardWidth }}
+      onClick={(e) => { e.stopPropagation(); onGap(hover.gap.gap_id); }}>
+      <span className="home-gap-card-code">{hover.code} · {KIND_LABEL[hover.gap.kind]}</span>
+      <b>{hover.gap.label}</b>
+      <span className="home-gap-card-why">{hover.gap.explanation}</span>
+      <span className="home-gap-card-foot">Score {hover.gap.score.toFixed(2)} · open gap ↗</span>
     </button>}
   </div>;
 }

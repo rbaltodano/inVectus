@@ -87,3 +87,4 @@
 .home-gap-card-code { font: 500 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
 .home-gap-card-why { color: var(--dim); line-height: 1.45; }
 .home-gap-card-foot { font-size: 11px; color: var(--dim); }
+.home-slice[data-hover] { cursor: pointer; }

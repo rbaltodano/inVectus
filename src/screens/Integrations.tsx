@@ -23,11 +23,11 @@ export default function Integrations() {
           <h2 id="i-data">Data sources</h2>
           <p>Bring rows in as a collection. Online sources are pulled once, when you ask, and then work offline.</p>
         </div>
-        <ul className="integration-grid">
+        <ul className="integration-grid" data-code="DS">
           <li className="integration-card">
             <div className="integration-card-top">
               <span className="integration-mark"><FileSpreadsheet size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className="integration-badge">Built in</span>
+              <span className="integration-badge" data-tone="ink">Built in</span>
             </div>
             <div className="integration-name">Excel</div>
             <p className="integration-desc">Import .xlsx, .xls or .ods files from Add to Dataset and pick the sheet. Read on this computer.</p>
@@ -35,7 +35,7 @@ export default function Integrations() {
           <li className="integration-card">
             <div className="integration-card-top">
               <span className="integration-mark"><Sheet size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className="integration-badge">Link import</span>
+              <span className="integration-badge" data-tone="ink">Link import</span>
             </div>
             <div className="integration-name">Google Sheets</div>
             <p className="integration-desc">Paste a sheet's link in Add to Dataset. The sheet must be shared as “Anyone with the link”; no sign-in.</p>
@@ -57,16 +57,16 @@ export default function Integrations() {
           <h2 id="i-checks">Outside checks</h2>
           <p>Where a gap check looks for existing work. Choose them per project in Settings → Network; they run only when that project's network switch is on.</p>
         </div>
-        <ul className="integration-grid">
+        <ul className="integration-grid" data-code="OC">
           <li className="integration-card">
             <div className="integration-card-top">
               <span className="integration-mark"><Library size={22} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className="integration-badge">Built in</span>
+              <span className="integration-badge" data-tone="ink">Built in</span>
             </div>
             <div className="integration-name">Scholarly sources</div>
             <p className="integration-desc">PubMed and OpenAlex by default; Semantic Scholar and arXiv when you turn them on. No keys needed.</p>
           </li>
-</ul>
+        </ul>
       </section>
     </div>
   </div>;

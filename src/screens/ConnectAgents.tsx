@@ -88,10 +88,10 @@ export default function ConnectAgents() {
   };
 
   return <div className="integrations-agents">
-    <ul className="integration-grid" aria-label="AI agent clients">{main.map(card)}</ul>
+    <ul className="integration-grid" data-code="AG" aria-label="AI agent clients">{main.map(card)}</ul>
     <details className="connect-more">
       <summary>More clients{more.length ? ` (${more.length})` : ""}</summary>
-      <ul className="integration-grid" aria-label="More AI agent clients">{more.map(card)}</ul>
+      <ul className="integration-grid" data-code="AG" aria-label="More AI agent clients">{more.map(card)}</ul>
       <div className="integration-card integration-card-wide">
         <div className="integration-card-top"><span className="integration-mark"><AgentIcon client={null} size={22} /></span></div>
         <div className="integration-name">Other client</div>

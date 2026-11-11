@@ -2952,3 +2952,23 @@ real accounts were used.
   Integrations now holds data sources and outside checks only. Checked: `tsc`, frontend build,
   46 UI tests; rendered in a browser preview with this Mac's real client list (native window
   not captured: no screen-recording permission in the agent session).
+
+## 2026-11-10 — v0.2.0 beta released (macOS, Windows, Linux)
+
+- **Windows and Linux verified in CI.** `build.yml` run 42907902558 on `7defae2`: full test
+  suite, clippy and fmt pass on macOS, Windows and Linux. Earlier Windows-only failures fixed
+  on the way (zip unix mode, DuckDB double-open in the app's `open_project`, unescaped paths in
+  TOML fixtures, an unused `mut`).
+- **Installers verified in CI.** `release-build.yml` run 42932092867 on `release/0.2.0`
+  (`ab95fc6` = `7defae2` + model-smoke data fix): NSIS (Windows), .deb + AppImage (Ubuntu
+  24.04), macOS app. Each installed on a fresh runner; the installed CLI ran offline checks,
+  downloaded bge-small-en-v1.5 and ran import → embed → search → regions → gap scan.
+- **macOS signed and notarized.** The CI-built app from that run, signed with Developer ID
+  (team 7XG2DHY989), notarized (submission accepted), stapled; `spctl`: "Notarized Developer
+  ID". `scripts/sign-macos.sh`.
+- **Release:** GitHub release v0.2.0 from branch `release/0.2.0` (the integrations work on
+  `main` after `7defae2` is not in it; its own `release-build.yml` run 42931420826 on `785a027`
+  passed on all three OSes). invectus.app now links the Windows and Linux installers;
+  `install.sh` installed v0.2.0 end to end.
+- **Unverified / limits:** Windows installer unsigned (SmartScreen warning); Linux tested on
+  Ubuntu 24.04 only; Intel Macs not built; no clean-machine test by a person yet.

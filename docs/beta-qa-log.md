@@ -72,12 +72,12 @@ checked by code review, unit tests and the type checker.
 | Item | Status | Notes |
 |---|---|---|
 | CI run 42532458660 | **fixed** (unverified until CI re-run) | macOS and Linux passed; Windows failed in `connect_writes_only_when_asked_and_bundles`: the test asserted a Unix file mode that a Windows-built zip does not record. Assertion now Unix-only |
-| Windows / Linux support | unverified | Owner approved CI (2026-11-10). `build.yml` run 42871521906 dispatched on `c1ad6d9` |
-| Windows / Linux installers | **fixed** (unverified until CI passes) | `build.yml` builds with `--no-bundle`, so no installer existed, and only the macOS bundle carried the `invectus` CLI that agent connections need. New manual `release-build.yml`: NSIS (Windows), .deb + AppImage (Linux), macOS app; installs each, runs the installed CLI offline, uploads the installers. The CLI ships as a Tauri `externalBin` (`tauri.cli-sidecar.json`), so it lands beside the app (Windows install folder, `/usr/bin` on Linux). First run: 42874674481 |
+| Windows / Linux support | pass | `build.yml` run 42907902558 on `7defae2`: full suite passes on macOS, Windows, Linux |
+| Windows / Linux installers | **fixed**, pass (`release-build.yml` run 42932092867, released as v0.2.0) | `build.yml` builds with `--no-bundle`, so no installer existed, and only the macOS bundle carried the `invectus` CLI that agent connections need. New manual `release-build.yml`: NSIS (Windows), .deb + AppImage (Linux), macOS app; installs each, runs the installed CLI offline, uploads the installers. The CLI ships as a Tauri `externalBin` (`tauri.cli-sidecar.json`), so it lands beside the app (Windows install folder, `/usr/bin` on Linux). First run: 42874674481 |
 | Native-window pass | blocked | osascript is "not allowed assistive access" and screen capture is refused for this session; needs Accessibility + Screen Recording for T3 Code |
 | Windows agent hand-off | open, known | Not implemented on Windows: an agent cannot open a project the app has open (lock error). Document for testers |
 | AppImage + agent connections | open | The AppImage's CLI path changes on every launch, so a registered agent connection breaks; recommend the .deb for agent use |
-| Developer ID signing + notarization | owner | No Developer ID identity in the keychain; unsigned app is blocked by Gatekeeper on browser download (curl installer avoids quarantine) |
+| Developer ID signing + notarization | pass | v0.2.0 macOS app signed, notarized and stapled (`scripts/sign-macos.sh`); Windows installer still unsigned |
 | Default embedding model (BGE vs SPEC's Nomic) | owner | Open spec conflict |
 | Dependency notices (61 review entries, ONNX Runtime binary) | open | |
 | Clean-machine smoke test | unverified | Needs a separate Mac or fresh user account |

@@ -971,10 +971,14 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 
 /* Integrations: a gallery of connectable apps, not a settings form. */
 .integrations-page { max-width: none; padding: 0; overflow-y: auto; }
-.integrations-inner { max-width: 960px; margin: 0 auto; padding: 48px clamp(20px, 4vw, 56px) 64px; display: flex; flex-direction: column; gap: 40px; }
+.integrations-inner { width: 100%; max-width: 960px; margin: 0 auto; padding: 48px clamp(20px, 4vw, 56px) 64px; display: flex; flex-direction: column; gap: 40px; }
 .integrations-header { display: flex; flex-direction: column; gap: 10px; padding-bottom: 28px; position: relative; }
 /* A rule of item-sized squares, like a row of the data circle's items. */
 .integrations-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: repeating-linear-gradient(90deg, rgba(var(--ink-rgb), .28) 0 2px, transparent 2px 7px); }
+.integrations-header-row { flex-direction: row; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.integrations-header-text { display: flex; flex-direction: column; gap: 10px; max-width: 500px; }
+.integrations-search { flex: 0 1 260px; min-width: 200px; }
+.integrations-empty { margin: 0; color: var(--dim); font-size: 13px; }
 .integrations-header h1 { font: 500 28px/1.15 var(--sans); letter-spacing: -.025em; color: var(--text); }
 .integrations-header p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--dim); }
 .integrations-section { display: flex; flex-direction: column; gap: 16px; }
@@ -993,12 +997,12 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .integration-grid[data-code="DS"] > .integration-card::before { content: "DS-" counter(card, decimal-leading-zero); }
 .integration-grid[data-code="OC"] > .integration-card::before { content: "OC-" counter(card, decimal-leading-zero); }
 .integration-grid[data-code="AG"] > .integration-card::before { content: "AG-" counter(card, decimal-leading-zero); }
+/* A fixed code (kept while the page search hides other cards). */
+.integration-grid > .integration-card[data-label]::before { content: attr(data-label); }
 .integration-card:hover::before, .integration-card[data-connected="true"]::before { color: var(--accent); }
 .integration-card-wide { margin-top: 16px; }
 .integration-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 32px; margin-bottom: 8px; }
-.integration-mark { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px dashed var(--line-2); border-radius: var(--r); color: var(--text); }
-.integration-card[data-connected="true"] .integration-mark { border-style: solid; border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
-.integration-modal-head .integration-mark { border: none; }
+.integration-mark { display: inline-flex; align-items: center; justify-content: flex-start; width: 32px; height: 32px; color: var(--text); }
 .integration-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--text); }
 .integration-desc { margin: 0; font-size: 13px; line-height: 1.55; color: var(--dim); overflow-wrap: anywhere; }
 /* Status: a small square and a mono label, the map's item square and QUERY label in miniature. */

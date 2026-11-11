@@ -46,6 +46,35 @@ pub struct ImportForm {
     pub chunk_chars: usize,
     pub chunk_overlap: usize,
     pub limit: Option<usize>,
+    /// Worksheet of a spreadsheet source (`None`: the first sheet).
+    #[serde(default)]
+    pub sheet: Option<String>,
+}
+
+/// The source a typed spec names: a Google Sheets link or Notion database (pulled into
+/// `project_root/sources/`), else a file or folder path. `sheet` picks a spreadsheet's tab.
+pub fn resolve_source(
+    spec: &str,
+    sheet: Option<String>,
+    project_root: Option<&std::path::Path>,
+) -> anyhow::Result<Source> {
+    let sheet = sheet.filter(|s| !s.trim().is_empty());
+    let probe = project_root.unwrap_or(std::path::Path::new("."));
+    let source = match Source::parse_remote(spec, probe)? {
+        Some(_) if project_root.is_none() => {
+            anyhow::bail!("open a project first: a pulled source is kept inside the project")
+        }
+        Some(remote) => remote,
+        None => Source::detect(&user_path(spec))?,
+    };
+    match (source, sheet) {
+        (Source::Excel { path, .. }, Some(sheet)) => Ok(Source::Excel {
+            path,
+            sheet: Some(sheet),
+        }),
+        (_, Some(_)) => anyhow::bail!("a sheet can only be chosen for a spreadsheet source"),
+        (source, None) => Ok(source),
+    }
 }
 
 fn default_chunk_tokens() -> usize {
@@ -65,22 +94,24 @@ pub fn load_chunk_tokenizer(policy: &ChunkPolicy) -> anyhow::Result<Option<Model
 
 /// The import request for `f`; a collection that exists keeps its saved chunking.
 pub fn request_for_session(session: &Shared, f: ImportForm) -> OpResult<ImportRequest> {
-    let saved = with_session(session, |s| {
-        s.project
+    let (saved, root) = with_session(session, |s| {
+        let saved = s
+            .project
             .store
             .collection(&f.collection)?
             .map(|c| serde_json::from_value::<ChunkPolicy>(c.chunking))
-            .transpose()
-            .map_err(Into::into)
+            .transpose()?;
+        Ok((saved, s.project.root.clone()))
     })?;
-    request_with_policy(f, saved).map_err(err)
+    request_with_policy(f, saved, Some(&root)).map_err(err)
 }
 
 pub fn request_with_policy(
     f: ImportForm,
     saved: Option<ChunkPolicy>,
+    project_root: Option<&std::path::Path>,
 ) -> anyhow::Result<ImportRequest> {
-    let source = Source::detect(&user_path(&f.source_path))?;
+    let source = resolve_source(&f.source_path, f.sheet.clone(), project_root)?;
     let blank = |o: Option<String>| o.filter(|s| !s.trim().is_empty());
     let role = match blank(f.role_column) {
         Some(column) => RoleMapping::Column {
@@ -260,8 +291,17 @@ pub fn plan_for(s: &Session, collection: &str) -> anyhow::Result<IndexPlan> {
 
 #[derive(Serialize)]
 pub struct SourceInfo {
-    /// `csv`, `parquet` or `folder`.
+    /// `csv`, `parquet`, `folder`, `excel`, `google_sheet` or `notion`.
     pub kind: String,
+    /// Worksheet names of a spreadsheet, and the one read.
+    pub sheets: Vec<String>,
+    pub sheet: Option<String>,
+    /// A pulled source: it must be pulled (network) before it can be read.
+    pub remote: bool,
+    /// A pulled source with no snapshot yet: columns and sample are empty.
+    pub needs_pull: bool,
+    /// The last pull of a pulled source (time, rows, SHA-256).
+    pub last_pull: Option<serde_json::Value>,
     pub columns: Vec<String>,
     /// The first rows, for guessing and showing the column mapping.
     pub sample: Vec<Vec<Option<String>>>,
@@ -273,16 +313,43 @@ pub struct SourceInfo {
 const SOURCE_LOOK_ROWS: usize = 1000;
 
 /// Columns and sample rows of an import source, before any mapping is chosen.
-pub fn inspect_source(path: &str) -> OpResult<SourceInfo> {
-    let source = Source::detect(&user_path(path)).map_err(err)?;
-    let kind = match source {
-        Source::Csv { .. } => "csv",
-        Source::Parquet { .. } => "parquet",
-        Source::Folder { .. } => "folder",
+pub fn inspect_source(
+    path: &str,
+    sheet: Option<String>,
+    project_root: Option<&std::path::Path>,
+) -> OpResult<SourceInfo> {
+    let source = resolve_source(path, sheet, project_root).map_err(err)?;
+    let (sheets, sheet) = match &source {
+        Source::Excel { path, sheet } => {
+            let names = invectus_ingest::source::excel_sheets(path).map_err(err)?;
+            let chosen = sheet.clone().or_else(|| names.first().cloned());
+            (names, chosen)
+        }
+        _ => (Vec::new(), None),
     };
+    let last_pull = invectus_ingest::remote::last_pull(&source);
+    if source.is_remote() && !source.path().is_file() {
+        return Ok(SourceInfo {
+            kind: source.kind().into(),
+            sheets,
+            sheet,
+            remote: true,
+            needs_pull: true,
+            last_pull,
+            columns: Vec::new(),
+            sample: Vec::new(),
+            rows_read: 0,
+            unreadable: 0,
+        });
+    }
     let table = invectus_ingest::source::read(&source, Some(SOURCE_LOOK_ROWS)).map_err(err)?;
     Ok(SourceInfo {
-        kind: kind.into(),
+        kind: source.kind().into(),
+        sheets,
+        sheet,
+        remote: source.is_remote(),
+        needs_pull: false,
+        last_pull,
         sample: table.rows.iter().take(5).cloned().collect(),
         rows_read: table.rows.len(),
         unreadable: table.unreadable.len(),
@@ -382,6 +449,76 @@ pub type Work = Box<
         ) -> anyhow::Result<(serde_json::Value, bool)>
         + Send,
 >;
+
+/// Pull a Google Sheet or Notion database into its project snapshot as a background job
+/// (`pull`). Network use: needs the project's network switch (or `allow_network`, the CLI's
+/// `--network`) and is refused in offline mode. Importing afterwards reads the snapshot offline.
+pub fn start_pull(
+    emit: &Emit,
+    session: &Shared,
+    board: &SharedBoard,
+    spec: &str,
+    allow_network: bool,
+) -> OpResult<JobInfo> {
+    let (source, root) = with_session(session, |s| {
+        ensure_idle(board, &s.project)?;
+        if !allow_network && !s.project.config.network_enabled {
+            anyhow::bail!(
+                "this project's network switch is off: turn it on in Settings → Network to pull \
+                 from outside sources"
+            );
+        }
+        invectus_core::net::ensure_online("pulling a source")?;
+        let source = resolve_source(spec, None, Some(&s.project.root))?;
+        if !source.is_remote() {
+            anyhow::bail!("{} is a local file; import it directly", source.describe());
+        }
+        Ok((source, s.project.root.display().to_string()))
+    })?;
+    let notion_token = match source {
+        Source::Notion { .. } => invectus_core::secrets::get("notion").map_err(err)?,
+        _ => None,
+    };
+    let label = format!("Pulling {}", source.describe());
+    let info = JobInfo::new("pull", Some(root), label);
+    spawn_job(
+        emit,
+        board,
+        info,
+        Box::new(move |cancel, tick| {
+            let mut cx = invectus_ingest::remote::PullContext {
+                notion_token,
+                cancel,
+                progress: tick,
+            };
+            let pulled = invectus_ingest::remote::pull(&source, &mut cx)?;
+            Ok((serde_json::to_value(pulled)?, false))
+        }),
+    )
+}
+
+/// Whether Notion has a token, and where it comes from (`keychain` or `environment`).
+pub fn notion_status() -> OpResult<Option<&'static str>> {
+    invectus_core::secrets::source("notion").map_err(err)
+}
+
+/// Save (or, with an empty token, remove) the Notion integration token in the keychain.
+/// Nothing is sent to Notion here; the token is first used by a pull.
+pub fn set_notion_token(token: &str) -> OpResult<Option<&'static str>> {
+    if token.trim().is_empty() {
+        invectus_core::secrets::delete("notion").map_err(err)?;
+    } else {
+        let t = token.trim();
+        if !(t.starts_with("ntn_") || t.starts_with("secret_")) || t.len() < 20 {
+            return Err(err(anyhow::anyhow!(
+                "that does not look like a Notion integration token (they start with ntn_ or \
+                 secret_)"
+            )));
+        }
+        invectus_core::secrets::set("notion", t).map_err(err)?;
+    }
+    notion_status()
+}
 
 /// Register a job on the board and run it on its own thread. Every change is emitted carrying
 /// the whole job, including the project it belongs to.
@@ -870,7 +1007,7 @@ mod tests {
             let mut g = session.lock().unwrap();
             let s = g.as_mut().unwrap();
             ensure_idle(&board, &s.project).unwrap();
-            let req = request_with_policy(form(), None).unwrap();
+            let req = request_with_policy(form(), None, None).unwrap();
             assert_eq!(req.chunking.tokens.as_ref().unwrap().max_tokens, 448);
             let tokenizer = load_chunk_tokenizer(&req.chunking).unwrap();
             invectus_ingest::import_with(
@@ -1043,7 +1180,7 @@ mod tests {
         }))
         .unwrap();
         form.chunk_tokenizer = Some("not-installed".into());
-        let req = request_with_policy(form, Some(ChunkPolicy::default())).unwrap();
+        let req = request_with_policy(form, Some(ChunkPolicy::default()), None).unwrap();
         assert!(req.chunking.tokens.is_none());
         assert_eq!(req.mapping.text, vec!["t"]);
         assert_eq!(req.mapping.title, None);

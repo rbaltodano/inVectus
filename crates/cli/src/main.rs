@@ -67,8 +67,25 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Import a CSV/TSV, Parquet file or a folder of text files into a collection.
+    /// Import a CSV/TSV, Parquet, spreadsheet (.xlsx/.xls/.ods), folder of text files, or a
+    /// pulled Google Sheet or Notion database into a collection.
     Import(ImportArgs),
+    /// Fetch a Google Sheet (shared by link) or Notion database into the project's local copy
+    /// (network use; `invectus import` then reads that copy offline).
+    Pull {
+        #[command(flatten)]
+        p: ProjectArg,
+        /// A docs.google.com/spreadsheets link, a Notion database link, or notion:<id>.
+        source: String,
+        /// Allow this command to use the network although the project's network switch is off.
+        #[arg(long)]
+        network: bool,
+    },
+    /// Tokens for integrations that need one (Notion), kept in the system keychain.
+    Integrations {
+        #[command(subcommand)]
+        command: IntegrationsCommand,
+    },
     /// Embed a collection (resumable; re-running skips unchanged items).
     Embed(EmbedArgs),
     /// Nearest items to a query in a collection (positive search, not an absence verdict).
@@ -176,12 +193,26 @@ enum ConnectCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum IntegrationsCommand {
+    /// Whether each integration has a token, and where it comes from.
+    Status,
+    /// Save a Notion internal integration token (read from standard input).
+    NotionToken,
+    /// Remove the saved Notion token.
+    NotionDisconnect,
+}
+
 #[derive(Args)]
 struct ImportArgs {
     #[command(flatten)]
     p: ProjectArg,
-    /// Source: a folder, .csv/.tsv or .parquet file.
-    source: PathBuf,
+    /// Source: a folder, .csv/.tsv, .parquet or spreadsheet file, or a pulled Google Sheets
+    /// link / Notion database (`invectus pull` it first).
+    source: String,
+    /// Spreadsheet tab to read (default: the first).
+    #[arg(long)]
+    sheet: Option<String>,
     #[arg(short, long)]
     collection: String,
     /// Text column(s), comma-separated (tables only).
@@ -637,6 +668,74 @@ fn models(cli_dir: &Option<PathBuf>) -> Result<ModelStore> {
     }))
 }
 
+fn cmd_pull(p: &ProjectArg, spec: &str, network: bool) -> Result<()> {
+    let project = open(p)?;
+    if !network && !project.config.network_enabled {
+        bail!(
+            "this project's network switch is off; pass --network to allow this pull, or turn \
+             the switch on in the app"
+        );
+    }
+    let source = invectus_orchestration::resolve_source(spec, None, Some(&project.root))?;
+    if !source.is_remote() {
+        bail!("{} is a local file; import it directly", source.describe());
+    }
+    let notion_token = match source {
+        Source::Notion { .. } => invectus_core::secrets::get("notion")?,
+        _ => None,
+    };
+    let cancel = invectus_core::CancelToken::default();
+    let mut tick = |phase: &str, done: usize, total: usize| {
+        if total > 0 {
+            eprint!("\r{phase} {done}/{total}   ");
+        } else if done > 0 {
+            eprint!("\r{phase} {done}   ");
+        }
+    };
+    let pulled = invectus_ingest::remote::pull(
+        &source,
+        &mut invectus_ingest::remote::PullContext {
+            notion_token,
+            cancel: &cancel,
+            progress: &mut tick,
+        },
+    )?;
+    eprintln!();
+    println!(
+        "pulled {} rows from {} into {}",
+        pulled.rows, pulled.origin, pulled.snapshot
+    );
+    println!(
+        "import it with: invectus import -p {} {spec:?} -c <collection> --text <column>",
+        p.project.display()
+    );
+    Ok(())
+}
+
+fn cmd_integrations(command: IntegrationsCommand) -> Result<()> {
+    match command {
+        IntegrationsCommand::Status => {
+            for name in invectus_core::secrets::NAMES {
+                match invectus_core::secrets::source(name)? {
+                    Some(from) => println!("{name}: token saved ({from})"),
+                    None => println!("{name}: not connected"),
+                }
+            }
+        }
+        IntegrationsCommand::NotionToken => {
+            let mut token = String::new();
+            std::io::stdin().read_line(&mut token)?;
+            invectus_orchestration::set_notion_token(token.trim()).map_err(anyhow::Error::msg)?;
+            println!("saved the Notion token in the system keychain");
+        }
+        IntegrationsCommand::NotionDisconnect => {
+            invectus_core::secrets::delete("notion")?;
+            println!("removed the Notion token");
+        }
+    }
+    Ok(())
+}
+
 fn open(p: &ProjectArg) -> Result<Project> {
     let project = Project::open(&p.project)?;
     if let Some(w) = project.storage_warning() {
@@ -822,6 +921,8 @@ fn run() -> Result<()> {
         }
         Command::Status { p, json } => status(&open(&p)?, json)?,
         Command::Import(a) => cmd_import(a, &cli.models_dir)?,
+        Command::Pull { p, source, network } => cmd_pull(&p, &source, network)?,
+        Command::Integrations { command } => cmd_integrations(command)?,
         Command::Embed(a) => cmd_embed(a, &cli.models_dir)?,
         Command::Search(a) => cmd_search(a, &cli.models_dir)?,
         Command::Calibrate(a) => cmd_calibrate(a, &cli.models_dir)?,
@@ -1070,8 +1171,9 @@ fn status(p: &Project, json: bool) -> Result<()> {
 }
 
 fn cmd_import(a: ImportArgs, models_dir: &Option<PathBuf>) -> Result<()> {
-    let source = Source::detect(&a.source)?;
     let mut project = open(&a.p)?;
+    let source =
+        invectus_orchestration::resolve_source(&a.source, a.sheet.clone(), Some(&project.root))?;
     // Reimports keep their recorded policy unless a chunking mode is explicitly selected.
     let saved_policy =
         if a.chunk_chars.is_none() && a.chunk_overlap.is_none() && a.chunk_tokenizer.is_none() {

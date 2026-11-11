@@ -125,9 +125,47 @@ async fn index_plan(state: State<'_, AppState>, collection: String) -> CmdResult
     off_thread(move || with_session(&session, |s| orch::plan_for(s, &collection))).await
 }
 
+/// Columns and sample rows of a source; a pulled source (Google Sheet, Notion) is looked up in
+/// the open project.
 #[tauri::command]
-async fn inspect_source(path: String) -> CmdResult<SourceInfo> {
-    off_thread(move || orch::inspect_source(&path)).await
+async fn inspect_source(
+    state: State<'_, AppState>,
+    path: String,
+    sheet: Option<String>,
+) -> CmdResult<SourceInfo> {
+    let session = state.session.clone();
+    off_thread(move || {
+        let root = session
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|s| s.project.root.clone()));
+        orch::inspect_source(&path, sheet, root.as_deref())
+    })
+    .await
+}
+
+/// Pull a Google Sheet or Notion database into the open project (network; needs the project's
+/// network switch). Runs as a background job.
+#[tauri::command]
+async fn pull_source(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    spec: String,
+) -> CmdResult<JobInfo> {
+    let (session, board, emit) = (state.session.clone(), state.board.clone(), emitter(&app));
+    off_thread(move || orch::start_pull(&emit, &session, &board, &spec, false)).await
+}
+
+/// Where the Notion token comes from (`keychain`, `environment`), or `None`.
+#[tauri::command]
+async fn notion_status() -> CmdResult<Option<String>> {
+    off_thread(|| orch::notion_status().map(|s| s.map(String::from))).await
+}
+
+/// Save the Notion token in the system keychain; an empty token removes it.
+#[tauri::command]
+async fn set_notion_token(token: String) -> CmdResult<Option<String>> {
+    off_thread(move || orch::set_notion_token(&token).map(|s| s.map(String::from))).await
 }
 
 #[tauri::command]
@@ -664,6 +702,9 @@ pub fn run() {
             project_info,
             rename_project,
             inspect_source,
+            pull_source,
+            notion_status,
+            set_notion_token,
             set_network,
             set_agent_model,
             list_llms,

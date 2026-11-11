@@ -194,7 +194,13 @@ impl Agent {
             }
             "inspect_source" => {
                 let a: SourceArgs = parse(args)?;
-                value(&orch::inspect_source(&a.source)?)
+                // A pulled source (Google Sheet, Notion) lives in the open project.
+                let root = self
+                    .session
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.as_ref().map(|s| s.project.root.clone()));
+                value(&orch::inspect_source(&a.source, a.sheet, root.as_deref())?)
             }
             "import_collection" => {
                 let a: ImportArgs = parse(args)?;
@@ -550,6 +556,7 @@ struct OpenArgs {
 #[serde(deny_unknown_fields)]
 struct SourceArgs {
     source: String,
+    sheet: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -568,6 +575,7 @@ struct ImportArgs {
     role_column: Option<String>,
     role_rules: Option<String>,
     limit: Option<usize>,
+    sheet: Option<String>,
 }
 
 impl ImportArgs {
@@ -600,6 +608,7 @@ impl ImportArgs {
             chunk_chars: 2000,
             chunk_overlap: 200,
             limit: self.limit,
+            sheet: self.sheet,
         }
     }
 }
@@ -873,10 +882,13 @@ pub fn tools() -> Value {
         },
         {
             "name": "inspect_source",
-            "description": "Columns and sample rows of a CSV/TSV, Parquet file or folder of text \
-                files, to choose the mapping for import_collection.",
+            "description": "Columns and sample rows of a CSV/TSV, Parquet, spreadsheet (.xlsx, \
+                .xls, .ods) or folder of text files, to choose the mapping for import_collection. \
+                A Google Sheets link or Notion database (notion:<id>) reads the copy the person \
+                pulled into the open project; needs_pull means they have not pulled it yet.",
             "inputSchema": { "type": "object", "properties": {
-                "source": { "type": "string", "description": "File or folder path." }
+                "source": { "type": "string", "description": "File or folder path, Google Sheets link, or notion:<database id>." },
+                "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." }
             }, "required": ["source"], "additionalProperties": false },
             "annotations": read_only,
         },
@@ -887,7 +899,8 @@ pub fn tools() -> Value {
                 with job_status). Re-importing updates changed items; unchanged ones are kept.",
             "inputSchema": { "type": "object", "properties": {
                 "project": project, "collection": collection,
-                "source": { "type": "string", "description": "File or folder path." },
+                "source": { "type": "string", "description": "File or folder path, Google Sheets link, or notion:<database id> (pulled sources must be pulled by the person first)." },
+                "sheet": { "type": "string", "description": "Spreadsheet tab (default: the first)." },
                 "text": { "type": "array", "items": { "type": "string" },
                     "description": "Text column(s), joined in order. Not used for folders." },
                 "title": { "type": "string", "description": "Title column." },

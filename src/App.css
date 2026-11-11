@@ -1002,3 +1002,5 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .integration-modal-head { display: flex; align-items: center; gap: 10px; }
 .integration-modal-head h3 { font-size: 16px; font-weight: 500; }
 .integration-modal-actions { justify-content: flex-end; gap: 8px; padding-top: 6px; }
+.integration-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--text-2); line-height: 1.55; }
+.integration-modal label { display: flex; flex-direction: column; gap: 6px; }

@@ -20,6 +20,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const [collection, setCollection] = useState("");
   const [path, setPath] = useState("");
   const [source, setSource] = useState<SourceInfo>();
+  const [sheet, setSheet] = useState<string | null>(null);
+  const [pullJob, setPullJob] = useState<number>();
   const [map, setMap] = useState({ text: "", title: "", id: "", date: "", url: "" });
   const [chunk, setChunk] = useState({ mode: "tokens", tokens: 448, tokenOverlap: 48, chars: 2000, overlap: 200 });
   // Token chunking needs BGE-small's tokenizer. Before it is installed (a first run), fall back
@@ -44,15 +46,25 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const collectionRef = useRef(collection);
   collectionRef.current = collection;
 
-  const look = (p: string) => run(async () => {
-    const s = await api.inspect(p);
-    setPath(p); setSource(s); setPreview(undefined); setOutcome(undefined);
+  const look = (p: string, tab: string | null = null) => run(async () => {
+    const s = await api.inspect(p, tab);
+    setPath(p); setSource(s); setSheet(s.sheet); setPreview(undefined); setOutcome(undefined);
     const guessed = guessMapping(s.columns);
     setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url: guessed.url });
     setRoleColumn(guessed.role);
-    if (!collectionRef.current) setCollection(collectionIdFromPath(p));
+    if (!collectionRef.current) setCollection(s.kind === "google_sheet" ? "google-sheet" : s.kind === "notion" ? "notion" : collectionIdFromPath(p));
     return true;
   });
+  // Pulling (network) runs as a job; when it ends, read the fresh snapshot.
+  const pull = () => run(async () => { const j = await api.pullSource(path); jobs.started(j); setPullJob(j.id); });
+  const pulling = pullJob !== undefined && jobs.current?.id === pullJob && isRunning(jobs.current) ? jobs.current : undefined;
+  const pullDone = pullJob !== undefined ? [jobs.current, ...jobs.history].find((j) => j?.id === pullJob && !isRunning(j)) : undefined;
+  useEffect(() => {
+    if (!pullDone) return;
+    setPullJob(undefined);
+    if (pullDone.state === "completed") look(path);
+    else if (pullDone.state === "failed") setError(pullDone.error ?? "The pull failed.");
+  }, [pullDone?.id, pullDone?.state]);
   // A dataset picked from the circle goes straight to the column step.
   useEffect(() => { if (initialPath) look(initialPath).then((ok) => { if (ok) setStep(1); }); }, [initialPath]);
   const choose = async (folder: boolean) => {
@@ -78,8 +90,10 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     role_rules: rules.filter((r) => r.value.trim()).map((r) => `${r.value.trim()}=${r.role}`).join(","),
     chunk_tokenizer: chunk.mode === "tokens" ? "bge-small-en-v1.5" : null,
     chunk_tokens: chunk.tokens, chunk_token_overlap: chunk.tokenOverlap,
-    chunk_chars: chunk.chars, chunk_overlap: chunk.overlap, limit: null,
+    chunk_chars: chunk.chars, chunk_overlap: chunk.overlap, limit: null, sheet,
   };
+  const remoteName = source?.kind === "google_sheet" ? "Google Sheets" : source?.kind === "notion" ? "Notion" : "";
+  const sourceName = remoteName ? `${remoteName} source` : baseName(path) + (sheet && (source?.sheets.length ?? 0) > 1 ? ` · ${sheet}` : "");
   const formKey = JSON.stringify(form);
 
   // Live role counts over the first rows while rules change.
@@ -141,31 +155,48 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
       <section aria-label="Choose data" className={`dropzone ${dragging ? "over" : ""}`}>
         <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
         <div className="strong big">Drop a file or folder here</div>
-        <div className="muted">CSV or TSV, Parquet, or a folder of .txt / .md files</div>
+        <div className="muted">CSV or TSV, Parquet, Excel (.xlsx, .xls) or OpenDocument (.ods), or a folder of .txt / .md files</div>
         <div className="row wrap center">
           <button type="button" className="btn primary" disabled={busy} onClick={() => choose(false)}>Choose file…</button>
           <button type="button" className="btn" disabled={busy} onClick={() => choose(true)}>Choose folder…</button>
         </div>
         <div className="row wrap center w-full">
-          <input aria-label="Path to a file or folder" className="grow" value={path} onChange={(e) => setPath(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && path.trim() && look(path.trim())} placeholder="/Users/you/data/papers.csv" />
-          <button type="button" className="btn" disabled={!path.trim() || busy} onClick={() => look(path.trim())}>{busy ? "Reading…" : "Use this path"}</button>
+          <input aria-label="Path to a file or folder, or a Google Sheets or Notion link" className="grow" value={path} onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && path.trim() && look(path.trim())} placeholder="/Users/you/data/papers.csv, or a Google Sheets or Notion link" />
+          <button type="button" className="btn" disabled={!path.trim() || busy} onClick={() => look(path.trim())}>{busy ? "Reading…" : "Use this"}</button>
         </div>
       </section>
-      {source && <div className="panel row wrap">
-        <span className="strong">{baseName(path)}</span>
-        <span className="muted">{source.kind.toUpperCase()} · {source.rows_read >= 1000 ? "1,000+" : fmt(source.rows_read)} {folder ? "files" : "rows"} · {source.columns.length} columns{source.unreadable ? ` · ${source.unreadable} unreadable` : ""}</span>
+      {source?.remote && <div className="panel stack gap-s" aria-label="Pull source">
+        <div className="row wrap">
+          <span className="strong">{remoteName}</span>
+          <span className="muted">{source.last_pull ? `Pulled ${new Date(source.last_pull.pulled_at * 1000).toLocaleString()} · ${fmt(source.last_pull.rows)} rows` : "Not pulled yet"}</span>
+          <button type="button" className={`btn ${source.needs_pull ? "primary" : ""} push`} disabled={busy || !!pulling} onClick={pull}>{pulling ? "Pulling…" : source.needs_pull ? `Pull from ${remoteName}` : "Pull again"}</button>
+        </div>
+        {pulling && <JobProgress job={pulling} />}
+        <div className="muted small">
+          Pulling uses the network once and saves a copy inside this project; importing, search and gaps then work offline from that copy.
+          {source.kind === "google_sheet" && " The sheet must be shared as “Anyone with the link”."}
+          {source.kind === "notion" && " Needs the Notion token from Integrations, and the database shared with your integration in Notion (••• → Connections)."}
+          {!ctx.project.network_enabled && " This project's network switch is off: turn it on in Settings → Network first."}
+        </div>
+      </div>}
+      {source && !source.needs_pull && <div className="panel row wrap">
+        <span className="strong">{sourceName}</span>
+        <span className="muted">{source.kind.replace("_", " ").toUpperCase()} · {source.rows_read >= 1000 ? "1,000+" : fmt(source.rows_read)} {folder ? "files" : "rows"} · {source.columns.length} columns{source.unreadable ? ` · ${source.unreadable} unreadable` : ""}</span>
+        {source.sheets.length > 1 && <label className="inline push">Sheet
+          <select value={sheet ?? ""} disabled={busy} onChange={(e) => look(path, e.target.value)}>{source.sheets.map((n) => <option key={n}>{n}</option>)}</select>
+        </label>}
       </div>}
       <div className="row end">
         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-        <button type="button" className="btn primary" disabled={!source || !validName} onClick={() => setStep(1)}>Next</button>
+        <button type="button" className="btn primary" disabled={!source || source.needs_pull || !validName} onClick={() => setStep(1)}>Next</button>
       </div>
     </>}
 
     {step === 1 && source && <>
       <div className="panel row wrap">
-        <span className="strong">{baseName(path)}</span>
-        <span className="muted">{source.kind.toUpperCase()} · into “{collection}”</span>
+        <span className="strong">{sourceName}</span>
+        <span className="muted">{source.kind.replace("_", " ").toUpperCase()} · into “{collection}”</span>
         <button type="button" className="link push" onClick={() => setStep(0)}>Change source</button>
       </div>
       {folder
@@ -304,7 +335,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
       </div>}
       {outcome!.plan.notes.map((n) => <div key={n} className="muted small">{n}</div>)}
       <div className="row end">
-        <button type="button" className="btn" onClick={() => { setStep(0); setSource(undefined); setPath(""); setOutcome(undefined); setError(undefined); }}>Import another</button>
+        <button type="button" className="btn" onClick={() => { setStep(0); setSource(undefined); setPath(""); setSheet(null); setOutcome(undefined); setError(undefined); }}>Import another</button>
         <button type="button" className="btn primary" onClick={() => onDone(report.collection)}>Go to the collection</button>
       </div>
     </section>}

@@ -2861,3 +2861,25 @@ instrument style, dashed outlines marking agents' work throughout, for review to
   opens the project; Remove appears on hover; the open project shows an accent "Open" tag.
   Collections and Models columns hide below 760 px.
 - Verified: `npm run build` passes. Not yet checked visually in the running app.
+
+## 2026-11-10 — Data-source integrations: Excel, Google Sheets, Notion
+
+- Plan and details: [docs/integrations.md](docs/integrations.md). Owner decisions: Sheets by
+  shared link now (Google sign-in later), Notion by pasted internal token, Notion databases
+  (not page trees) first.
+- Engine: `Source::Excel` (calamine 0.38, local), `Source::GoogleSheet` and `Source::Notion`
+  read a project snapshot under `sources/`; `invectus_ingest::remote::pull` is the only network
+  step (gated by `net::ensure_online`; callers check the project network switch).
+  `invectus_core::secrets` keeps the Notion token in the OS keychain (keyring 3).
+- CLI: `invectus import` takes spreadsheets and `--sheet`; new `invectus pull` and
+  `invectus integrations {status,notion-token,notion-disconnect}`.
+- App: import screen reads spreadsheets (sheet menu) and pulled sources (Pull button, job
+  progress); Collections "Pull and update"; Integrations page lists Excel, Google Sheets, Notion
+  (token dialog) and a "Databases: coming later" card above the AI agent cards.
+- Agents: `inspect_source` / `import_collection` accept `sheet` and pulled-source specs (they read
+  an existing pull; agents cannot start a pull).
+- **Unverified:** Google Sheets and Notion pulls have not run against the live services (no test
+  sheet or Notion workspace used). Keychain storage not exercised in tests (needs a session
+  keychain). Linux kernel-keyring persistence and Windows Credential Manager untested.
+- **Spec conflict to review:** outside data connectors are beyond SPEC v1 (file/table import
+  only; connectors beyond PubMed and Steam are post-v1). They follow the explicit-network rule.

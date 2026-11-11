@@ -149,6 +149,8 @@ pub struct CollectionInfo {
     /// `csv`, `parquet`, `folder` or another importer's kind, and the source path when known.
     pub source_kind: Option<String>,
     pub source_path: Option<String>,
+    /// A pulled source (Google Sheet, Notion): the spec to pull it again before re-importing.
+    pub source_spec: Option<String>,
     /// The stored source can be imported again (`reimport_collection`).
     pub reimportable: bool,
 }
@@ -246,6 +248,9 @@ pub fn project_info(s: &Session, board: &SharedBoard) -> anyhow::Result<ProjectI
         .map(|summary| CollectionInfo {
             source_kind: summary.source["kind"].as_str().map(String::from),
             source_path: summary.source["path"].as_str().map(String::from),
+            source_spec: serde_json::from_value::<Source>(summary.source.clone())
+                .ok()
+                .and_then(|s| s.remote_spec()),
             reimportable: serde_json::from_value::<Source>(summary.source.clone()).is_ok(),
             summary,
         })

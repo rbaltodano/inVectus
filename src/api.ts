@@ -10,7 +10,7 @@ export const ROLES: Role[] = ["neutral", "demand", "coverage"];
 
 export interface Collection {
   collection_id: string; items: number; chunks: number; by_role: Record<string, number>; updated_at: string | null;
-  source_kind: string | null; source_path: string | null; reimportable: boolean;
+  source_kind: string | null; source_path: string | null; source_spec: string | null; reimportable: boolean;
 }
 export interface CalibrationStatus { method: string; sample: number; vectors: number; fitted_at: string | null; holdout_auc: number | null }
 export interface RegionsStatus { run_id: string; created_at: string | null; stats: Record<string, unknown>; scanned: boolean }
@@ -38,10 +38,17 @@ export interface ProjectInfo {
 export interface ModelInfo { key: string; repo: string; dimensions: number; megabytes: number; installed: boolean; default: boolean; note: string }
 export interface LlmInfo { key: string; repo: string; megabytes: number; installed: boolean; default: boolean; note: string }
 
-export interface SourceInfo { kind: "csv" | "parquet" | "folder"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number }
+export interface PullRecord { origin: string; snapshot: string; rows: number; bytes: number; sha256: string; pulled_at: number }
+export interface SourceInfo {
+  kind: "csv" | "parquet" | "folder" | "excel" | "google_sheet" | "notion"; columns: string[]; sample: (string | null)[][]; rows_read: number; unreadable: number;
+  /** Spreadsheet tabs and the one read. */
+  sheets: string[]; sheet: string | null;
+  /** Pulled sources (Google Sheets, Notion): needs_pull until the first pull. */
+  remote: boolean; needs_pull: boolean; last_pull: PullRecord | null;
+}
 export interface ImportForm {
   collection: string; source_path: string; text: string[]; title: string; id: string; date: string; url: string;
-  role: Role; role_column: string; role_rules: string; chunk_tokenizer: string | null; chunk_tokens: number; chunk_token_overlap: number; chunk_chars: number; chunk_overlap: number; limit: number | null;
+  role: Role; role_column: string; role_rules: string; chunk_tokenizer: string | null; chunk_tokens: number; chunk_token_overlap: number; chunk_chars: number; chunk_overlap: number; limit: number | null; sheet?: string | null;
 }
 export interface MappedRow { source_id: string; title: string | null; text: string; date: string | null; unparsed_date: string | null; role: Role }
 export interface Preview { chunk_counts: number[]; columns: string[]; rows: MappedRow[]; skipped: Record<string, number> }
@@ -146,7 +153,11 @@ export const api = {
   rename: (path: string, name: string) => invoke<string>("rename_project", { path, name }),
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
   setAgentModel: (project: string, model: string | null) => invoke<ProjectInfo>("set_agent_model", { project, model }),
-  inspect: (path: string) => invoke<SourceInfo>("inspect_source", { path }),
+  inspect: (path: string, sheet?: string | null) => invoke<SourceInfo>("inspect_source", { path, sheet: sheet ?? null }),
+  /** Network: pull a Google Sheet or Notion database into the open project (a background job). */
+  pullSource: (spec: string) => invoke<JobInfo>("pull_source", { spec }),
+  notionStatus: () => invoke<string | null>("notion_status"),
+  setNotionToken: (token: string) => invoke<string | null>("set_notion_token", { token }),
   preview: (form: ImportForm, rows = 20) => invoke<Preview>("preview_import", { form, rows }),
   importCollection: (form: ImportForm) => invoke<ImportOutcome>("import_collection", { form }),
   reimport: (collection: string) => invoke<ImportOutcome>("reimport_collection", { collection }),
@@ -224,7 +235,7 @@ export const verdictLabel = (v: string | undefined) => VERDICTS.find(([id]) => i
 export async function pickSource(folder = false): Promise<string | null> {
   const r = await openDialog(folder
     ? { directory: true, multiple: false, title: "Choose a folder of .txt or .md files" }
-    : { directory: false, multiple: false, title: "Choose a dataset", filters: [{ name: "Datasets", extensions: ["csv", "tsv", "parquet", "pq"] }] });
+    : { directory: false, multiple: false, title: "Choose a dataset", filters: [{ name: "Datasets", extensions: ["csv", "tsv", "parquet", "pq", "xlsx", "xlsm", "xlsb", "xls", "ods"] }] });
   return typeof r === "string" ? r : null;
 }
 

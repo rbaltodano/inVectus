@@ -1,8 +1,9 @@
-//! Import: table files, folders and gapmap projects into a project's item store (SPEC §7.2).
+//! Import: table files, spreadsheets, folders, pulled sources and gapmap projects into a project's item store (SPEC §7.2).
 pub mod chunk;
 pub mod gapmap;
 pub mod import;
 pub mod mapping;
+pub mod remote;
 pub mod source;
 
 pub use chunk::{ChunkPolicy, TokenChunking};

@@ -52,6 +52,11 @@ tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"
 # Reads Codex's ~/.codex/config.toml (connect status); already in the lockfile.
 toml = "0.8"
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+# Excel / OpenDocument spreadsheets, read locally in pure Rust.
+calamine = "0.38"
+# Integration tokens (Notion) live in the OS keychain, never in project files. Linux uses the
+# kernel keyring (no D-Bus build dependency); it does not survive a reboot.
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 # llama.cpp for local language models; built from the vendored source (cmake), loads local GGUF
 # files only.
 llama-cpp-2 = { version = "=0.1.160", default-features = false }

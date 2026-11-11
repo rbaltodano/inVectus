@@ -1,4 +1,6 @@
-//! Readers for table files (CSV, Parquet via DuckDB) and folders of text files.
+//! Readers for table files (CSV, Parquet via DuckDB; Excel and OpenDocument via calamine),
+//! folders of text files, and local snapshots of pulled sources (Google Sheets, Notion). Reading
+//! never touches the network: a pulled source reads the snapshot [`crate::remote::pull`] wrote.
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -17,7 +19,25 @@ pub enum Source {
         path: PathBuf,
         extensions: Vec<String>,
     },
+    /// A spreadsheet workbook; `sheet` is the worksheet name (`None`: the first sheet).
+    Excel {
+        path: PathBuf,
+        sheet: Option<String>,
+    },
+    /// A Google Sheet shared by link; read from its pulled CSV snapshot.
+    GoogleSheet {
+        spreadsheet_id: String,
+        gid: Option<String>,
+        snapshot: PathBuf,
+    },
+    /// A Notion database (one row per page); read from its pulled CSV snapshot.
+    Notion {
+        database_id: String,
+        snapshot: PathBuf,
+    },
 }
+
+pub const EXCEL_EXTENSIONS: &[&str] = &["xlsx", "xlsm", "xlsb", "xls", "ods"];
 
 pub const DEFAULT_FOLDER_EXTENSIONS: &[&str] = &["txt", "md", "markdown", "rst", "text"];
 /// Files above this size are skipped (not plain notes; likely data dumps).
@@ -49,17 +69,149 @@ impl Source {
             "parquet" | "pq" => Ok(Source::Parquet {
                 path: path.to_path_buf(),
             }),
+            e if EXCEL_EXTENSIONS.contains(&e) => Ok(Source::Excel {
+                path: path.to_path_buf(),
+                sheet: None,
+            }),
             _ => bail!(
-                "cannot infer the format of {}; expected a folder, .csv/.tsv or .parquet",
+                "cannot infer the format of {}; expected a folder, .csv/.tsv, .parquet or a \
+                 spreadsheet (.xlsx, .xls, .ods)",
                 path.display()
             ),
         }
     }
 
+    /// The local file or folder read on import (a pulled source's snapshot).
     pub fn path(&self) -> &Path {
         match self {
-            Source::Csv { path } | Source::Parquet { path } | Source::Folder { path, .. } => path,
+            Source::Csv { path }
+            | Source::Parquet { path }
+            | Source::Folder { path, .. }
+            | Source::Excel { path, .. } => path,
+            Source::GoogleSheet { snapshot, .. } | Source::Notion { snapshot, .. } => snapshot,
         }
+    }
+
+    /// A Google Sheets link or a Notion database (`notion:<id>` or a notion.so link) as a pulled
+    /// source whose snapshot lives under `project_root/sources/`; `None` for anything else.
+    pub fn parse_remote(spec: &str, project_root: &Path) -> Result<Option<Self>> {
+        let spec = spec.trim();
+        if let Some((id, gid)) = google_sheet_id(spec)? {
+            let file = format!("{id}-{}.csv", gid.as_deref().unwrap_or("default"));
+            return Ok(Some(Source::GoogleSheet {
+                snapshot: project_root
+                    .join("sources")
+                    .join("google-sheets")
+                    .join(file),
+                spreadsheet_id: id,
+                gid,
+            }));
+        }
+        if let Some(id) = notion_database_id(spec)? {
+            return Ok(Some(Source::Notion {
+                snapshot: project_root
+                    .join("sources")
+                    .join("notion")
+                    .join(format!("{id}.csv")),
+                database_id: id,
+            }));
+        }
+        Ok(None)
+    }
+
+    /// A pulled source (needs a network pull before it can be read).
+    pub fn is_remote(&self) -> bool {
+        matches!(self, Source::GoogleSheet { .. } | Source::Notion { .. })
+    }
+
+    /// The spec that names a pulled source again (for "pull and update").
+    pub fn remote_spec(&self) -> Option<String> {
+        match self {
+            Source::GoogleSheet {
+                spreadsheet_id,
+                gid,
+                ..
+            } => Some(format!(
+                "https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit{}",
+                gid.as_deref()
+                    .map(|g| format!("#gid={g}"))
+                    .unwrap_or_default()
+            )),
+            Source::Notion { database_id, .. } => Some(format!("notion:{database_id}")),
+            _ => None,
+        }
+    }
+
+    /// Short kind name for the UI and agents.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Source::Csv { .. } => "csv",
+            Source::Parquet { .. } => "parquet",
+            Source::Folder { .. } => "folder",
+            Source::Excel { .. } => "excel",
+            Source::GoogleSheet { .. } => "google_sheet",
+            Source::Notion { .. } => "notion",
+        }
+    }
+
+    /// Where the data comes from, for messages ("Google Sheet 1AbC…", "report.xlsx").
+    pub fn describe(&self) -> String {
+        match self {
+            Source::GoogleSheet { spreadsheet_id, .. } => format!("Google Sheet {spreadsheet_id}"),
+            Source::Notion { database_id, .. } => format!("Notion database {database_id}"),
+            other => other.path().display().to_string(),
+        }
+    }
+}
+
+/// `(spreadsheet id, gid)` from a docs.google.com/spreadsheets link.
+fn google_sheet_id(spec: &str) -> Result<Option<(String, Option<String>)>> {
+    let rest = [
+        "https://docs.google.com/spreadsheets/d/",
+        "docs.google.com/spreadsheets/d/",
+    ]
+    .iter()
+    .find_map(|p| spec.strip_prefix(p));
+    let Some(rest) = rest else { return Ok(None) };
+    let id: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if id.len() < 20 {
+        bail!("this Google Sheets link has no spreadsheet id: {spec}");
+    }
+    let gid = spec
+        .split(['#', '?', '&'])
+        .find_map(|part| part.strip_prefix("gid="))
+        .map(|g| {
+            g.chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect::<String>()
+        })
+        .filter(|g| !g.is_empty());
+    Ok(Some((id, gid)))
+}
+
+/// A Notion database id (32 hex digits, no dashes) from `notion:<id>` or a Notion link.
+fn notion_database_id(spec: &str) -> Result<Option<String>> {
+    let lower = spec.to_ascii_lowercase();
+    let body = if let Some(rest) = lower.strip_prefix("notion:") {
+        rest.to_string()
+    } else if lower.contains("notion.so/") || lower.contains("notion.site/") {
+        // The id is the last 32-hex run in the path, before any query (`?v=` names a view).
+        lower.split('?').next().unwrap_or("").to_string()
+    } else {
+        return Ok(None);
+    };
+    let hex: Vec<char> = body.chars().filter(|c| *c != '-').collect();
+    let id = hex
+        .windows(32)
+        .rev()
+        .find(|w| w.iter().all(|c| c.is_ascii_hexdigit()))
+        .map(|w| w.iter().collect::<String>());
+    match id {
+        Some(id) => Ok(Some(id)),
+        None => bail!("no Notion database id in {spec:?}; copy the database's link from Notion"),
     }
 }
 
@@ -91,6 +243,133 @@ pub fn read(source: &Source, limit: Option<usize>) -> Result<Table> {
         Source::Csv { path } => read_table(path, false, limit),
         Source::Parquet { path } => read_table(path, true, limit),
         Source::Folder { path, extensions } => read_folder(path, extensions, limit),
+        Source::Excel { path, sheet } => read_excel(path, sheet.as_deref(), limit),
+        Source::GoogleSheet { snapshot, .. } | Source::Notion { snapshot, .. } => {
+            if !snapshot.is_file() {
+                bail!(
+                    "{} has not been pulled into this project yet; pull it first (Pull in the \
+                     import screen, or `invectus pull`)",
+                    source.describe()
+                );
+            }
+            read_table(snapshot, false, limit)
+        }
+    }
+}
+
+/// Worksheet names of a workbook, in order.
+pub fn excel_sheets(path: &Path) -> Result<Vec<String>> {
+    use calamine::Reader;
+    let wb = calamine::open_workbook_auto(path)
+        .with_context(|| format!("opening {}", path.display()))?;
+    Ok(wb.sheet_names().to_vec())
+}
+
+/// One worksheet as text columns. The first non-empty row is the header; blank header cells
+/// become `column_N` and repeated names get a `_2`, `_3` suffix. Fully empty rows are skipped.
+fn read_excel(path: &Path, sheet: Option<&str>, limit: Option<usize>) -> Result<Table> {
+    use calamine::Reader;
+    let mut wb = calamine::open_workbook_auto(path)
+        .with_context(|| format!("opening {}", path.display()))?;
+    let names = wb.sheet_names().to_vec();
+    let name = match sheet {
+        Some(s) => names
+            .iter()
+            .find(|n| n.as_str() == s)
+            .cloned()
+            .with_context(|| {
+                format!(
+                    "{} has no sheet {s:?}; sheets: {}",
+                    path.display(),
+                    names.join(", ")
+                )
+            })?,
+        None => names
+            .first()
+            .cloned()
+            .with_context(|| format!("{} has no sheets", path.display()))?,
+    };
+    let range = wb
+        .worksheet_range(&name)
+        .with_context(|| format!("reading sheet {name:?} of {}", path.display()))?;
+    let mut rows = range
+        .rows()
+        .map(|r| r.iter().map(cell_text).collect::<Vec<_>>())
+        .filter(|r| r.iter().any(Option::is_some));
+    let header = rows
+        .next()
+        .with_context(|| format!("sheet {name:?} of {} is empty", path.display()))?;
+    let columns = header_names(&header);
+    let n = columns.len();
+    let rows = rows
+        .take(limit.unwrap_or(usize::MAX))
+        .map(|mut r| {
+            r.resize(n, None);
+            r
+        })
+        .collect();
+    Ok(Table {
+        columns,
+        rows,
+        unreadable: Vec::new(),
+    })
+}
+
+fn header_names(header: &[Option<String>]) -> Vec<String> {
+    let mut seen = std::collections::HashMap::<String, usize>::new();
+    header
+        .iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let base = h.clone().unwrap_or_else(|| format!("column_{}", i + 1));
+            let k = seen.entry(base.clone()).or_insert(0);
+            *k += 1;
+            if *k == 1 { base } else { format!("{base}_{k}") }
+        })
+        .collect()
+}
+
+/// A cell as text: whole numbers without `.0`, dates as ISO 8601, blanks and errors as `None`.
+fn cell_text(c: &calamine::Data) -> Option<String> {
+    use calamine::Data;
+    let s = match c {
+        Data::Empty | Data::Error(_) => return None,
+        Data::String(s) => s.trim().to_string(),
+        Data::Int(i) => i.to_string(),
+        Data::Float(f) if f.fract() == 0.0 && f.abs() < 1e15 => format!("{}", *f as i64),
+        Data::Float(f) => f.to_string(),
+        Data::Bool(b) => b.to_string(),
+        Data::DateTime(d) if d.is_duration() => d.as_f64().to_string(),
+        Data::DateTime(d) => excel_serial_iso(d.as_f64()),
+        Data::DateTimeIso(s) | Data::DurationIso(s) => s.clone(),
+    };
+    Some(s).filter(|s| !s.is_empty())
+}
+
+/// An Excel serial date (days since 1899-12-30) as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`.
+fn excel_serial_iso(serial: f64) -> String {
+    let days = serial.floor() as i64;
+    let secs = ((serial - serial.floor()) * 86_400.0).round() as i64;
+    // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
+    let z = days - 25_569 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    if secs == 0 {
+        format!("{y:04}-{m:02}-{d:02}")
+    } else {
+        let secs = secs.min(86_399);
+        format!(
+            "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}",
+            secs / 3600,
+            secs / 60 % 60,
+            secs % 60
+        )
     }
 }
 
@@ -300,9 +579,89 @@ mod tests {
     }
 
     #[test]
-    fn unknown_extension_is_rejected() {
+    fn excel_serial_dates_become_iso() {
+        assert_eq!(excel_serial_iso(45_658.0), "2025-01-01");
+        assert_eq!(excel_serial_iso(45_658.5), "2025-01-01T12:00:00");
+        assert_eq!(excel_serial_iso(1.0), "1899-12-31");
+    }
+
+    #[test]
+    fn header_names_fill_blanks_and_dedupe() {
+        let h = [Some("a".into()), None, Some("a".into())];
+        assert_eq!(header_names(&h), vec!["a", "column_2", "a_2"]);
+    }
+
+    #[test]
+    fn spreadsheet_extensions_are_detected() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("x.xlsx");
+        std::fs::write(&p, "x").unwrap();
+        assert_eq!(
+            Source::detect(&p).unwrap(),
+            Source::Excel {
+                path: p.clone(),
+                sheet: None
+            }
+        );
+        assert!(
+            read(&Source::detect(&p).unwrap(), None).is_err(),
+            "not a real workbook"
+        );
+    }
+
+    #[test]
+    fn remote_specs_parse_google_sheets_and_notion() {
+        let root = Path::new("/p");
+        let s = Source::parse_remote(
+            "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/edit#gid=42",
+            root,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            s,
+            Source::GoogleSheet {
+                spreadsheet_id: "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789".into(),
+                gid: Some("42".into()),
+                snapshot: root
+                    .join("sources/google-sheets/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-42.csv"),
+            }
+        );
+        let id = "0123456789abcdef0123456789abcdef";
+        for spec in [
+            format!("notion:{id}"),
+            "notion:01234567-89ab-cdef-0123-456789abcdef".to_string(),
+            format!(
+                "https://www.notion.so/team/Reading-list-{id}?v=fedcba9876543210fedcba9876543210"
+            ),
+        ] {
+            match Source::parse_remote(&spec, root).unwrap() {
+                Some(Source::Notion { database_id, .. }) => assert_eq!(database_id, id, "{spec}"),
+                other => panic!("{spec}: {other:?}"),
+            }
+        }
+        let again = Source::parse_remote(&s.remote_spec().unwrap(), root)
+            .unwrap()
+            .unwrap();
+        assert_eq!(again, s, "the spec round-trips");
+        assert!(Source::parse_remote("notion:nothing", root).is_err());
+        assert_eq!(Source::parse_remote("/data/x.csv", root).unwrap(), None);
+    }
+
+    #[test]
+    fn unpulled_remote_source_says_to_pull() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Source::parse_remote("notion:0123456789abcdef0123456789abcdef", dir.path())
+            .unwrap()
+            .unwrap();
+        let e = read(&s, None).err().unwrap().to_string();
+        assert!(e.contains("not been pulled"), "{e}");
+    }
+
+    #[test]
+    fn unknown_extension_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("x.docx");
         std::fs::write(&p, "x").unwrap();
         assert!(Source::detect(&p).is_err());
     }

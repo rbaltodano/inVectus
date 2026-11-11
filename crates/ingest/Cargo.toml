@@ -13,6 +13,10 @@ serde.workspace = true
 serde_json.workspace = true
 duckdb.workspace = true
 arrow-array.workspace = true
+calamine.workspace = true
+ureq.workspace = true
+sha2.workspace = true
+hex.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

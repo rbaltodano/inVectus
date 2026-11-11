@@ -56,6 +56,16 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     setReimported(`${fmt(r.inserted)} new, ${fmt(r.updated)} changed, ${fmt(r.unchanged)} unchanged${out.index_error ? ` · indexing did not start: ${out.index_error}` : ""}${!out.job && out.plan.missing.length ? " · indexing needs a model (below)" : ""}`);
     await ctx.refresh();
   });
+  // A pulled source (Google Sheet, Notion): pull it again (network job), then re-import.
+  const [pullJob, setPullJob] = useState<number>();
+  const pullAndUpdate = () => run(async () => { const j = await api.pullSource(c.source_spec!); jobs.started(j); setPullJob(j.id); });
+  const pulled = pullJob !== undefined ? [jobs.current, ...jobs.history].find((j) => j?.id === pullJob && !isRunning(j)) : undefined;
+  useEffect(() => {
+    if (!pulled) return;
+    setPullJob(undefined);
+    if (pulled.state === "completed") reimport();
+    else if (pulled.state === "failed") setReimported(`Pull failed: ${pulled.error ?? "unknown error"}`);
+  }, [pulled?.id, pulled?.state]);
   const overall: IndexStatus | "none" = indexingHere ? "indexing" : tables.length === 0 ? "none" : tables.some((t) => t.index_status === "indexed" || t.index_status === "imported") ? (tables.every((t) => t.index_status === "indexed" || t.index_status === "imported") ? "indexed" : "outdated") : tables[0].index_status;
 
   return <section className="collection-row stack gap" data-open={open} aria-labelledby={`c-${c.collection_id}`}>
@@ -88,7 +98,9 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
 
     {tables.length === 0 && plan && plan.models.length > 0 && <button type="button" className="btn primary start" disabled={busy || isRunning(job)} onClick={() => index(null, true)}>Index and map with {plan.models.join(", ")}</button>}
     <div className="collection-actions">
-      {c.reimportable && <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={reimport}
+      {c.source_spec && <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={pullAndUpdate}
+        title={project.network_enabled ? "Pulls the latest copy (network), then imports it with the same columns and roles" : "Turn on this project's network switch (Settings → Network) to pull"}>{pullJob !== undefined ? "Pulling…" : "Pull and update"}</button>}
+      {c.reimportable && !c.source_spec && <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={reimport}
         title={c.source_path ? `Imports ${c.source_path} again with the same columns and roles` : undefined}>Update from source</button>}
       {tables.some((t) => t.origin === "embedded") && <button type="button" className="text-btn" onClick={() => { const t = tables[0]; ctx.pickTable(t); ctx.go({ view: "project", tab: "search" }); }}>Search this collection</button>}
       <button type="button" className="text-btn push" aria-expanded={open} onClick={onToggle}>{open ? "Hide details" : "Details"}</button>
@@ -125,7 +137,7 @@ function Details({ ctx, c, tables }: { ctx: Ctx; c: Collection; tables: TableInf
 
   const cal = (t: TableInfo, llm: boolean) => start(() => api.startCalibration({ collection: c.collection_id, space: t.space_id }, llm));
   return <div className="details stack gap">
-    <p className="dim small">Source files are not watched. “Update from source” imports the same file or folder again and re-indexes only what changed.</p>
+    <p className="dim small">Source files are not watched. “Update from source” imports the same file or folder again and re-indexes only what changed; “Pull and update” first fetches the latest copy of a Google Sheet or Notion database.</p>
     {tables.map((t) => <div key={t.space_id} className="stack gap-s">
       <span className="section">{t.model_key} · {t.space_id.slice(0, 12)}</span>
       <div className="detail-line">

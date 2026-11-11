@@ -6,6 +6,7 @@ pub mod job;
 pub mod multimodal;
 pub mod net;
 pub mod project;
+pub mod secrets;
 pub mod store;
 
 pub use embedder::{Embedding, TextEmbedder, TokenOffsets};

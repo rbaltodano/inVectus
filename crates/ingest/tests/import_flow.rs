@@ -148,3 +148,90 @@ fn long_text_is_chunked_and_folder_sources_import() {
     let r = import(&mut p, &req).unwrap();
     assert_eq!((r.unchanged, r.chunks_written), (2, 0));
 }
+
+/// tests/fixtures/sample.xlsx (written by make_sample_xlsx.py): sheet "Ideas" has a blank first
+/// row, an empty trailing header cell, a blank row, a text id with a leading zero, dates and decimals.
+fn sample_xlsx() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.xlsx")
+}
+
+#[test]
+fn excel_sheets_read_as_text_columns_and_import() {
+    use invectus_ingest::source::{excel_sheets, read};
+    let path = sample_xlsx();
+    assert_eq!(excel_sheets(&path).unwrap(), vec!["Ideas", "Notes"]);
+
+    let first = read(&Source::detect(&path).unwrap(), None).unwrap();
+    assert_eq!(
+        first.columns,
+        vec!["id", "title", "abstract", "published", "score"],
+        "an empty trailing header cell is not a column"
+    );
+    assert_eq!(first.rows.len(), 2, "blank rows are skipped");
+    let r0 = &first.rows[0];
+    assert_eq!(r0[0].as_deref(), Some("007"), "text ids keep leading zeros");
+    assert_eq!(r0[2].as_deref(), Some("Text, with a comma"));
+    assert_eq!(
+        r0[3].as_deref(),
+        Some("2025-01-01"),
+        "date cells become ISO dates"
+    );
+    assert_eq!(r0[4].as_deref(), Some("3"), "whole numbers have no .0");
+    let r1 = &first.rows[1];
+    assert_eq!(r1[0].as_deref(), Some("8"));
+    assert_eq!(r1[2].as_deref(), Some("Line one\nline two"));
+    assert_eq!(r1[3].as_deref(), Some("2025-01-01T12:00:00"));
+    assert_eq!(r1[4].as_deref(), Some("2.5"));
+
+    let notes = Source::Excel {
+        path: path.clone(),
+        sheet: Some("Notes".into()),
+    };
+    let t = read(&notes, None).unwrap();
+    assert_eq!(t.columns, vec!["name", "note"]);
+    assert_eq!(t.rows[0][0].as_deref(), Some("Other sheet"));
+    let missing = Source::Excel {
+        path: path.clone(),
+        sheet: Some("Nope".into()),
+    };
+    assert!(
+        read(&missing, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("Ideas, Notes")
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = Project::create(&dir.path().join("p")).unwrap();
+    let req = ImportRequest {
+        collection: "ideas".into(),
+        source: Source::detect(&path).unwrap(),
+        mapping: Mapping {
+            id: Some("id".into()),
+            title: Some("title".into()),
+            text: vec!["abstract".into()],
+            date: Some("published".into()),
+            url: None,
+            role: RoleMapping::Constant {
+                role: Role::Neutral,
+            },
+            meta: MetaMapping::All,
+        },
+        chunking: ChunkPolicy::default(),
+        limit: None,
+    };
+    let r = import(&mut p, &req).unwrap();
+    assert_eq!((r.inserted, r.skipped.len()), (2, 0));
+    assert_eq!(
+        import(&mut p, &req).unwrap().unchanged,
+        2,
+        "re-import is idempotent"
+    );
+    let stored: Source =
+        serde_json::from_value(p.store.collection("ideas").unwrap().unwrap().source).unwrap();
+    assert_eq!(
+        stored, req.source,
+        "the sheet choice is kept for re-imports"
+    );
+}

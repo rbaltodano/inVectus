@@ -23,3 +23,5 @@
 .collection-source-mark { display: flex; flex: none; color: var(--ink); }
 .collection-source .push { margin-left: auto; flex: none; }
 .add-data-actions { gap: 16px; align-items: center; }
+.source-private { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); color: var(--dim); }
+.source-private .strong { color: var(--ink); }

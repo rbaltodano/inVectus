@@ -255,7 +255,7 @@ const ENTRIES: Entry[] = [
   { id: "excel", name: "Excel", category: "tables", code: "DS-01", icon: FileSpreadsheet, badge: "Built in", keywords: "xlsx xls ods spreadsheet OpenDocument file local",
     desc: "Import .xlsx, .xls or .ods files from Add to Dataset and pick the sheet. Read on this computer." },
   { id: "sheets", name: "Google Sheets", category: "tables", code: "DS-02", icon: Sheet, badge: "Link import", keywords: "spreadsheet link shared google",
-    desc: "Paste a sheet's link in Add to Dataset. The sheet must be shared as “Anyone with the link”; no sign-in." },
+    desc: "Paste the link of a sheet shared as “Anyone with the link”. For a private sheet, download it as .xlsx and import the file; nothing is shared." },
   { id: "airtable", name: "Airtable", category: "tables", code: "DS-03", token: token("airtable"), keywords: "" },
   { id: "notion", name: "Notion", category: "docs", code: "DS-04", token: token("notion"), keywords: "" },
   { id: "zotero", name: "Zotero", category: "research", code: "DS-05", token: token("zotero"), keywords: "" },

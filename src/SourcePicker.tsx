@@ -24,7 +24,7 @@ export const SOURCES: Source[] = [
   { id: "file", name: "File", hint: "CSV, TSV, Parquet or Excel" },
   { id: "folder", name: "Folder", hint: "A folder of .txt or .md files" },
   { id: "sheets", name: "Google Sheets", hint: "A sheet shared by link", placeholder: "https://docs.google.com/spreadsheets/d/…", mark: "sheets",
-    help: "The sheet must be shared as “Anyone with the link”. No sign-in." },
+    help: "Paste a link to a sheet shared as “Anyone with the link”." },
   { id: "notion", name: "Notion", hint: "A database", token: "notion", placeholder: "https://www.notion.so/…", mark: "notion",
     help: "The database must be shared with your Notion integration." },
   { id: "zotero", name: "Zotero", hint: "A library or collection", token: "zotero", placeholder: "zotero.org link, or zotero:library", mark: "zotero",
@@ -90,6 +90,12 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
     <p className="dim small">More sources: <button type="button" className="text-btn" onClick={onIntegrations}>connect them on Integrations</button></p>
     {error && <p className="err small" role="alert">{error}</p>}
     {editing && <SourceDialog source={editing} current={chosen(editing.id)?.path}
+      onUseFile={async () => {
+        // A private sheet: import a downloaded copy instead, as a file (nothing is shared).
+        const path = await pickSource(false).catch((e) => { setError(String(e)); return null; });
+        if (path) onChange([...picked.filter((p) => p.id !== "file" && p.id !== editing.id), { id: "file", path }]);
+        setEditing(undefined);
+      }}
       onSave={(path) => { set(editing.id, path); setEditing(undefined); }}
       onReplace={async () => {
         const path = await pickSource(editing.id === "folder").catch((e) => { setError(String(e)); return null; });
@@ -102,8 +108,8 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
 }
 
 /** A link source's link (or a chosen file's change and remove), in a dialog. */
-function SourceDialog({ source, current, onSave, onReplace, onRemove, onClose }: {
-  source: Source; current?: string; onSave: (path: string) => void; onReplace: () => void; onRemove: () => void; onClose: () => void;
+function SourceDialog({ source, current, onSave, onReplace, onRemove, onClose, onUseFile }: {
+  source: Source; current?: string; onSave: (path: string) => void; onReplace: () => void; onRemove: () => void; onClose: () => void; onUseFile: () => void;
 }) {
   const [value, setValue] = useState(current ?? "");
   const box = useRef<HTMLDivElement>(null);
@@ -128,6 +134,10 @@ function SourceDialog({ source, current, onSave, onReplace, onRemove, onClose }:
             <input autoFocus value={value} spellCheck={false} placeholder={source.placeholder} onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) onSave(value.trim()); }} /></label>
           {source.help && <p className="dim small">{source.help}</p>}
+          {source.id === "sheets" && <div className="source-private small">
+            <span className="strong">Private sheet?</span> Keep it private: in Google Sheets choose File → Download → Microsoft Excel (.xlsx), then import that file.
+            <button type="button" className="text-btn" onClick={onUseFile}>Choose the downloaded file</button>
+          </div>}
           <p className="dim small">Pulling uses the network once; everything after runs offline on the local copy.</p>
         </>}
       <div className="row integration-modal-actions">

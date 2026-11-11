@@ -37,8 +37,8 @@ export default function NewProject({ onCreated, onIntegrations, onAgents, blocke
   useEffect(() => {
     if (!inTauri) return;
     api.defaultDir().then(setDir).catch(() => undefined);
-    api.connectStatus().then(setClients).catch(() => undefined);
-    api.llms().then((ls) => setLlm(ls.find((l) => l.default) ?? ls[0])).catch(() => undefined);
+    api.connectStatus().then((c) => setClients(c ?? [])).catch(() => undefined);
+    api.llms().then((ls) => setLlm(ls?.find((l) => l.default) ?? ls?.[0])).catch(() => undefined);
   }, []);
 
   const agents = useMemo<AgentOption[]>(() => [

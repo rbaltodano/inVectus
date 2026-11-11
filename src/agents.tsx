@@ -50,9 +50,11 @@ export function useActiveAgent(project?: string): AgentActivity | undefined {
 
 /** The second line of a project's sidebar row: an active agent's latest call, else a quiet
  * fact about the project; and the agent's mark for the right edge of the row. */
-export function ProjectRowDetail({ root, fallback }: { root: string; fallback: string }) {
+export function ProjectRowDetail({ root, fallback, working }: { root: string; fallback: string; working?: string }) {
   const a = useActiveAgent(root);
   const now = useNow();
+  // A job running in this project (an import, a pull, indexing) shimmers like an agent's call.
+  if (!a && working) return <span className="project-row-sub agent" title={working}><Shimmer text={working} /></span>;
   if (!a) return <span className="project-row-sub">{fallback}</span>;
   const text = describe(a);
   return <span className="project-row-sub agent" title={`${clientName(a.client)} ${text} · ${ago(a.at_ms, now)}`}>

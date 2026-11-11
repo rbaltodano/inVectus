@@ -220,7 +220,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
                 onClick={(e) => { if (e.detail <= 1 && !(e.target as HTMLElement).closest("input, button, a")) void openRecent(r); }}>
                 <div className="project-row-text">
                   <ProjectName name={r.name} className="sidebar-project-name" disabled={opening || (switchingBlocked && job?.project !== r.root)} onSelect={() => void openRecent(r)} onSave={(name) => renameProject(r.root, name)} />
-                  <ProjectRowDetail root={r.root} fallback={rowFact(r, job)} />
+                  <ProjectRowDetail root={r.root} fallback={rowFact(r, job)} working={job && job.project === r.root && isRunning(job) ? jobLine(job) : undefined} />
                 </div>
                 {commandHeld && index < 9 ? <kbd className="project-shortcut" aria-hidden="true">{index + 1}</kbd> : <ProjectRowAgent root={r.root} />}
               </div>
@@ -253,6 +253,17 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     </main>
     <StarPrompt />
   </div>;
+}
+
+/** A running job in a few words for the sidebar: "Pulling Google Sheet…", "Indexing papers…".
+ *  Long identifiers (sheet ids, paths, links) are left out. */
+function jobLine(job: JobInfo): string {
+  const words: string[] = [];
+  for (const w of job.label.split(/\s+/)) {
+    if (w.length > 20 || /[/\\:]/.test(w)) break;
+    words.push(w);
+  }
+  return `${(words.join(" ") || job.label).replace(/[.…]+$/, "")}…`;
 }
 
 /** The quiet second line of a sidebar project: a running job, else its size. */

@@ -3,7 +3,8 @@
 // read locally; Google Sheets (shared by link), Notion, Zotero and Airtable (tokens in the
 // keychain) are pulled into a project only when the person asks, then imported offline
 // (docs/integrations.md).
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { DOT_FLICKER_MS } from "../dot-flicker";
 import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbulb, ListChecks, Map as MapIcon, NotebookText, Search, Sheet, Table2, X, type LucideIcon } from "lucide-react";
 import { api, inTauri } from "../api";
 import { ErrorLine, useAction } from "../App";
@@ -11,6 +12,15 @@ import Link from "../Link";
 
 type Category = "tables" | "docs" | "research" | "forms" | "product" | "databases";
 type StatusFilter = "all" | "connected" | "token" | "ready";
+interface Filter { category: Category | "all"; status: StatusFilter }
+
+/** Flicker delay for an element by its place on the diagonal from the top left of `root`
+ *  (about one card step per 55 ms), with a little scatter like the data circle's squares. */
+function diagonalDelay(el: HTMLElement, root: HTMLElement): number {
+  const r = el.getBoundingClientRect(), o = root.getBoundingClientRect();
+  const steps = (r.left - o.left) / 290 + (r.top - o.top) / 190;
+  return Math.round(Math.min(900, steps * 55 + Math.random() * 25));
+}
 
 const CATEGORIES: { id: Category; label: string; short: string; about: string }[] = [
   { id: "tables", label: "Spreadsheets & tables", short: "Tables", about: "Rows from files and table tools; each row becomes an item." },
@@ -46,11 +56,52 @@ export default function Integrations() {
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   const text = (e: Entry) => [e.name, e.desc, e.keywords, e.token?.about, e.token?.use, e.token?.keywords, CATEGORIES.find((c) => c.id === e.category)!.label].join(" ").toLowerCase();
   const connected = (e: Entry) => !!e.token && !!tokens?.[e.token.id];
-  const statusOk = (e: Entry) => status === "all" || (status === "connected" ? connected(e) : status === "token" ? !!e.token && !connected(e) : !e.token && !e.muted);
-  const searched = ENTRIES.filter((e) => terms.every((w) => text(e).includes(w)) && statusOk(e));
-  const visible = searched.filter((e) => category === "all" || e.category === category);
+  const statusOk = (e: Entry, st: StatusFilter) => st === "all" || (st === "connected" ? connected(e) : st === "token" ? !!e.token && !connected(e) : !e.token && !e.muted);
+  const matching = (f: Filter) => ENTRIES.filter((e) => terms.every((w) => text(e).includes(w)) && statusOk(e, f.status) && (f.category === "all" || e.category === f.category));
+  // The chips show the choice at once; the cards follow after the leaving ones flicker out.
+  const [applied, setApplied] = useState<Filter>({ category: "all", status: "all" });
+  const [round, setRound] = useState(0);
+  const searched = matching({ category: "all", status });
+  const visible = matching(applied);
   const filtered = !!query.trim() || category !== "all" || status !== "all";
-  const clear = () => { setQuery(""); setCategory("all"); setStatus("all"); };
+  const results = useRef<HTMLDivElement>(null);
+  const pending = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(pending.current), []);
+
+  /** Change a filter: cards that will not stay flicker out along the diagonal from the top left,
+   *  then the results flicker in along the same diagonal. */
+  const applyFilter = (next: Filter) => {
+    setCategory(next.category); setStatus(next.status);
+    clearTimeout(pending.current);
+    const root = results.current;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const show = () => { setApplied(next); setRound((r) => r + 1); };
+    if (!root || reduced) { show(); return; }
+    const keep = new Set(matching(next).map((e) => e.code));
+    const keepSections = new Set(matching(next).map((e) => e.category));
+    const leaving = [
+      ...[...root.querySelectorAll<HTMLElement>(".integration-card")].filter((el) => !keep.has(el.dataset.label ?? "")),
+      ...[...root.querySelectorAll<HTMLElement>(".integrations-section")].filter((el) => !keepSections.has(el.dataset.category as Category))
+        .map((el) => el.querySelector<HTMLElement>(".integrations-section-head")!),
+    ];
+    let last = 0;
+    for (const el of leaving) {
+      const d = diagonalDelay(el, root);
+      last = Math.max(last, d);
+      el.style.setProperty("--out-delay", `${d}ms`);
+      el.classList.add("is-leaving");
+    }
+    pending.current = setTimeout(show, leaving.length ? last + DOT_FLICKER_MS + 40 : 0);
+  };
+  const clear = () => { setQuery(""); applyFilter({ category: "all", status: "all" }); };
+
+  // Arriving cards and section titles take their flicker delay from their place on the diagonal.
+  useLayoutEffect(() => {
+    const root = results.current;
+    if (!root) return;
+    root.querySelectorAll<HTMLElement>(".integration-card, .integrations-section-head")
+      .forEach((el) => el.style.setProperty("--card-delay", `${diagonalDelay(el, root)}ms`));
+  }, [round]);
 
   const card = (e: Entry) => e.token
     ? <TokenCard key={e.id} it={e.token} label={e.code} from={tokens === undefined ? undefined : tokens[e.token.id] ?? null}
@@ -83,21 +134,23 @@ export default function Integrations() {
           {[{ id: "all" as const, short: "All", label: "All categories" }, ...CATEGORIES].map((c) => {
             const n = c.id === "all" ? searched.length : searched.filter((e) => e.category === c.id).length;
             return <button key={c.id} type="button" className="integrations-chip" aria-pressed={category === c.id} disabled={n === 0 && category !== c.id}
-              title={c.label} onClick={() => setCategory(c.id)}>{c.short}<span className="integrations-chip-count">{n}</span></button>;
+              title={c.label} onClick={() => applyFilter({ category: c.id, status })}>{c.short}<span className="integrations-chip-count">{n}</span></button>;
           })}
         </div>
         <label className="integrations-status" data-active={status !== "all"}>
           <span>Status</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+          <select value={status} onChange={(e) => applyFilter({ category, status: e.target.value as StatusFilter })}>
             {STATUS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
           </select>
         </label>
       </div>
       {visible.length === 0 && <p className="integrations-empty" role="status">No integrations match these filters. <button type="button" className="text-btn" onClick={clear}>Clear filters</button></p>}
+      <div ref={results} className="integrations-results">
       {CATEGORIES.map((c) => {
         const items = visible.filter((e) => e.category === c.id);
         if (items.length === 0) return null;
-        return <section key={c.id} aria-labelledby={`i-${c.id}`} className="integrations-section">
+        // A new round remounts the results, so every result flickers in again.
+        return <section key={`${c.id}-${round}`} data-category={c.id} aria-labelledby={`i-${c.id}`} className="integrations-section">
           <div className="integrations-section-head">
             <h2 id={`i-${c.id}`}>{c.label}<span className="integrations-section-count">{String(items.length).padStart(2, "0")}</span></h2>
             <p>{c.about}</p>
@@ -105,6 +158,7 @@ export default function Integrations() {
           <ul className="integration-grid">{items.map(card)}</ul>
         </section>;
       })}
+      </div>
       {!filtered && <p className="integrations-footnote">Online sources are pulled once, when you ask, and then work offline. Outside checks run only when a project's network switch is on.</p>}
     </div>
   </div>;

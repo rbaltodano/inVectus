@@ -1051,8 +1051,23 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .integration-card:nth-child(7n+6) { --card-delay: 150ms; }
 .integration-card:nth-child(7n+7) { --card-delay: 75ms; }
 .integration-card { --flicker-delay: var(--card-delay, 0ms); }
+/* Filtering: leaving cards and section titles flicker out (the levels in reverse, ending
+   hidden); results then flicker in. Delays come from the diagonal (Integrations.tsx). */
+@keyframes item-flicker-out {
+  0% { opacity: 1; }
+  16.67% { opacity: .5; }
+  33.33% { opacity: .7; }
+  50% { opacity: .35; }
+  66.67% { opacity: .85; }
+  83.33% { opacity: .2; }
+  100% { opacity: 0; }
+}
+.integrations-results { display: flex; flex-direction: column; gap: 40px; }
+.integrations-section-head { animation: item-flicker 150ms step-end backwards; animation-delay: var(--card-delay, 0ms); }
+.integration-card.is-leaving, .integrations-section-head.is-leaving { animation: item-flicker-out 150ms step-end forwards; animation-delay: var(--out-delay, 0ms); pointer-events: none; }
+.integration-card.is-leaving .integration-badge, .integration-card.is-leaving .integration-connect { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .integration-card, .integration-card .integration-badge, .integration-card .integration-connect { animation: none; }
+  .integration-card, .integration-card .integration-badge, .integration-card .integration-connect, .integrations-section-head { animation: none; }
 }
 .integrations-agents .connect-more > summary { padding: 4px 0 0; }
 .integrations-agents .connect-more[open] > summary { margin-bottom: 16px; }

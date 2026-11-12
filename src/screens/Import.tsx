@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { api, fmt, inTauri, pickSource, ROLES, type ImportForm, type ImportOutcome, type Preview, type Role, type SourceInfo } from "../api";
-import { guessMapping } from "../column-guess";
+import { columnDefaults } from "../source-defaults";
 import { baseName, collectionIdFromPath } from "../paths";
 import { ErrorLine, useAction, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
@@ -62,10 +62,10 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const look = (p: string, tab: string | null = null) => run(async () => {
     const s = await api.inspect(p, tab);
     setPath(p); setSource(s); setSheet(s.sheet); setPreview(undefined); setOutcome(undefined);
-    const guessed = guessMapping(s.columns);
-    const url = guessed.url && guessed.url !== guessed.id ? guessed.url : "";
-    setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url });
-    setTextCols(guessed.text ? [guessed.text] : []);
+    // Known integrations open with their own columns set; others are guessed from names.
+    const guessed = columnDefaults(s.kind, s.columns, s.sample);
+    setMap({ text: guessed.searched[0] ?? "", title: guessed.title, id: guessed.id, date: guessed.date, url: guessed.url });
+    setTextCols(guessed.searched);
     // Roles are not guessed: what counts as demand or coverage depends on the collection. The
     // table's roles line asks for them (and warns when every row would be neutral).
     tableShownFor.current = undefined;

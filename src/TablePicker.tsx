@@ -8,6 +8,8 @@ import { createPortal } from "react-dom";
 import { fmt, type Role } from "./api";
 import { DOT_DELAY_MS } from "./dot-flicker";
 import Select from "./Select";
+import { proseColumns } from "./table-columns";
+export { proseColumns };
 import "./TablePicker.css";
 
 export type ColumnRole = "searched" | "title" | "id" | "date" | "url" | "roles" | "kept";
@@ -32,16 +34,6 @@ export function assign(col: string, role: ColumnRole, a: Assignment): Assignment
   if (role === "searched") next.searched = [...next.searched, col];
   else if (role !== "kept") next[role] = col;
   return next;
-}
-
-/** Columns that hold prose (not numbers, years, IDs or links), for "search every text column". */
-export function proseColumns(columns: string[], sample: (string | null)[][]): string[] {
-  return columns.filter((_, i) => {
-    const vals = sample.map((r) => (r[i] ?? "").trim()).filter(Boolean);
-    if (!vals.length) return false;
-    const prose = vals.filter((v) => /[A-Za-z]{3,}/.test(v) && /\s/.test(v) && !/^https?:\/\//.test(v) && !/^10\.\d{4,}\//.test(v));
-    return prose.length / vals.length >= 0.6;
-  });
 }
 
 export interface RolesSummary { column: string; rules: { value: string; role: Role }[]; defaultRole: Role }

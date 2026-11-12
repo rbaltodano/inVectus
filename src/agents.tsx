@@ -62,12 +62,12 @@ export function ProjectRowDetail({ root, fallback, working }: { root: string; fa
   </span>;
 }
 
-/** Terminal-style thinking shimmer. Like a CLI, it repaints on a tick (120 ms, about 8 fps):
+/** Terminal-style thinking shimmer. Like a CLI, it repaints on a tick (85 ms, about 12 fps):
  * the bright head moves exactly one letter per tick, and every letter snaps to one of three
  * brightness levels by its distance from the head, with nothing in between, so the band jumps
  * letter by letter instead of gliding like a CSS gradient. A short pause follows each pass.
  * Screen readers get the plain text; reduced motion shows it still. */
-const TICK_MS = 120;
+const TICK_MS = 85;
 const LEVELS = [1, 0.65]; // distance 0, 1 from the head; further letters use BASE
 const BASE = 0.35;
 const PAUSE_TICKS = 6;

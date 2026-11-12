@@ -92,7 +92,15 @@ been checked through them. Paths for those files on Windows and Linux are unveri
 4. Save it for review, record your decision, and optionally check outside sources.
 
 <details>
-<summary>More screenshots: search, source items, collections, and saved decisions</summary>
+<summary>More screenshots: home, gaps, search, source items, collections, setup and settings</summary>
+
+### Pick up where you left off
+
+![Home with the open project's readiness, map and top-ranked gaps](docs/screenshots/home.png)
+
+### Browse ranked gaps
+
+![Ranked gap list with types and review state beside the collection map](docs/screenshots/ophthalmology-gaps.png)
 
 ### Inspect a source item
 
@@ -105,6 +113,18 @@ been checked through them. Paths for those files on Windows and Linux are unveri
 ### Inspect collection readiness
 
 ![The indexed medical collection, role counts and calibration details](docs/screenshots/ophthalmology-collections.png)
+
+### Start a project
+
+![New project setup: a local destination and optional data import](docs/screenshots/new-project.png)
+
+### Bring in data from other tools
+
+![Integrations for spreadsheets, notes, research libraries, forms and databases](docs/screenshots/integrations.png)
+
+### Keep the network off
+
+![Project network settings with offline mode on and outside sources for gap checks](docs/screenshots/settings.png)
 
 ### Keep a decision log
 

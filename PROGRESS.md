@@ -3067,3 +3067,13 @@ real accounts were used.
 
 - Added `docs/case-study.md`: decisions, measurements and limits, drawn from this ledger (no new
   measurements). Linked from the README's Engineering choices section.
+
+## 2026-11-12 — Refreshed screenshots
+
+- Recaptured native macOS window screenshots from a release build of commit 7c76d45 (bundled
+  frontend), Ophthalmology Research project (5,000 papers), network off. Replaced the
+  ophthalmology search, gap, item and collections images; added home, gaps list, new project,
+  integrations and settings (network) images to the README. EXIF/XMP chunks stripped.
+- Saved still uses the older Urban Futures demo capture: the ophthalmology project has no saved
+  gaps or decisions, and none were created for the screenshot. The Agents page was not captured
+  because it shows the signed-in account email.

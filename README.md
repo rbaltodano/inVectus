@@ -174,6 +174,7 @@ inputs. The desktop serializes background jobs and supports cancellation.
 
 Read the [architecture and tradeoffs](docs/architecture.md) for the data flow and
 boundaries between the crates.
+The [case study](docs/case-study.md) covers the decisions, measurements and limits in more depth.
 
 ## Status and limitations
 

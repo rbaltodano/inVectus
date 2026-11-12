@@ -3062,3 +3062,8 @@ real accounts were used.
   which holds text now opens with its prose columns searched (it opened with Import disabled).
 - Not checked against the real services: Notion, Zotero, Airtable, Typeform, Tally, Canny,
   Productboard (no tokens on this Mac); Google Sheets private sheets (real redirect to sign-in).
+
+## 2026-11-12 — Case study
+
+- Added `docs/case-study.md`: decisions, measurements and limits, drawn from this ledger (no new
+  measurements). Linked from the README's Engineering choices section.

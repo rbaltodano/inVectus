@@ -181,6 +181,10 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
   const [filter, setFilter] = useState("");
   const flicker = useFlickerDelays();
   const noun = source.list!.noun;
+  // Like the table view: the bottom fades while more of the list is below.
+  const rows = useRef<HTMLUListElement>(null);
+  const [more, setMore] = useState(false);
+  const measure = () => { const el = rows.current; setMore(!!el && el.scrollTop < el.scrollHeight - el.clientHeight - 2); };
 
   const load = async () => {
     setBusy(true); setError(undefined);
@@ -195,6 +199,7 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
     const q = filter.trim().toLowerCase();
     return (items ?? []).filter((c) => !q || `${c.title} ${c.group ?? ""}`.toLowerCase().includes(q));
   }, [items, filter]);
+  useEffect(measure, [shown]);
   const groups = new Set((items ?? []).map((c) => c.group ?? "")).size > 1 && source.id !== "productboard";
 
   if (!items) return <div className="choice-ask">
@@ -219,7 +224,7 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
     </div>
     {items.length === 0 && <p className="dim small">{source.name} lists no {noun} for this token.
       {source.id === "notion" && " Share a database with your integration in Notion (••• → Connections), then ask again."}</p>}
-    {shown.length > 0 && <ul className="choice-rows" role="listbox" aria-label={`${source.name} ${noun}`}>
+    {shown.length > 0 && <ul ref={rows} onScroll={measure} className={`choice-rows${more ? " fb" : ""}`} role="listbox" aria-label={`${source.name} ${noun}`}>
       {shown.map((c, i) => {
         const on = c.spec === value;
         const head = groups && c.group !== shown[i - 1]?.group;

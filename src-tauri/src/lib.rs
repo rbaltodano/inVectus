@@ -169,6 +169,14 @@ async fn integration_tokens() -> CmdResult<std::collections::BTreeMap<String, Op
     .await
 }
 
+/// What a connected integration can pull, listed on the person's request (network).
+#[tauri::command]
+async fn source_choices(
+    integration: String,
+) -> CmdResult<Vec<invectus_ingest::remote::browse::Choice>> {
+    off_thread(move || orch::source_choices(&integration)).await
+}
+
 /// Save an integration's token in the system keychain; an empty token removes it.
 #[tauri::command]
 async fn set_integration_token(name: String, token: String) -> CmdResult<Option<String>> {
@@ -732,6 +740,7 @@ pub fn run() {
             inspect_source,
             pull_source,
             integration_tokens,
+            source_choices,
             set_verify_sources,
             set_integration_token,
             set_network,

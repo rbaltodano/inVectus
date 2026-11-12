@@ -14,6 +14,7 @@
 //!   customer notes or features ([`productboard`]).
 
 mod airtable;
+pub mod browse;
 mod canny;
 mod productboard;
 mod tally;

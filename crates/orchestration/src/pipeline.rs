@@ -511,6 +511,25 @@ pub fn integration_tokens() -> OpResult<std::collections::BTreeMap<String, Optio
         .collect()
 }
 
+/// What a connected integration can pull (Notion databases, Zotero collections, Airtable
+/// tables, forms, boards), so the person picks one instead of pasting a link. Network: called
+/// only when the person asks for the list; offline mode refuses it.
+pub fn source_choices(integration: &str) -> OpResult<Vec<invectus_ingest::remote::browse::Choice>> {
+    let token = if integration == "productboard" {
+        None
+    } else {
+        Some(
+            invectus_core::secrets::get(integration)
+                .map_err(err)?
+                .ok_or_else(|| {
+                    format!("{integration} is not connected: add its token in Integrations")
+                })?,
+        )
+    };
+    invectus_ingest::remote::browse::choices(integration, token.as_deref().unwrap_or(""))
+        .map_err(err)
+}
+
 /// Save (or, with an empty token, remove) an integration's token in the keychain. Nothing is
 /// sent to the service here; the token is first used by a pull.
 pub fn set_integration_token(name: &str, token: &str) -> OpResult<Option<&'static str>> {

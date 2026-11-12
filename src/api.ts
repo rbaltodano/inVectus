@@ -147,6 +147,18 @@ export interface Verification {
 /** The collection and vector space the screens work on. */
 export interface TableRef { project?: string; collection: string; space: string | null }
 
+/** Something an integration can pull (a Notion database, a Zotero collection, a form…). */
+export interface SourceChoice {
+  /** What a pull takes (`notion:<id>`, `zotero:collection:<KEY>`, …). */
+  spec: string; title: string;
+  /** The library, base or workspace it belongs to. */
+  group?: string; count?: number;
+  /** Last edit, RFC 3339. */
+  edited?: string;
+  /** Part of the item above it (a sub-collection, a view of a table). */
+  nested?: boolean;
+}
+
 export const api = {
   version: () => invoke<string>("engine_version"),
   defaultDir: () => invoke<string>("default_projects_dir"),
@@ -162,6 +174,8 @@ export const api = {
   pullSource: (spec: string) => invoke<JobInfo>("pull_source", { spec }),
   /** Token-based integrations (notion, zotero, airtable, typeform, tally, canny) → token source, or null. */
   integrationTokens: () => invoke<Record<string, string | null>>("integration_tokens"),
+  /** Network, on the person's request: what a connected integration can pull. */
+  sourceChoices: (integration: string) => invoke<SourceChoice[]>("source_choices", { integration }),
   setIntegrationToken: (name: string, token: string) => invoke<string | null>("set_integration_token", { name, token }),
   preview: (form: ImportForm, rows = 20) => invoke<Preview>("preview_import", { form, rows }),
   importCollection: (form: ImportForm) => invoke<ImportOutcome>("import_collection", { form }),

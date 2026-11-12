@@ -3021,3 +3021,24 @@ real accounts were used.
 - Dev mode: `scripts/live.sh` (hot reload) and a Live tag beside the logo.
 - Checks: `tsc`, 46 UI tests; screens checked in headless Chrome with a stand-in backend.
   Not tested end to end: a real multi-source import, a real "Import all rows".
+
+## 2026-11-12 — Integrations: column defaults, and choosing what to pull
+
+- Import opens each integration with its own columns set (`src/source-defaults.ts`): Zotero,
+  Canny, Productboard notes and features, Typeform and Tally (open-text answers only), Notion and
+  Airtable (fixed id/date/url columns, the rest guessed by name). Roles are still not guessed.
+- Source dialogs list what a connected token can pull, so no link is needed: Notion databases
+  (`POST /search`), Zotero libraries and collections (tree order, item counts, group libraries),
+  Airtable tables and their other views (needs the `schema.bases:read` scope; first 40 bases),
+  Typeform and Tally forms, Canny boards (plus all boards), Productboard notes or features
+  (no network). `invectus_ingest::remote::browse`, Tauri `source_choices`. Each choice is the
+  same spec a pull takes; tests parse every listed spec back. The link field stays as a fallback.
+- Checks: 4 Rust tests on recorded answer shapes, 5 defaults tests, 51 UI tests, `tsc`, clippy.
+  Not tested against the real services: answer shapes follow each API's documentation.
+
+### Decisions and spec conflicts to review
+
+- Listing is a network call outside the per-project switch (SPEC §7.7: the switch enables
+  connectors). It runs only when the person clicks "Show my … " in the dialog (New project has
+  no project yet to hold a switch), offline mode refuses it, and nothing is pulled. The pull
+  itself still needs the project's switch. Owner to confirm, or gate listing on the switch too.

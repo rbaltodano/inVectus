@@ -47,8 +47,13 @@
 .choice-row.on::before { animation: item-flicker 150ms step-end both; }
 .choice-row.leaving::before { animation: item-flicker-out 150ms step-end both; }
 @media (prefers-reduced-motion: reduce) { .choice-row.on::before { animation: none; } .choice-row.leaving::before { display: none; } }
-.choice-dot { width: 12px; height: 12px; flex: none; border: 1px solid var(--line-2); border-radius: 50%; }
-.choice-row[aria-selected="true"] .choice-dot { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 3px, transparent 3.5px); }
+.choice-box { width: 14px; height: 14px; flex: none; display: grid; place-items: center; border: 1px solid var(--line-2); border-radius: 3px; color: var(--bg); }
+.choice-row.on .choice-box { border-color: var(--accent); background: var(--accent); }
+/* Included in a picked library, collection, table or "All boards": shown ticked, not pickable. */
+.choice-row.covered { cursor: default; }
+.choice-row.covered > :not(.choice-box) { opacity: .45; }
+.choice-row.covered .choice-box { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.choice-row.covered:hover { background: none; }
 .choice-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .choice-meta { flex: none; font-size: 11.5px; color: var(--dim); }
 .choice-row[aria-selected="true"] .choice-meta { color: var(--accent); }

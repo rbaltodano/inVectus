@@ -7,6 +7,7 @@ import { Check, FileSpreadsheet, FolderOpen, RotateCw } from "lucide-react";
 import { api, inTauri, pickSource, type SourceChoice } from "./api";
 import { Shimmer } from "./agents";
 import { ago } from "./ago";
+import { coveredBy, toggle } from "./choice-cover";
 import { useFlickerDelays } from "./dot-flicker";
 import IntegrationIcon, { type IntegrationMarkName } from "./IntegrationIcon";
 import { baseName } from "./paths";
@@ -64,8 +65,19 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
 
   const shown = SOURCES.filter((s) => !s.token || !!tokens[s.token]);
   const chosen = (id: SourceId) => picked.find((p) => p.id === id);
+  const chosenAll = (id: SourceId) => picked.filter((p) => p.id === id);
   const set = (id: SourceId, path: string | null, label?: string) =>
     onChange(path ? [...picked.filter((p) => p.id !== id), { id, path, label }] : picked.filter((p) => p.id !== id));
+  // A listed integration can bring several of its databases, collections or forms.
+  const setAll = (id: SourceId, items: { path: string; label?: string }[]) =>
+    onChange([...picked.filter((p) => p.id !== id), ...items.map((i) => ({ id, ...i }))]);
+  const hint = (s: Source) => {
+    const all = chosenAll(s.id);
+    if (all.length === 0) return s.hint;
+    if (all.length > 1) return s.id === "productboard" ? "Notes and features" : `${all.length} ${s.list?.noun ?? "sources"}`;
+    const p = all[0];
+    return isLocal(s.id) ? baseName(p.path) : p.label ?? shortLink(p.path);
+  };
 
   const choose = async (s: Source) => {
     if (disabled) return;
@@ -86,7 +98,7 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
               : s.id === "file" ? <FileSpreadsheet size={20} strokeWidth={1.5} aria-hidden="true" />
               : <FolderOpen size={20} strokeWidth={1.5} aria-hidden="true" />}</span>
             <span className="np-source-name">{s.name}</span>
-            <span className="np-source-hint">{p ? (isLocal(s.id) ? baseName(p.path) : p.label ?? shortLink(p.path)) : s.hint}</span>
+            <span className="np-source-hint">{hint(s)}</span>
             {p && <span className="np-source-check" aria-label="Will be imported"><Check size={12} strokeWidth={2.5} aria-hidden="true" /></span>}
           </button>
         </li>;
@@ -94,7 +106,7 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
     </ul>
     <p className="dim small">More sources: <button type="button" className="text-btn" onClick={onIntegrations}>connect them on Integrations</button></p>
     {error && <p className="err small" role="alert">{error}</p>}
-    {editing && <SourceDialog source={editing} current={chosen(editing.id)?.path}
+    {editing && <SourceDialog source={editing} current={chosen(editing.id)?.path} currentAll={chosenAll(editing.id)}
       onUseFile={async () => {
         // A private sheet: import a downloaded copy instead, as a file (nothing is shared).
         const path = await pickSource(false).catch((e) => { setError(String(e)); return null; });
@@ -102,6 +114,7 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
         setEditing(undefined);
       }}
       onSave={(path, label) => { set(editing.id, path, label); setEditing(undefined); }}
+      onSaveAll={(items) => { setAll(editing.id, items); setEditing(undefined); }}
       onReplace={async () => {
         const path = await pickSource(editing.id === "folder").catch((e) => { setError(String(e)); return null; });
         if (path) set(editing.id, path);
@@ -113,13 +126,18 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
 }
 
 /** A link source's link (or a chosen file's change and remove), in a dialog. */
-function SourceDialog({ source, current, onSave, onReplace, onRemove, onClose, onUseFile }: {
-  source: Source; current?: string; onSave: (path: string, label?: string) => void; onReplace: () => void; onRemove: () => void; onClose: () => void; onUseFile: () => void;
+function SourceDialog({ source, current, currentAll, onSave, onSaveAll, onReplace, onRemove, onClose, onUseFile }: {
+  source: Source; current?: string; currentAll: Picked[]; onSave: (path: string, label?: string) => void; onSaveAll: (items: { path: string; label?: string }[]) => void; onReplace: () => void; onRemove: () => void; onClose: () => void; onUseFile: () => void;
 }) {
-  const [value, setValue] = useState(current ?? "");
-  // The chosen list entry's name, while the value is its spec (the link field then stays empty).
-  const [label, setLabel] = useState<string>();
-  const [linkOpen, setLinkOpen] = useState(!source.list || (!!current && /^https?:|\.(so|com|org|site)\//.test(current)));
+  const looksLink = (p: string) => /^https?:|\.(so|com|org|site)\//.test(p);
+  // Listed sources: any number of picks (the list), plus an optional pasted link.
+  const [picks, setPicks] = useState<SourceChoice[]>(source.list
+    ? currentAll.filter((p) => !looksLink(p.path)).map((p) => listed.get(source.id)?.find((c) => c.spec === p.path) ?? { spec: p.path, title: p.label ?? p.path })
+    : []);
+  const [value, setValue] = useState(source.list ? currentAll.find((p) => looksLink(p.path))?.path ?? "" : current ?? "");
+  const [linkOpen, setLinkOpen] = useState(!source.list || !!value);
+  const saveList = () => onSaveAll([...picks.map((c) => ({ path: c.spec, label: c.title })), ...(value.trim() ? [{ path: value.trim() }] : [])]);
+  const count = picks.length + (value.trim() ? 1 : 0);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } };
@@ -138,15 +156,15 @@ function SourceDialog({ source, current, onSave, onReplace, onRemove, onClose, o
       {local
         ? <p className="small">Chosen: <span className="mono">{current}</span></p>
         : <>
-          {source.list && <ChoiceList source={source} value={value} onPick={(c) => { setValue(c.spec); setLabel(c.title); }}
-            onOpen={(c) => onSave(c.spec, c.title)} onListed={(n) => setLinkOpen(n === 0)} />}
+          {source.list && <ChoiceList source={source} picks={picks} onToggle={(c) => setPicks((p) => toggle(c, p))}
+            onListed={(n) => setLinkOpen(n === 0 || !!value)} />}
           {source.list && !linkOpen
             ? <button type="button" className="text-btn source-link-toggle flicker-in" onClick={() => setLinkOpen(true)}>Paste a link instead</button>
             : <>
               <label className="small">{source.list ? "Or paste a link" : `${source.name} link`}
-                <input autoFocus={!source.list} value={label ? "" : value} spellCheck={false} placeholder={source.placeholder}
-                  onChange={(e) => { setValue(e.target.value); setLabel(undefined); }}
-                  onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) onSave(value.trim(), label); }} /></label>
+                <input autoFocus={!source.list} value={value} spellCheck={false} placeholder={source.placeholder}
+                  onChange={(e) => setValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) { if (source.list) saveList(); else onSave(value.trim()); } }} /></label>
               {source.help && <p className="dim small">{source.help}</p>}
             </>}
           {source.id === "sheets" && <div className="source-private small">
@@ -156,11 +174,14 @@ function SourceDialog({ source, current, onSave, onReplace, onRemove, onClose, o
           <p className="dim small">Pulling uses the network once; everything after runs offline on the local copy.</p>
         </>}
       <div className="row integration-modal-actions">
-        {current && <button type="button" className="text-btn push-right" onClick={onRemove}>Remove</button>}
+        {current && <button type="button" className="text-btn push-right" onClick={onRemove}>{currentAll.length > 1 ? "Remove all" : "Remove"}</button>}
         <button type="button" className="btn" onClick={onClose}>Cancel</button>
         {local
           ? <button type="button" className="btn primary" onClick={onReplace}>Choose another</button>
-          : <button type="button" className="btn primary" disabled={!value.trim()} onClick={() => onSave(value.trim(), label)}>{current ? "Save" : "Add"}</button>}
+          : source.list
+            ? <button type="button" className="btn primary" disabled={count === 0 && currentAll.length === 0} onClick={saveList}>
+              {currentAll.length ? "Save" : count > 1 ? `Add ${count}` : "Add"}</button>
+            : <button type="button" className="btn primary" disabled={!value.trim()} onClick={() => onSave(value.trim())}>{current ? "Save" : "Add"}</button>}
       </div>
     </div>
   </div>, document.body);
@@ -171,8 +192,8 @@ const listed = new Map<SourceId, SourceChoice[]>();
 
 /** What a connected integration can pull. Asking the service is the person's click (network);
     Productboard's two choices are known without asking. */
-function ChoiceList({ source, value, onPick, onOpen, onListed }: {
-  source: Source; value: string; onPick: (c: SourceChoice) => void; onOpen: (c: SourceChoice) => void; onListed: (n: number) => void;
+function ChoiceList({ source, picks, onToggle, onListed }: {
+  source: Source; picks: SourceChoice[]; onToggle: (c: SourceChoice) => void; onListed: (n: number) => void;
 }) {
   const local = source.id === "productboard";
   const [items, setItems] = useState<SourceChoice[] | undefined>(listed.get(source.id));
@@ -185,15 +206,18 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
   const rows = useRef<HTMLUListElement>(null);
   const [more, setMore] = useState(false);
   const measure = () => { const el = rows.current; setMore(!!el && el.scrollTop < el.scrollHeight - el.clientHeight - 2); };
-  // The chosen row's light and outline flicker in; the one it replaces flickers out.
-  const [leaving, setLeaving] = useState<string>();
-  const last = useRef(value);
+  // A picked row's light and outline flicker in; an unpicked one's flicker out.
+  const on = useMemo(() => new Set(picks.map((c) => c.spec)), [picks]);
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const last = useRef(on);
   useEffect(() => {
-    if (last.current === value) return;
-    setLeaving(last.current); last.current = value;
-    const t = setTimeout(() => setLeaving(undefined), 160);
+    const gone = [...last.current].filter((s) => !on.has(s));
+    last.current = on;
+    if (!gone.length) return;
+    setLeaving(new Set(gone));
+    const t = setTimeout(() => setLeaving(new Set()), 160);
     return () => clearTimeout(t);
-  }, [value]);
+  }, [on]);
 
   const load = async () => {
     setBusy(true); setError(undefined);
@@ -233,15 +257,17 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
     </div>
     {items.length === 0 && <p className="dim small">{source.name} lists no {noun} for this token.
       {source.id === "notion" && " Share a database with your integration in Notion (••• → Connections), then ask again."}</p>}
-    {shown.length > 0 && <ul ref={rows} onScroll={measure} className={`choice-rows${more ? " fb" : ""}`} role="listbox" aria-label={`${source.name} ${noun}`}>
+    {shown.length > 0 && <ul ref={rows} onScroll={measure} className={`choice-rows${more ? " fb" : ""}`} role="listbox" aria-multiselectable="true" aria-label={`${source.name} ${noun}`}>
       {shown.map((c, i) => {
-        const on = c.spec === value;
+        const picked = on.has(c.spec);
+        const by = picked ? undefined : coveredBy(c, picks);
         const head = groups && c.group !== shown[i - 1]?.group;
         return <li key={c.spec} role="presentation">
           {head && <div className="choice-group eyebrow flicker-in" style={flicker(`group:${c.group}`)}>{c.group}</div>}
-          <button type="button" role="option" aria-selected={on} className={`choice-row flicker-in${c.nested ? " nested" : ""}${on ? " on" : ""}${c.spec === leaving ? " leaving" : ""}`} style={flicker(c.spec)}
-            onClick={() => onPick(c)} onDoubleClick={() => onOpen(c)}>
-            <span className="choice-dot" aria-hidden="true" />
+          <button type="button" role="option" aria-selected={picked} aria-disabled={!!by} title={by ? `Included in ${by.title}` : undefined}
+            className={`choice-row flicker-in${c.nested ? " nested" : ""}${picked ? " on" : ""}${by ? " covered" : ""}${leaving.has(c.spec) ? " leaving" : ""}`} style={flicker(c.spec)}
+            onClick={() => { if (!by) onToggle(c); }}>
+            <span className="choice-box" aria-hidden="true">{(picked || by) && <Check size={10} strokeWidth={3} />}</span>
             <span className="choice-title" title={c.title}>{c.nested && !filter.trim() ? c.title.split(" / ").pop() : c.title}</span>
             <span className="choice-meta">{!groups && c.group && source.id === "productboard" ? c.group : meta(c)}</span>
           </button>

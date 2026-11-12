@@ -2999,3 +2999,25 @@ real accounts were used.
   release app bundle built and launched on this Mac (arm64). Screens checked in headless
   Chrome with a stand-in backend and the real gapmap-full map export; the native window was
   not captured (no screen-recording permission). Not run: full workspace tests, clippy, CI.
+
+## 2026-11-11 — UI iteration (agent pill, dropdowns, Import table view)
+
+- Project header and New project: an agent pill (connected agents and the on-device model,
+  "Add new agent" opens the connect screen); names and marks flicker on change. Offline pill
+  removed from the header (the network switch stays in Settings).
+- All native dropdowns replaced by one custom Select with per-option detail.
+- Cards (integrations, agents, sources) flicker in after random per-card delays
+  (`useFlickerDelays`). Shimmer tick 120 → 85 ms (also on invectus.app).
+- Sidebar: finished jobs leave; a project's running job shimmers under its name.
+  Home gap cards show on hover only. Pulls show the indexing bar (a percentage only where the
+  source reports a total: Notion pages).
+- Import table view (`TablePicker`): everything is imported; "Choose searched columns" picks the
+  import's text columns (several are joined, already supported by the engine); labels set title,
+  ID, date, URL or the roles column. Before importing it shows: the roles (reviews and
+  meta-analyses guessed as coverage, other publication types as demand, only when the column
+  looks like publication types), rows the preview would skip for empty text, empty or repeated
+  IDs in the sample, and updates to an existing collection. With every row neutral the button
+  says "without roles". Counts come from the preview of the first rows (estimates).
+- Dev mode: `scripts/live.sh` (hot reload) and a Live tag beside the logo.
+- Checks: `tsc`, 46 UI tests; screens checked in headless Chrome with a stand-in backend.
+  Not tested end to end: a real multi-source import, a real "Import all rows".

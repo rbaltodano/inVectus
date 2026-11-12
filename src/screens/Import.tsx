@@ -10,6 +10,19 @@ import Select from "../Select";
 import TablePicker, { type Assignment } from "../TablePicker";
 import IndexingIndicator from "../IndexingIndicator";
 
+/** Rules for a publication-type column: reviews and meta-analyses are coverage, the rest demand.
+ *  Only when the column's first rows look like publication types; otherwise nothing is guessed. */
+function guessRoleRules(columns: string[], sample: (string | null)[][], column: string): { rules: Rule[]; default: Role } | undefined {
+  const i = columns.indexOf(column);
+  if (i < 0) return undefined;
+  const values = new Set<string>();
+  sample.forEach((row) => (row[i] ?? "").replace(/^\[|\]$/g, "").split(/[;,]/).forEach((v) => { const t = v.trim().replace(/^'|'$/g, ""); if (t) values.add(t); }));
+  const cover = [...values].filter((v) => /review|meta-analysis|guideline/i.test(v));
+  const study = [...values].some((v) => /journal article|trial|study|case report|clinical/i.test(v));
+  if (!cover.length || !study) return undefined;
+  return { rules: cover.map((value) => ({ value, role: "coverage" as Role })), default: "demand" };
+}
+
 const ROLE_NOTE: Record<Role, string> = { neutral: "Neither asks nor answers; context only", demand: "Asks for or needs something", coverage: "Answers a need" };
 
 const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
@@ -49,6 +62,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const [roleColumn, setRoleColumn] = useState("");
   const [rules, setRules] = useState<Rule[]>([]);
   const [counts, setCounts] = useState<Record<Role, number>>();
+  // The preview over the first rows: how many it read and why it would skip some.
+  const [previewStats, setPreviewStats] = useState<{ read: number; skipped: Record<string, number> }>();
   const [preview, setPreview] = useState<Preview>();
   const [outcome, setOutcome] = useState<ImportOutcome>();
   const report = outcome?.report;
@@ -61,8 +76,13 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     const s = await api.inspect(p, tab);
     setPath(p); setSource(s); setSheet(s.sheet); setPreview(undefined); setOutcome(undefined);
     const guessed = guessMapping(s.columns);
-    setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url: guessed.url });
+    const url = guessed.url && guessed.url !== guessed.id ? guessed.url : "";
+    setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url });
     setTextCols(guessed.text ? [guessed.text] : []);
+    // Publication types: reviews and meta-analyses cover a topic (coverage); other studies are
+    // demand. Shown in the table's roles line, where it can be changed.
+    const guessedRules = guessRoleRules(s.columns, s.sample, guessed.role);
+    if (guessedRules) { setRules(guessedRules.rules); setDefaultRole(guessedRules.default); }
     tableShownFor.current = undefined;
     setRoleColumn(guessed.role);
     if (!collectionRef.current) setCollection(s.remote ? s.kind.replace("_", "-") : collectionIdFromPath(p));
@@ -127,7 +147,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
         const c = { demand: 0, coverage: 0, neutral: 0 };
         p.rows.forEach((r) => { c[r.role] += 1; });
         setCounts(c);
-      }).catch(() => setCounts(undefined));
+        setPreviewStats({ read: p.rows.length + Object.values(p.skipped).reduce((n, v) => n + v, 0), skipped: p.skipped });
+      }).catch(() => { setCounts(undefined); setPreviewStats(undefined); });
     }, 300);
     return () => clearTimeout(timer);
   }, [step, formKey]);
@@ -235,7 +256,11 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
 
     {step === 1 && source && !folder && tableOpen && <TablePicker fileName={sourceName} columns={source.columns} sample={source.sample} rowsRead={source.rows_read}
       assignment={assignment} onChange={setAssignment} busy={busy}
-      onImport={() => { setTableOpen(false); void doImport(); }} onList={() => setTableOpen(false)} onCancel={() => { setTableOpen(false); setStep(0); }} />}
+      roles={{ column: roleColumn, rules: rules.filter((r) => r.value.trim()), defaultRole }} counts={counts} stats={previewStats}
+      existing={exists ? collection : undefined}
+      onImport={() => { setTableOpen(false); void doImport(); }} onList={() => setTableOpen(false)}
+      onRoles={() => { setTableOpen(false); setTimeout(() => document.getElementById("roles")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
+      onCancel={() => { setTableOpen(false); setStep(0); }} />}
     {step === 1 && source && <>
       <div className="panel row wrap">
         <span className="strong">{sourceName}</span>

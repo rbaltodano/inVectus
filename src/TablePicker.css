@@ -1,0 +1,36 @@
+/* Import's table view (TablePicker.tsx). */
+.tp-backdrop { z-index: 60; }
+.tp-modal { width: min(1080px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--line-2); border-radius: 16px;
+  box-shadow: 0 30px 80px var(--shadow); overflow: hidden; }
+.tp-head { padding: 18px 22px 14px; }
+.tp-head h3 { font-size: 17px; font-weight: 500; margin: 4px 0; }
+.tp-wrap { padding: 4px 22px 18px; min-height: 0; display: flex; }
+/* One solid table, rounded as a whole, with thin lines; edges fade where more continues. */
+.tp-scroll { flex: 1; overflow: auto; max-height: 52vh; border: 1px solid var(--line); border-radius: 14px; background: var(--line); scrollbar-width: none; }
+.tp-scroll::-webkit-scrollbar { display: none; }
+.tp-scroll.fb { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent); }
+.tp-scroll.fr { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 110px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 110px), transparent); }
+.tp-scroll.fb.fr {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent), linear-gradient(to right, #000 calc(100% - 110px), transparent); -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent), linear-gradient(to right, #000 calc(100% - 110px), transparent); mask-composite: intersect; }
+.tp-grid { display: grid; gap: 1px; width: max-content; min-width: 100%; }
+.tp-row { display: contents; }
+.tp-c { position: relative; height: 40px; padding: 0 12px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; background: var(--bg); cursor: default; }
+.tp-fill { position: absolute; inset: 0; background: var(--surface); pointer-events: none; }
+.tp-fill.on { opacity: 1; } .tp-fill.off { opacity: 0; }
+.tp-fill.in { animation: item-flicker 150ms step-end both; }
+.tp-fill.out { animation: item-flicker-out 150ms step-end both; }
+.tp-v { position: relative; z-index: 1; color: rgba(var(--ink-rgb), .5); overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; animation: item-flicker 150ms step-end backwards; }
+.tp-h { position: sticky; top: 0; z-index: 3; height: 58px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; }
+.tp-rn { position: sticky; left: 0; z-index: 2; justify-content: center; padding: 0; background: var(--surface); }
+.tp-rn .tp-v { font: 11px var(--mono); }
+.tp-h.tp-rn { z-index: 4; align-items: center; }
+.tp-modal .tp-c.hover::after { content: ""; position: absolute; inset: 0; background: rgba(235, 231, 224, .08); pointer-events: none; }
+.tp-c:not(.tp-rn) { cursor: pointer; }
+.tp-label { position: relative; z-index: 2; font: 500 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--dim); }
+.tp-label .select-trigger { gap: 4px; }
+.tp-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.tp-strong { color: var(--ink); }
+.tp-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .tp-v, .tp-fill.in, .tp-fill.out { animation: none; } .tp-fill.out { opacity: 0; } }
+.tp-label.s { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }

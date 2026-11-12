@@ -7,6 +7,7 @@ import { ErrorLine, useAction, type Ctx } from "../App";
 import { JobProgress, isRunning, useJobs } from "../jobs";
 import { DownloadConsent } from "../models";
 import Select from "../Select";
+import TablePicker, { type Assignment } from "../TablePicker";
 import IndexingIndicator from "../IndexingIndicator";
 
 const ROLE_NOTE: Record<Role, string> = { neutral: "Neither asks nor answers; context only", demand: "Asks for or needs something", coverage: "Answers a need" };
@@ -28,6 +29,11 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   const [sheet, setSheet] = useState<string | null>(null);
   const [pullJob, setPullJob] = useState<number>();
   const [map, setMap] = useState({ text: "", title: "", id: "", date: "", url: "" });
+  // Searched columns: the import's text columns, joined (the table view can pick several).
+  const [textCols, setTextCols] = useState<string[]>([]);
+  // The table view opens once per source when the Columns step starts.
+  const [tableOpen, setTableOpen] = useState(false);
+  const tableShownFor = useRef<string>();
   const [chunk, setChunk] = useState({ mode: "tokens", tokens: 448, tokenOverlap: 48, chars: 2000, overlap: 200 });
   // Token chunking needs BGE-small's tokenizer. Before it is installed (a first run), fall back
   // to character chunks so the import still works; indexing then asks to download the model.
@@ -56,6 +62,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     setPath(p); setSource(s); setSheet(s.sheet); setPreview(undefined); setOutcome(undefined);
     const guessed = guessMapping(s.columns);
     setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url: guessed.url });
+    setTextCols(guessed.text ? [guessed.text] : []);
+    tableShownFor.current = undefined;
     setRoleColumn(guessed.role);
     if (!collectionRef.current) setCollection(s.remote ? s.kind.replace("_", "-") : collectionIdFromPath(p));
     // An online source that was never pulled stays on the Source step, where Pull is.
@@ -90,8 +98,17 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
   }, [step]);
 
   const folder = source?.kind === "folder";
+  useEffect(() => {
+    if (step === 1 && source && !folder && tableShownFor.current !== path) { tableShownFor.current = path; setTableOpen(true); }
+  }, [step, source, folder, path]);
+  const assignment: Assignment = { searched: textCols, title: map.title, id: map.id, date: map.date, url: map.url, roles: roleColumn };
+  const setAssignment = (a: Assignment) => {
+    setTextCols(a.searched);
+    setMap({ text: a.searched[0] ?? "", title: a.title, id: a.id, date: a.date, url: a.url });
+    setRoleColumn(a.roles);
+  };
   const form: ImportForm = {
-    collection, source_path: path, text: [map.text], title: map.title, id: map.id, date: map.date, url: map.url,
+    collection, source_path: path, text: textCols, title: map.title, id: map.id, date: map.date, url: map.url,
     role: defaultRole, role_column: rules.length ? roleColumn : "",
     role_rules: rules.filter((r) => r.value.trim()).map((r) => `${r.value.trim()}=${r.role}`).join(","),
     chunk_tokenizer: chunk.mode === "tokens" ? "bge-small-en-v1.5" : null,
@@ -216,6 +233,9 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
       </div>
     </>}
 
+    {step === 1 && source && !folder && tableOpen && <TablePicker fileName={sourceName} columns={source.columns} sample={source.sample} rowsRead={source.rows_read}
+      assignment={assignment} onChange={setAssignment} busy={busy}
+      onImport={() => { setTableOpen(false); void doImport(); }} onList={() => setTableOpen(false)} onCancel={() => { setTableOpen(false); setStep(0); }} />}
     {step === 1 && source && <>
       <div className="panel row wrap">
         <span className="strong">{sourceName}</span>
@@ -225,14 +245,15 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
       {folder
         ? <section className="panel"><h2>Columns</h2><p className="muted">Each file becomes one item: its name is the title, its text is searched, and its path is kept.</p></section>
         : <section aria-labelledby="cols" className="panel stack">
-          <h2 id="cols">Which column holds what?</h2>
-          <div className="muted small">Only Text is required. We guessed from the column names.</div>
+          <div className="row"><h2 id="cols">Which column holds what?</h2>
+            <button type="button" className="btn push" onClick={() => setTableOpen(true)}>Open table view</button></div>
+          <div className="muted small">Only Text is required. We guessed from the column names.{textCols.length > 1 ? ` Searched: ${textCols.join(", ")} (set in the table view).` : ""}</div>
           <div className="scroll-x">
             <div className="mapping">
               <div className="th">Field</div><div className="th">Column</div><div className="th sample">Sample from row 1</div>
               {([["text", "Text"], ["title", "Title"], ["id", "ID"], ["date", "Date"], ["url", "URL"]] as const).map(([k, label]) => <Fragment key={k}>
                 <label htmlFor={`m-${k}`} className="strong">{label}{k === "text" && <span className="req"> *</span>}</label>
-                <Select id={`m-${k}`} menuTitle={`${label} column`} value={map[k]} onChange={(next) => setMap({ ...map, [k]: next })}
+                <Select id={`m-${k}`} menuTitle={`${label} column`} value={map[k]} onChange={(next) => { setMap({ ...map, [k]: next }); if (k === "text") setTextCols(next ? [next] : []); }}
                   options={[{ value: "", label: k === "text" ? "Choose a column" : k === "id" ? "Row number" : "None", note: k === "id" ? "Number items by their row" : k === "text" ? undefined : "Leave this field empty" },
                     ...source.columns.map((c) => ({ value: c, label: c, note: sampleOf(c) ? `Row 1: ${sampleOf(c)}` : "Row 1 is empty" }))]} />
                 <div className="muted clip sample">{map[k] ? sampleOf(map[k]) || "(empty)" : ""}</div>
@@ -298,7 +319,7 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
       </section>
       <div className="row end">
         <button type="button" className="btn" onClick={() => setStep(0)}>Back</button>
-        <button type="button" className="btn primary" disabled={(!folder && !map.text) || busy} onClick={doPreview}>{busy ? "Reading…" : "Preview"}</button>
+        <button type="button" className="btn primary" disabled={(!folder && !textCols.length) || busy} onClick={doPreview}>{busy ? "Reading…" : "Preview"}</button>
       </div>
     </>}
 

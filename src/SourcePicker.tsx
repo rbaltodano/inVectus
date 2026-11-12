@@ -141,7 +141,7 @@ function SourceDialog({ source, current, onSave, onReplace, onRemove, onClose, o
           {source.list && <ChoiceList source={source} value={value} onPick={(c) => { setValue(c.spec); setLabel(c.title); }}
             onOpen={(c) => onSave(c.spec, c.title)} onListed={(n) => setLinkOpen(n === 0)} />}
           {source.list && !linkOpen
-            ? <button type="button" className="text-btn source-link-toggle" onClick={() => setLinkOpen(true)}>Paste a link instead</button>
+            ? <button type="button" className="text-btn source-link-toggle flicker-in" onClick={() => setLinkOpen(true)}>Paste a link instead</button>
             : <>
               <label className="small">{source.list ? "Or paste a link" : `${source.name} link`}
                 <input autoFocus={!source.list} value={label ? "" : value} spellCheck={false} placeholder={source.placeholder}
@@ -185,6 +185,15 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
   const rows = useRef<HTMLUListElement>(null);
   const [more, setMore] = useState(false);
   const measure = () => { const el = rows.current; setMore(!!el && el.scrollTop < el.scrollHeight - el.clientHeight - 2); };
+  // The chosen row's light and outline flicker in; the one it replaces flickers out.
+  const [leaving, setLeaving] = useState<string>();
+  const last = useRef(value);
+  useEffect(() => {
+    if (last.current === value) return;
+    setLeaving(last.current); last.current = value;
+    const t = setTimeout(() => setLeaving(undefined), 160);
+    return () => clearTimeout(t);
+  }, [value]);
 
   const load = async () => {
     setBusy(true); setError(undefined);
@@ -202,7 +211,7 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
   useEffect(measure, [shown]);
   const groups = new Set((items ?? []).map((c) => c.group ?? "")).size > 1 && source.id !== "productboard";
 
-  if (!items) return <div className="choice-ask">
+  if (!items) return <div className="choice-ask flicker-in" style={flicker("ask")}>
     {busy ? <Shimmer text={`Asking ${source.name} for your ${noun}…`} />
       : <><button type="button" className="btn" onClick={() => void load()}>Show my {source.name} {noun}</button>
         <span className="dim small">Asks {source.name} once for the {noun} your token can read.</span></>}
@@ -217,9 +226,9 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
   return <div className="choice-list stack gap-s">
     <div className="choice-list-head">
       {items.length > 8
-        ? <input className="choice-filter" value={filter} autoFocus spellCheck={false} placeholder={`Filter ${items.length} ${noun}`} onChange={(e) => setFilter(e.target.value)} />
-        : <span className="eyebrow">{items.length ? `Your ${noun}` : `No ${noun}`}</span>}
-      {!local && <button type="button" className="icon-btn choice-refresh" title="Ask again" aria-label={`Ask ${source.name} again`} disabled={busy} onClick={() => void load()}>
+        ? <input className="choice-filter flicker-in" style={flicker("filter")} value={filter} autoFocus spellCheck={false} placeholder={`Filter ${items.length} ${noun}`} onChange={(e) => setFilter(e.target.value)} />
+        : <span className="eyebrow flicker-in" style={flicker("head")}>{items.length ? `Your ${noun}` : `No ${noun}`}</span>}
+      {!local && <button type="button" className="choice-refresh flicker-in" style={flicker("refresh")} title="Ask again" aria-label={`Ask ${source.name} again`} disabled={busy} onClick={() => void load()}>
         <RotateCw size={13} strokeWidth={1.75} aria-hidden="true" /></button>}
     </div>
     {items.length === 0 && <p className="dim small">{source.name} lists no {noun} for this token.
@@ -229,8 +238,8 @@ function ChoiceList({ source, value, onPick, onOpen, onListed }: {
         const on = c.spec === value;
         const head = groups && c.group !== shown[i - 1]?.group;
         return <li key={c.spec} role="presentation">
-          {head && <div className="choice-group eyebrow">{c.group}</div>}
-          <button type="button" role="option" aria-selected={on} className={`choice-row flicker-in${c.nested ? " nested" : ""}`} style={flicker(c.spec)}
+          {head && <div className="choice-group eyebrow flicker-in" style={flicker(`group:${c.group}`)}>{c.group}</div>}
+          <button type="button" role="option" aria-selected={on} className={`choice-row flicker-in${c.nested ? " nested" : ""}${on ? " on" : ""}${c.spec === leaving ? " leaving" : ""}`} style={flicker(c.spec)}
             onClick={() => onPick(c)} onDoubleClick={() => onOpen(c)}>
             <span className="choice-dot" aria-hidden="true" />
             <span className="choice-title" title={c.title}>{c.nested && !filter.trim() ? c.title.split(" / ").pop() : c.title}</span>

@@ -3013,9 +3013,9 @@ real accounts were used.
   source reports a total: Notion pages).
 - Import table view (`TablePicker`): everything is imported; "Choose searched columns" picks the
   import's text columns (several are joined, already supported by the engine); labels set title,
-  ID, date, URL or the roles column. Before importing it shows: the roles (reviews and
-  meta-analyses guessed as coverage, other publication types as demand, only when the column
-  looks like publication types), rows the preview would skip for empty text, empty or repeated
+  ID, date, URL or the roles column. Before importing it shows: the roles (never guessed: the
+  owner chose to ask, since demand and coverage depend on the collection), rows the preview
+  would skip for empty text, empty or repeated
   IDs in the sample, and updates to an existing collection. With every row neutral the button
   says "without roles". Counts come from the preview of the first rows (estimates).
 - Dev mode: `scripts/live.sh` (hot reload) and a Live tag beside the logo.

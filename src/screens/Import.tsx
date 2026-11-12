@@ -10,19 +10,6 @@ import Select from "../Select";
 import TablePicker, { type Assignment } from "../TablePicker";
 import IndexingIndicator from "../IndexingIndicator";
 
-/** Rules for a publication-type column: reviews and meta-analyses are coverage, the rest demand.
- *  Only when the column's first rows look like publication types; otherwise nothing is guessed. */
-function guessRoleRules(columns: string[], sample: (string | null)[][], column: string): { rules: Rule[]; default: Role } | undefined {
-  const i = columns.indexOf(column);
-  if (i < 0) return undefined;
-  const values = new Set<string>();
-  sample.forEach((row) => (row[i] ?? "").replace(/^\[|\]$/g, "").split(/[;,]/).forEach((v) => { const t = v.trim().replace(/^'|'$/g, ""); if (t) values.add(t); }));
-  const cover = [...values].filter((v) => /review|meta-analysis|guideline/i.test(v));
-  const study = [...values].some((v) => /journal article|trial|study|case report|clinical/i.test(v));
-  if (!cover.length || !study) return undefined;
-  return { rules: cover.map((value) => ({ value, role: "coverage" as Role })), default: "demand" };
-}
-
 const ROLE_NOTE: Record<Role, string> = { neutral: "Neither asks nor answers; context only", demand: "Asks for or needs something", coverage: "Answers a need" };
 
 const STEPS = ["Source", "Columns", "Roles", "Preview", "Import"];
@@ -79,10 +66,8 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
     const url = guessed.url && guessed.url !== guessed.id ? guessed.url : "";
     setMap({ text: guessed.text, title: guessed.title, id: guessed.id, date: guessed.date, url });
     setTextCols(guessed.text ? [guessed.text] : []);
-    // Publication types: reviews and meta-analyses cover a topic (coverage); other studies are
-    // demand. Shown in the table's roles line, where it can be changed.
-    const guessedRules = guessRoleRules(s.columns, s.sample, guessed.role);
-    if (guessedRules) { setRules(guessedRules.rules); setDefaultRole(guessedRules.default); }
+    // Roles are not guessed: what counts as demand or coverage depends on the collection. The
+    // table's roles line asks for them (and warns when every row would be neutral).
     tableShownFor.current = undefined;
     setRoleColumn(guessed.role);
     if (!collectionRef.current) setCollection(s.remote ? s.kind.replace("_", "-") : collectionIdFromPath(p));

@@ -42,8 +42,8 @@
 .choice-row > * { position: relative; z-index: 1; }
 .choice-row:hover { background: rgba(235, 231, 224, .08); } /* the table view's hover */
 /* The chosen row: the table view's light from its left edge, and an accent outline (no fill). */
-.choice-row.on::before, .choice-row.leaving::before { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 1px var(--accent);
-  background: radial-gradient(ellipse 50% 70% at 0% 50%, color-mix(in srgb, var(--accent) 37.5%, transparent), color-mix(in srgb, var(--accent) 12.5%, transparent) 55%, transparent 100%) left center / 96px 100% no-repeat; }
+.choice-row.on::before, .choice-row.leaving::before { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+  background: radial-gradient(ellipse 50% 70% at 0% 50%, color-mix(in srgb, var(--accent) 50%, transparent), color-mix(in srgb, var(--accent) 16.7%, transparent) 55%, transparent 100%) left center / 96px 100% no-repeat; }
 .choice-row.on::before { animation: item-flicker 150ms step-end both; }
 .choice-row.leaving::before { animation: item-flicker-out 150ms step-end both; }
 @media (prefers-reduced-motion: reduce) { .choice-row.on::before { animation: none; } .choice-row.leaving::before { display: none; } }

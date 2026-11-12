@@ -3042,3 +3042,23 @@ real accounts were used.
   connectors). It runs only when the person clicks "Show my … " in the dialog (New project has
   no project yet to hold a switch), offline mode refuses it, and nothing is pulled. The pull
   itself still needs the project's switch. Owner to confirm, or gate listing on the switch too.
+
+### Integration check without accounts (2026-11-12, arm64 macOS)
+
+- Real: CSV, TSV, Excel and folder imports through the CLI (skipped rows by reason, duplicate
+  ids, repeated header names, Unicode, quoted newlines, idempotent re-import). Google Sheets:
+  a public sample sheet pulled (30 rows) and imported; offline mode and the network switch refuse
+  the pull; a missing sheet says so.
+- Stand-in servers (`crates/ingest/src/remote/stand_in.rs`, test builds only; requests are
+  routed there by a test-only hook): Notion, Zotero (own and group libraries, collections),
+  Airtable (views, offsets), Typeform (1,002 responses over two pages), Tally, Canny (board by
+  name, all boards), Productboard notes and features, and Google Sheets private and missing
+  sheets. Each test runs the whole pull (paging, retries after 429, refused tokens, the CSV
+  written) and the listing. Answers follow each API's documentation, not recordings.
+- The pulled CSVs then imported through the CLI with the app's column defaults, and one was
+  embedded and searched.
+- Fixed on the way: Productboard notes now list linked features by id (the API gives no names);
+  Canny listing reports a refused key like the pull does; a table whose column names do not say
+  which holds text now opens with its prose columns searched (it opened with Import disabled).
+- Not checked against the real services: Notion, Zotero, Airtable, Typeform, Tally, Canny,
+  Productboard (no tokens on this Mac); Google Sheets private sheets (real redirect to sign-in).

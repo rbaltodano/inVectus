@@ -120,7 +120,16 @@ fn note_row(d: &Value) -> Vec<String> {
         customer,
         s(&d["company"]["domain"]),
         names(&d["tags"], "name"),
-        names(&d["features"], "name"),
+        // Notes link features by id (with importance); a name is used when one is given.
+        d["features"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|f| f["name"].as_str().or(f["id"].as_str()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default(),
         s(&d["source"]["origin"]),
         s(&d["createdAt"]),
         s(&d["displayUrl"]),

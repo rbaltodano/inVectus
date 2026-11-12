@@ -39,3 +39,15 @@ test("plain files keep the name-based guess; the url never reuses the id column"
   assert.equal(d.id, "pmid");
   assert.notEqual(d.url, d.id);
 });
+
+test("with no column named like text, the prose columns are searched", () => {
+  const cols = ["record_id", "created_time", "Name", "Request", "Votes", "Link"];
+  const sample = [
+    ["rec1", "2026-01-01", "Ada Park", "Export to PDF loses figure captions", "4", "https://x.io/1"],
+    ["rec2", "2026-01-02", "Lee Chen", "Offline search for clinical notes", "9", "https://x.io/2"],
+  ];
+  const d = columnDefaults("airtable", cols, sample);
+  assert.deepEqual(d.searched, ["Name", "Request"]);
+  assert.equal(d.id, "record_id");
+  assert.deepEqual(columnDefaults("file", ["a", "b"], [["1", "2"]]).searched, [], "nothing prose-like: the person chooses");
+});

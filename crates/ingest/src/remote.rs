@@ -17,6 +17,8 @@ mod airtable;
 pub mod browse;
 mod canny;
 mod productboard;
+#[cfg(test)]
+mod stand_in;
 mod tally;
 mod typeform;
 mod zotero;
@@ -146,6 +148,23 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
     Ok(pulled)
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Under test, requests go to a local stand-in server ([`stand_in`]) instead of the service.
+    static STAND_IN: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// `url`, or under test the same host and path on the stand-in server.
+fn routed(url: &str) -> String {
+    #[cfg(test)]
+    if let Some(base) = STAND_IN.with(|s| s.borrow().clone())
+        && let Some(rest) = url.strip_prefix("https://")
+    {
+        return format!("{base}/{rest}");
+    }
+    url.to_string()
+}
+
 fn need_token(cx: &PullContext, name: &str, env: &str) -> Result<String> {
     cx.token.clone().with_context(|| {
         format!(
@@ -188,6 +207,8 @@ impl Paced {
         body: Option<&Value>,
     ) -> Result<(u16, Value)> {
         let method = if body.is_some() { "POST" } else { "GET" };
+        let url = routed(url);
+        let url = url.as_str();
         for attempt in 0..5u32 {
             if let Some(t) = self.last {
                 std::thread::sleep(self.spacing.saturating_sub(t.elapsed()));
@@ -277,7 +298,7 @@ fn google_sheet_csv(id: &str, gid: Option<&str>) -> Result<String> {
         url.push_str(&format!("&gid={g}"));
     }
     let resp = agent()
-        .get(&url)
+        .get(&routed(&url))
         .header("User-Agent", USER_AGENT)
         .call()
         .with_context(|| format!("GET {url}"))?;
@@ -347,7 +368,7 @@ struct Notion<'a> {
 
 impl Notion<'_> {
     fn call(&mut self, method: &str, path: &str, body: Option<&Value>) -> Result<Value> {
-        let url = format!("{NOTION_API}{path}");
+        let url = routed(&format!("{NOTION_API}{path}"));
         for attempt in 0..5 {
             if let Some(t) = self.last {
                 std::thread::sleep(NOTION_SPACING.saturating_sub(t.elapsed()));

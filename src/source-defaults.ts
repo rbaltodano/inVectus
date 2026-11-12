@@ -12,7 +12,10 @@ const all = (columns: string[], names: string[]) => names.filter((n) => columns.
 
 export function columnDefaults(kind: string, columns: string[], sample: (string | null)[][]): ColumnDefaults {
   const g = guessMapping(columns);
-  const base: ColumnDefaults = { searched: g.text ? [g.text] : [], title: g.title, id: g.id, date: g.date, url: g.url && g.url !== g.id ? g.url : "", role: g.role };
+  // No column named like text: search the columns that hold prose in the sample, so the table
+  // opens ready to import instead of with nothing searched.
+  const searched = g.text ? [g.text] : proseColumns(columns, sample).filter((c) => c !== g.id && c !== g.url);
+  const base: ColumnDefaults = { searched, title: g.title, id: g.id, date: g.date, url: g.url && g.url !== g.id ? g.url : "", role: g.role };
   switch (kind) {
     case "zotero":
       return { ...base, searched: all(columns, ["title", "abstract"]), title: has(columns, "title"), id: has(columns, "key"), date: has(columns, "date"), url: has(columns, "url") };

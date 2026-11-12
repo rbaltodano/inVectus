@@ -420,6 +420,9 @@ fn canny(key: &str) -> Result<Vec<Choice>> {
     )?;
     if status != 200 || v.get("error").is_some() {
         let msg = v["error"].as_str().unwrap_or("no message");
+        if matches!(status, 401 | 403) || msg.contains("invalid api key") {
+            bail!("Canny refused the API key: check it in Integrations ({msg})");
+        }
         bail!("Canny answered HTTP {status}: {msg}");
     }
     Ok(canny_choices(&v))

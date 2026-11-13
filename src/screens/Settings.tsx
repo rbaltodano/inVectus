@@ -44,7 +44,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
   const [theme, setTheme] = useState<ThemeChoice>(themeChoice);
   const chooseTheme = (t: ThemeChoice) => { setTheme(t); setThemeChoice(t); };
   const flicker = useFlickerSetting();
-  const chooseFlicker = (on: boolean) => setFlickerSetting(on);
+  const windowFlicker = useFlickerSetting("windows");
   const jobs = useStartJob();
   const { busy, error, run } = useAction();
   const running = isRunning(jobs.current);
@@ -124,8 +124,12 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             </section>
             <section aria-label="Flicker animations" className="panel settings-group stack gap">
               <label className="check top settings-switch-row">
-                <input type="checkbox" role="switch" checked={flicker} onChange={() => chooseFlicker(!flicker)} />
-                <span><b>Flicker animations</b><div className="muted small">Cards, menus and windows flicker in and out like the map’s squares. Turn off to have them appear and close at once. Always off when your system asks for reduced motion.</div></span>
+                <input type="checkbox" role="switch" checked={flicker} onChange={() => setFlickerSetting(!flicker)} />
+                <span><b>Flicker animations</b><div className="muted small">Cards, menus and the map’s squares flicker in and out. Turn off to have them appear and go at once. Always off when your system asks for reduced motion.</div></span>
+              </label>
+              <label className="check top settings-switch-row">
+                <input type="checkbox" role="switch" checked={windowFlicker} onChange={() => setFlickerSetting(!windowFlicker, "windows")} />
+                <span><b>Window flicker</b><div className="muted small">Popup windows flicker out when they close. Works on its own, even with flicker animations off.</div></span>
               </label>
             </section>
           </div>

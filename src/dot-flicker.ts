@@ -1,38 +1,45 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
-/** Settings → Appearance → Flicker animations (this computer; on unless turned off). Off, or under
- *  the system's reduced motion, cards, menus and windows appear and close at once and the map's
- *  squares show without flickering. CSS reads `data-flicker="off"` on the root element. */
-const FLICKER_KEY = "invectus.flicker";
+/** Settings → Appearance (this computer; both on unless turned off):
+ *  - Flicker animations: cards, menus, table cells and the map's squares flicker in and out.
+ *    Off: they appear and go at once. CSS reads `data-flicker="off"` on the root element.
+ *  - Window flicker: popup windows flicker out when they close (Modal.tsx), whatever the first
+ *    switch says. CSS reads `data-window-flicker="off"`.
+ *  The system's reduced-motion setting turns both off. */
+export type FlickerKind = "items" | "windows";
+const KEYS: Record<FlickerKind, string> = { items: "invectus.flicker", windows: "invectus.window-flicker" };
+const ATTR: Record<FlickerKind, "flicker" | "windowFlicker"> = { items: "flicker", windows: "windowFlicker" };
 const FLICKER_EVENT = "invectus-flicker";
 
-export function flickerSetting(): boolean {
-  try { return localStorage.getItem(FLICKER_KEY) !== "off"; } catch { return true; }
+export function flickerSetting(kind: FlickerKind = "items"): boolean {
+  try { return localStorage.getItem(KEYS[kind]) !== "off"; } catch { return true; }
 }
 
-export function setFlickerSetting(on: boolean) {
-  try { if (on) localStorage.removeItem(FLICKER_KEY); else localStorage.setItem(FLICKER_KEY, "off"); } catch { /* storage unavailable */ }
+export function setFlickerSetting(on: boolean, kind: FlickerKind = "items") {
+  try { if (on) localStorage.removeItem(KEYS[kind]); else localStorage.setItem(KEYS[kind], "off"); } catch { /* storage unavailable */ }
   applyFlickerSetting();
   window.dispatchEvent(new Event(FLICKER_EVENT));
 }
 
 export function applyFlickerSetting(root: HTMLElement = document.documentElement) {
-  if (flickerSetting()) delete root.dataset.flicker; else root.dataset.flicker = "off";
+  for (const kind of ["items", "windows"] as const) {
+    if (flickerSetting(kind)) delete root.dataset[ATTR[kind]]; else root.dataset[ATTR[kind]] = "off";
+  }
 }
 
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** Whether to skip flicker right now (the setting is off, or the system asks for reduced motion). */
-export const noFlicker = () => !flickerSetting() || reducedMotion();
+/** Whether to skip this kind of flicker right now (its switch is off, or reduced motion). */
+export const noFlicker = (kind: FlickerKind = "items") => !flickerSetting(kind) || reducedMotion();
 
-/** The flicker setting as React state, following changes made in Settings. */
-export function useFlickerSetting(): boolean {
-  const [on, setOn] = useState(flickerSetting);
+/** A flicker setting as React state, following changes made in Settings. */
+export function useFlickerSetting(kind: FlickerKind = "items"): boolean {
+  const [on, setOn] = useState(() => flickerSetting(kind));
   useEffect(() => {
-    const sync = () => setOn(flickerSetting());
+    const sync = () => setOn(flickerSetting(kind));
     window.addEventListener(FLICKER_EVENT, sync);
     return () => window.removeEventListener(FLICKER_EVENT, sync);
-  }, []);
+  }, [kind]);
   return on;
 }
 export const DOT_DELAY_MS = 250;

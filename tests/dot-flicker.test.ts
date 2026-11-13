@@ -69,9 +69,20 @@ test("the flicker setting is on by default, persists off, and marks the root ele
     assert.equal(root.dataset.flicker, undefined);
     assert.equal(store.size, 0);
     assert.equal(events.length, 2);
-    // Reduced motion wins over the setting.
+    // Window flicker is its own switch.
+    setFlickerSetting(false);
+    assert.equal(noFlicker("windows"), false);
+    setFlickerSetting(false, "windows");
+    assert.equal(noFlicker("windows"), true);
+    assert.equal(root.dataset.windowFlicker, "off");
+    setFlickerSetting(true, "windows");
+    setFlickerSetting(true);
+    assert.equal(root.dataset.windowFlicker, undefined);
+    assert.equal(store.size, 0);
+    // Reduced motion wins over both switches.
     g.matchMedia = () => ({ matches: true });
     assert.equal(noFlicker(), true);
+    assert.equal(noFlicker("windows"), true);
   } finally {
     for (const k of ["localStorage", "document", "window", "matchMedia"]) delete g[k];
   }

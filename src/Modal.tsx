@@ -1,6 +1,7 @@
 // Popup windows leave the way the data circle's squares do: the whole window, backdrop included,
 // flickers out (levels 1, .5, .7, .35, .85, .2, 0 over 150 ms) before it is removed, however it
-// closed (Cancel, Escape, a click outside, or the work finishing). Skipped when flicker is off.
+// closed (Cancel, Escape, a click outside, or the work finishing). Settings → Window flicker turns
+// it off.
 //
 //   <FlickerPresence show={open}>{open && <ModalBackdrop …>…</ModalBackdrop>}</FlickerPresence>
 //
@@ -18,7 +19,7 @@ export function FlickerPresence({ show, children }: { show: boolean; children: R
   // Derived during render, so the first frame without `show` already plays the exit (no blink).
   if (show !== prevShow) {
     setPrevShow(show);
-    setLeaving(!show && !noFlicker());
+    setLeaving(!show && !noFlicker("windows"));
   }
   if (show) last.current = children;
   useEffect(() => {

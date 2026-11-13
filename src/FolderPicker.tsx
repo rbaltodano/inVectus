@@ -1,6 +1,6 @@
 // Settings → Storage → Agent folders: choose a file or folder AI agents may read, on a canvas.
 // The folder sits at the left and what it holds branches out to the right (three levels); drag
-// to look around. Chips flicker in, roughly left to right. Clicking one lights it and everything
+// to look around (the dotted grid moves with it, 1:1). Chips flicker in, roughly left to right. Clicking one lights it and everything
 // inside it (light chips, one level after another) while the rest drops to 25%; allowing it
 // flickers the rest away, and a second later the window closes (FlickerPresence flickers it out).
 // Double-click a folder to open it; "Up a level" and the system's own picker reach anywhere else.
@@ -150,7 +150,7 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
         <h3 id="fp-title">Let agents read a file or folder</h3>
         <p className="dim small">Drag to look around. Click a file or folder: agents may read it and everything inside. Double-click a folder to open it.</p>
       </div>
-      <div ref={canvas} className="fp-canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+      <div ref={canvas} className="fp-canvas" style={{ backgroundPosition: `${pan.x}px ${pan.y}px` }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         {view && <div ref={world} className="fp-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px)`, width: size.w, height: size.h }}>
           <svg className="fp-edges" width={size.w} height={size.h} aria-hidden="true">
             {placed.filter((p) => p.parent).map((p) => {

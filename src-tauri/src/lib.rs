@@ -572,6 +572,133 @@ fn cancel_verification() -> bool {
     orch::cancel_verification()
 }
 
+// ---- Storage settings: agent folders, projects folder, check cache ----------------------
+
+/// Files and folders AI agents may read on this computer (besides the projects folder and the
+/// open project, which they may always read).
+#[derive(serde::Serialize)]
+struct Grant {
+    path: String,
+    dir: bool,
+    /// Gone from disk (moved or deleted); the grant does nothing until it is back.
+    missing: bool,
+}
+
+#[tauri::command]
+fn agent_folders() -> Vec<Grant> {
+    orch::grants::granted_folders()
+        .iter()
+        .map(|p| Grant {
+            path: p.display().to_string(),
+            dir: p.is_dir(),
+            missing: !p.exists(),
+        })
+        .collect()
+}
+
+#[tauri::command]
+async fn allow_agent_folder(path: String) -> CmdResult<String> {
+    off_thread(move || {
+        orch::grants::allow(&orch::user_path(&path))
+            .map(|p| p.display().to_string())
+            .map_err(orch::err)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn revoke_agent_folder(path: String) -> CmdResult<bool> {
+    off_thread(move || orch::grants::revoke(std::path::Path::new(&path)).map_err(orch::err)).await
+}
+
+#[derive(serde::Serialize)]
+struct FolderView {
+    tree: orch::grants::TreeNode,
+    /// The folder above, for "up a level" (none at the top of the disk).
+    parent: Option<String>,
+}
+
+/// A folder and what it holds (names only), for the agent-folder picker. Without a path: the
+/// projects folder, or the home folder before the projects folder exists.
+#[tauri::command]
+async fn folder_tree(path: Option<String>, depth: Option<usize>) -> CmdResult<FolderView> {
+    off_thread(move || {
+        let start = match path {
+            Some(p) => orch::user_path(&p),
+            None => {
+                let projects = orch::prefs::projects_dir();
+                if projects.is_dir() {
+                    projects
+                } else {
+                    dirs::home_dir().unwrap_or(projects)
+                }
+            }
+        };
+        let tree =
+            orch::grants::folder_tree(&start, depth.unwrap_or(3).min(4)).map_err(orch::err)?;
+        let parent = std::path::Path::new(&tree.path)
+            .parent()
+            .map(|p| p.display().to_string());
+        Ok(FolderView { tree, parent })
+    })
+    .await
+}
+
+#[derive(serde::Serialize)]
+struct ProjectsDir {
+    path: String,
+    /// `~/inVectus Projects` (nothing chosen).
+    standard: bool,
+    /// The folder may be synced by a cloud service.
+    warning: Option<String>,
+}
+
+fn projects_dir_view(path: std::path::PathBuf) -> ProjectsDir {
+    ProjectsDir {
+        standard: path == orch::prefs::standard_projects_dir(),
+        warning: invectus_core::project::cloud_sync_warning(&path),
+        path: path.display().to_string(),
+    }
+}
+
+#[tauri::command]
+fn projects_dir() -> ProjectsDir {
+    projects_dir_view(orch::prefs::projects_dir())
+}
+
+/// Choose where new projects go (`None` goes back to `~/inVectus Projects`). Agents may read
+/// this folder, so the whole disk or home folder is refused.
+#[tauri::command]
+async fn set_projects_dir(path: Option<String>) -> CmdResult<ProjectsDir> {
+    off_thread(move || {
+        let chosen = path.map(|p| orch::user_path(&p));
+        orch::prefs::set_projects_dir(chosen.as_deref())
+            .map(projects_dir_view)
+            .map_err(orch::err)
+    })
+    .await
+}
+
+/// Saved answers from outside sources in the open project.
+#[tauri::command]
+async fn check_cache_usage(state: State<'_, AppState>) -> CmdResult<invectus_verify::CacheUsage> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            Ok(invectus_verify::cache_usage(&s.project.root))
+        })
+    })
+    .await
+}
+
+/// Delete the open project's saved answers; the next gap check asks the sources again.
+#[tauri::command]
+async fn clear_check_cache(state: State<'_, AppState>) -> CmdResult<invectus_verify::CacheUsage> {
+    let session = state.session.clone();
+    off_thread(move || with_session(&session, |s| invectus_verify::clear_cache(&s.project.root)))
+        .await
+}
+
 /// The network calls this app made (host, purpose, status, time; never paths or contents).
 #[tauri::command]
 fn outbound_log() -> Vec<invectus_core::net::OutboundCall> {
@@ -759,6 +886,14 @@ pub fn run() {
             set_agent_access,
             agent_access_default,
             outbound_log,
+            agent_folders,
+            allow_agent_folder,
+            revoke_agent_folder,
+            folder_tree,
+            projects_dir,
+            set_projects_dir,
+            check_cache_usage,
+            clear_check_cache,
             default_gap_weights,
             export_gaps,
             open_url,

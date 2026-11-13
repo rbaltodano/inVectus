@@ -1,0 +1,55 @@
+/* The agent-folder picker (FolderPicker.tsx): a dotted canvas with a left-to-right tree. */
+.integration-modal.fp-modal { width: min(940px, 100%); max-width: none; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.fp-head { display: flex; flex-direction: column; gap: 6px; }
+.fp-head h3 { font-size: 16px; font-weight: 500; }
+/* Chosen chips switch to the other theme's colours: paper and ink in dark, the reverse in light. */
+.fp-modal { --fp-lit-bg: #ebe7e0; --fp-lit-ink: #141414; }
+:root[data-theme="light"] .fp-modal { --fp-lit-bg: #202020; --fp-lit-ink: #e8e3db; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .fp-modal { --fp-lit-bg: #202020; --fp-lit-ink: #e8e3db; } }
+.fp-canvas { position: relative; height: min(440px, 55vh); overflow: hidden; cursor: grab; touch-action: none; user-select: none;
+  border: 1px solid var(--line); border-radius: var(--r); background-color: var(--bg);
+  background-image: radial-gradient(circle, rgba(var(--ink-rgb), .13) 1px, transparent 1.4px); background-size: 22px 22px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 70px), transparent), linear-gradient(to bottom, #000 calc(100% - 50px), transparent);
+  -webkit-mask-composite: source-in; mask-composite: intersect; }
+.fp-canvas:active { cursor: grabbing; }
+.fp-world { position: absolute; left: 0; top: 0; }
+.fp-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.fp-edge { fill: none; stroke: var(--line-2); stroke-width: 1.2; animation: item-flicker 150ms step-end backwards; animation-delay: var(--card-delay, 0ms); }
+.fp-node { position: absolute; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 10px; transform: translateY(-50%);
+  max-width: 300px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: 12.5px var(--sans); white-space: nowrap;
+  cursor: pointer; animation: item-flicker 150ms step-end backwards; animation-delay: var(--card-delay, 0ms); }
+.fp-node svg { flex: none; color: var(--dim); }
+.fp-node.dir svg { color: var(--text); }
+.fp-node.root { background: var(--surface-2); border-color: var(--line-2); }
+.fp-node:hover:not(:disabled) { border-color: rgba(var(--ink-rgb), .35); }
+.fp-node:disabled { cursor: default; }
+.fp-name { overflow: hidden; text-overflow: ellipsis; }
+.fp-count { margin-left: 2px; color: var(--dim); font-size: 11px; }
+.fp-more { cursor: default; border-style: dashed; background: none; color: var(--dim); }
+/* Choosing: the chosen chip and everything inside it light up, level by level; the rest drops to
+   25%, and to nothing once allowed. Each state ends on its own values, so with flicker off it
+   simply switches. */
+@keyframes fp-lit {
+  0% { background: var(--surface); border-color: var(--line); color: var(--text); }
+  0.01%, 100% { background: var(--fp-lit-bg); border-color: var(--fp-lit-bg); color: var(--fp-lit-ink); }
+  16.67% { background: color-mix(in srgb, var(--fp-lit-bg) 20%, var(--surface)); color: color-mix(in srgb, var(--fp-lit-ink) 20%, var(--text)); }
+  33.33% { background: color-mix(in srgb, var(--fp-lit-bg) 85%, var(--surface)); color: color-mix(in srgb, var(--fp-lit-ink) 85%, var(--text)); }
+  50% { background: color-mix(in srgb, var(--fp-lit-bg) 35%, var(--surface)); color: color-mix(in srgb, var(--fp-lit-ink) 35%, var(--text)); }
+  66.67% { background: color-mix(in srgb, var(--fp-lit-bg) 70%, var(--surface)); color: color-mix(in srgb, var(--fp-lit-ink) 70%, var(--text)); }
+  83.33% { background: color-mix(in srgb, var(--fp-lit-bg) 50%, var(--surface)); color: color-mix(in srgb, var(--fp-lit-ink) 50%, var(--text)); }
+}
+.fp-node.lit { background: var(--fp-lit-bg); border-color: var(--fp-lit-bg); color: var(--fp-lit-ink); animation: fp-lit 150ms step-end backwards; animation-delay: var(--lit-delay, 0ms); }
+.fp-node.lit svg, .fp-node.lit .fp-count { color: inherit; }
+.fp-node.lit .fp-count { opacity: .55; }
+@keyframes fp-dim { 0% { opacity: 1; } 16.67% { opacity: .55; } 33.33% { opacity: .9; } 50% { opacity: .4; } 66.67% { opacity: .75; } 83.33% { opacity: .5; } 100% { opacity: .25; } }
+@keyframes fp-gone { 0% { opacity: .25; } 16.67% { opacity: .1; } 33.33% { opacity: .22; } 50% { opacity: .07; } 66.67% { opacity: .17; } 83.33% { opacity: .12; } 100% { opacity: 0; } }
+.fp-node.dim, .fp-edge.dim { opacity: .25; animation: fp-dim 150ms step-end; }
+.fp-node.gone, .fp-edge.gone { opacity: 0; animation: fp-gone 150ms step-end; pointer-events: none; }
+.fp-where { position: absolute; right: 12px; bottom: 10px; font-size: 11px; color: var(--dim); pointer-events: none; }
+.fp-empty { position: absolute; left: 20px; top: 16px; }
+.fp-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fp-pick { flex: 1; min-width: 160px; }
+.fp-pick-name { color: var(--text); }
+.fp-foot .text-btn { display: inline-flex; align-items: center; gap: 4px; }
+@media (prefers-reduced-motion: reduce) { .fp-node, .fp-edge, .fp-node.lit, .fp-node.dim, .fp-edge.dim, .fp-node.gone, .fp-edge.gone { animation: none; } }
+:root[data-flicker="off"] :is(.fp-node, .fp-edge, .fp-node.lit, .fp-node.dim, .fp-edge.dim, .fp-node.gone, .fp-edge.gone) { animation: none; }

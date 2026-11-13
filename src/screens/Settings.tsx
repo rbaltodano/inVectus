@@ -6,6 +6,7 @@ import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
 import OutboundLog from "../OutboundLog";
+import StorageSettings, { CheckCache } from "./StorageSettings";
 import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 import { setFlickerSetting, useFlickerSetting } from "../dot-flicker";
@@ -150,6 +151,9 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             </section>
 
           </div>
+          <div id="settings-section-storage" role="tabpanel" aria-labelledby="settings-tab-storage" className="settings-section" hidden={section !== "storage"}>
+            {section === "storage" && <StorageSettings />}
+          </div>
           <div id="settings-section-network" role="tabpanel" aria-labelledby="settings-tab-network" className="settings-section" hidden={section !== "network"}>
             {projectEmpty}
 
@@ -178,7 +182,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
                   </label>;
                 })}
               </fieldset>
-              <div className="muted small">Results are cached in the project for 7 days.</div>
+              <CheckCache key={project.root} />
             </section>}
             <OutboundLog />
 

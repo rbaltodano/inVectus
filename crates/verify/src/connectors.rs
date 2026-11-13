@@ -350,6 +350,53 @@ fn cache_path(root: &std::path::Path, source: Source, key: &str) -> PathBuf {
         .join(format!("{}.json", &h[..32]))
 }
 
+/// Saved answers from outside sources for the project at `root` (`cache/verify/`).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct CacheUsage {
+    pub files: u64,
+    pub bytes: u64,
+}
+
+fn cache_dir(root: &std::path::Path) -> PathBuf {
+    root.join("cache").join("verify")
+}
+
+fn tally(dir: &std::path::Path, usage: &mut CacheUsage) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let Ok(meta) = std::fs::symlink_metadata(e.path()) else {
+            continue;
+        };
+        if meta.is_dir() {
+            tally(&e.path(), usage);
+        } else if meta.is_file() {
+            usage.files += 1;
+            usage.bytes += meta.len();
+        }
+    }
+}
+
+/// How many saved answers there are and their size.
+pub fn cache_usage(root: &std::path::Path) -> CacheUsage {
+    let mut usage = CacheUsage::default();
+    tally(&cache_dir(root), &mut usage);
+    usage
+}
+
+/// Delete every saved answer, so the next check asks the sources again. Returns what was
+/// removed. Links inside are removed, never followed.
+pub fn clear_cache(root: &std::path::Path) -> Result<CacheUsage> {
+    let usage = cache_usage(root);
+    let dir = cache_dir(root);
+    match std::fs::remove_dir_all(&dir) {
+        Ok(()) => Ok(usage),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(CacheUsage::default()),
+        Err(e) => Err(e).with_context(|| format!("removing {}", dir.display())),
+    }
+}
+
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -734,6 +781,27 @@ mod tests {
         assert_eq!(hits[0].year, Some(2021));
         assert_eq!(hits[1].year, None);
         assert!(parse_arxiv("<html>").is_err());
+    }
+
+    #[test]
+    fn the_check_cache_can_be_measured_and_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(cache_usage(dir.path()), CacheUsage::default());
+        assert_eq!(clear_cache(dir.path()).unwrap(), CacheUsage::default());
+        for (source, key) in [(Source::PubMed, "a"), (Source::OpenAlex, "b")] {
+            let p = cache_path(dir.path(), source, key);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, b"{}").unwrap();
+        }
+        let other = dir.path().join("keep.txt");
+        std::fs::write(&other, b"x").unwrap();
+        assert_eq!(cache_usage(dir.path()), CacheUsage { files: 2, bytes: 4 });
+        assert_eq!(
+            clear_cache(dir.path()).unwrap(),
+            CacheUsage { files: 2, bytes: 4 }
+        );
+        assert_eq!(cache_usage(dir.path()), CacheUsage::default());
+        assert!(other.exists(), "only the check cache is removed");
     }
 
     #[test]

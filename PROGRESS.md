@@ -3219,3 +3219,32 @@ Checked on arm64 macOS only.
   and reduced-motion override). In the mock harness (headless Chrome, macOS): the switch stores
   "off", cards and dialog rows have no animation, and the agent dialog is gone 20 ms after Cancel.
   Not checked in the packaged app.
+
+## 2026-11-13 — Settings: Storage (projects folder, agent folders) and check cache
+
+- New Settings → Storage tab (this computer):
+  - **Projects folder:** choose where new projects go, or go back to `~/inVectus Projects`. Kept in
+    `<OS data dir>/inVectus/settings.json` (`orchestration::prefs`). It stays an agent root, so
+    the choice passes the same breadth check as a grant; cloud-synced folders get the existing
+    warning.
+  - **Agent folders:** the granted files and folders, each with Remove (missing ones say "not
+    found"), and "Add a file or folder…", which opens the tree picker (`src/FolderPicker.tsx`):
+    a draggable canvas with the folder at the left and three levels to the right, chips that
+    flicker in left to right, chosen chip and its contents lit in the other theme's colours level
+    by level, the rest at 25%, gone on Allow, window closing a second later. Double-click opens a
+    folder; "Up a level" and "Browse…" (system dialog) reach anything else.
+- Grants can now be single files as well as folders. Refused as a grant and as the projects
+  folder: the whole disk, the home folder, and any folder containing the home folder (previously
+  only `/` and the home folder itself).
+- `folder_tree` lists names only: hidden entries and symlinks left out (links never followed),
+  60 entries per folder, 600 per tree, depth at most 4.
+- Network tab: **Saved answers** shows the open project's gap-check cache (files, size) with
+  Clear (`invectus_verify::cache_usage` / `clear_cache`; removes only `cache/verify/`).
+- docs/security.md updated: grants in the app, who can change them, and the agent-access switch
+  (the stale "no per-project switch yet" line is gone).
+- Checks (arm64 macOS): new Rust tests for broad-place refusal and file grants, the tree listing,
+  the projects-folder choice and reset, and the cache measure/clear; orchestration, verify and
+  CLI tests pass; clippy clean on the changed crates; fmt; `npm run build`; 58 UI tests pass.
+  Picker recorded in the mock harness with real mouse input (headless Chrome screencast). Not
+  checked in the packaged app. Not reviewed by Fable 5.2.
+- Not done: settings for encryption (encryption itself is not built; docs/encryption-plan.md).

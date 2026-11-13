@@ -151,6 +151,14 @@ export interface TableRef { project?: string; collection: string; space: string 
 /** One network call the app made: host and purpose only, never paths, ids or contents. */
 export interface OutboundCall { at_ms: number; host: string; purpose: string; status: number | null }
 
+/** A file or folder in the agent-folder picker (names and paths only). */
+export interface FolderNode { name: string; path: string; dir: boolean; count: number; children: FolderNode[]; more: number }
+export interface FolderView { tree: FolderNode; parent: string | null }
+export interface AgentGrant { path: string; dir: boolean; missing: boolean }
+export interface ProjectsDir { path: string; standard: boolean; warning: string | null }
+/** Saved answers from outside sources in the open project. */
+export interface CacheUsage { files: number; bytes: number }
+
 export interface SourceChoice {
   /** What a pull takes (`notion:<id>`, `zotero:collection:<KEY>`, …). */
   spec: string; title: string;
@@ -171,6 +179,15 @@ export const api = {
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
   setAgentAccess: (enabled: boolean) => invoke<ProjectInfo>("set_agent_access", { enabled }),
   agentAccessDefault: () => invoke<boolean>("agent_access_default"),
+  /** Files and folders agents may read (besides the projects folder and the open project). */
+  agentFolders: () => invoke<AgentGrant[]>("agent_folders"),
+  allowAgentFolder: (path: string) => invoke<string>("allow_agent_folder", { path }),
+  revokeAgentFolder: (path: string) => invoke<boolean>("revoke_agent_folder", { path }),
+  folderTree: (path?: string, depth?: number) => invoke<FolderView>("folder_tree", { path: path ?? null, depth: depth ?? null }),
+  projectsDir: () => invoke<ProjectsDir>("projects_dir"),
+  setProjectsDir: (path: string | null) => invoke<ProjectsDir>("set_projects_dir", { path }),
+  checkCacheUsage: () => invoke<CacheUsage>("check_cache_usage"),
+  clearCheckCache: () => invoke<CacheUsage>("clear_check_cache"),
   setVerifySources: (sources: string[]) => invoke<ProjectInfo>("set_verify_sources", { sources }),
   setAgentModel: (project: string, model: string | null) => invoke<ProjectInfo>("set_agent_model", { project, model }),
   setProjectAgent: (project: string, agent: string | null) => invoke<ProjectInfo>("set_project_agent", { project, agent }),
@@ -266,8 +283,8 @@ export async function pickSource(folder = false): Promise<string | null> {
 }
 
 /** The system's folder picker for where a new project lives. */
-export async function pickDirectory(start?: string): Promise<string | null> {
-  const r = await openDialog({ directory: true, multiple: false, title: "Choose where the project lives", defaultPath: start || undefined });
+export async function pickDirectory(start?: string, title = "Choose where the project lives"): Promise<string | null> {
+  const r = await openDialog({ directory: true, multiple: false, title, defaultPath: start || undefined });
   return typeof r === "string" ? r : null;
 }
 

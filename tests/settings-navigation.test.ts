@@ -15,6 +15,9 @@ test("settings search finds controls by preference, including project controls",
   assert.deepEqual(searchSettings("coverage momentum").map((s) => s.id), ["scoring"]);
   assert.deepEqual(searchSettings("offline").map((s) => s.id), ["network"]);
   assert.deepEqual(searchSettings("runtime").map((s) => s.id), ["embedding"]);
+  assert.deepEqual(searchSettings("agent folders").map((s) => s.id), ["storage"]);
+  assert.deepEqual(searchSettings("projects folder").map((s) => s.id), ["storage"]);
+  assert.deepEqual(searchSettings("clear saved answers").map((s) => s.id), ["network"]);
   assert.deepEqual(searchSettings("recent coverage penalty").map((s) => s.id), ["scoring"]);
   assert.deepEqual(searchSettings("new-local-model", { models: "new-local-model" }).map((s) => s.id), ["models"]);
 });

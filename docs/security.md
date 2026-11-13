@@ -42,15 +42,24 @@ stdio or the app's local socket (owner-only, peer user checked). **What a tool r
 the agent's provider.**
 
 - **Files.** Agent tools read files only inside:
-  - the projects folder (`~/inVectus Projects`);
+  - the projects folder (`~/inVectus Projects`, or the folder chosen in Settings → Storage; kept
+    per machine in `<OS data dir>/inVectus/settings.json`);
   - the open project;
-  - folders the person granted with `invectus agents allow <folder>`. Grants are kept per machine
+  - files and folders the person granted in Settings → Storage → Agent folders or with
+    `invectus agents allow <path>`. Grants are kept per machine
     (`<OS data dir>/inVectus/agent-access.json`), never in a project.
+  - The whole disk, the home folder, and any folder that contains the home folder are refused,
+    both as a grant and as the projects folder.
 - **Path checks.** Paths are resolved (`..`, `~`, and symlinks, including the final file) before
   they are compared, so links that escape are refused. Agents open or create projects only in the
   same places. Imports the person makes in the app (file dialog) are not limited.
-- **Collection text.** Search results, gap context and samples go to the agent by design. There
-  is no per-project agent-access switch yet (owner decision pending, PROGRESS.md).
+- **Collection text.** Search results, gap context and samples go to the agent by design, only
+  for projects whose Agent access switch is on (off by default; new projects start with the last
+  choice made on this machine).
+- **Who grants.** Grants and the projects folder change only through the app's own window or the
+  CLI, never through an agent tool. A script injected into the app's window could change them;
+  the window's content security policy runs only the app's own scripts, and no code renders
+  collection text as HTML.
 
 ## Files on disk
 
@@ -75,7 +84,7 @@ the agent's provider.**
   disk, protected only by file permissions and the OS's disk encryption (FileVault, BitLocker,
   LUKS).
 - Linux keeps integration tokens in the kernel keyring, which does not survive a reboot.
-- An app UI for agent grants and for removing pulled copies (CLI only today).
+- An app UI for removing pulled copies (CLI only today).
 - Spreadsheet imports have no decompression-size cap.
 - Model files are re-hashed only when their size or modification time changes.
 

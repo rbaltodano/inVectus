@@ -97,10 +97,9 @@ pub fn user_path(path: &str) -> PathBuf {
     }
 }
 
+/// Where new projects go: the folder chosen in Settings, or `~/inVectus Projects`.
 pub fn default_projects_dir() -> String {
-    dirs::home_dir()
-        .map(|h| h.join("inVectus Projects").display().to_string())
-        .unwrap_or_default()
+    crate::prefs::projects_dir().display().to_string()
 }
 
 #[derive(Serialize)]

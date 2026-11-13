@@ -771,11 +771,11 @@ fn cmd_sources(p: &ProjectArg, command: SourcesCommand) -> Result<()> {
 
 #[derive(Subcommand)]
 enum AgentsCommand {
-    /// List the folders agents may read.
+    /// List the files and folders agents may read.
     List,
-    /// Let agents read files in a folder (and its subfolders).
+    /// Let agents read a file, or the files in a folder (and its subfolders).
     Allow { folder: PathBuf },
-    /// Take a folder back.
+    /// Take a file or folder back.
     Revoke { folder: PathBuf },
     /// Let agents read a project (`on`) or stop them (`off`). New projects start with the
     /// last choice made on this machine.
@@ -805,7 +805,7 @@ fn cmd_agents(command: AgentsCommand) -> Result<()> {
         }
         AgentsCommand::Allow { folder } => {
             let real = grants::allow(&folder)?;
-            println!("agents may now read files in {}", real.display());
+            println!("agents may now read {}", real.display());
         }
         AgentsCommand::Access { p, state } => {
             let mut project = open(&p)?;

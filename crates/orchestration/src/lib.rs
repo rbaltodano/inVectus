@@ -10,6 +10,7 @@ pub mod grants;
 pub mod handoff;
 pub mod jobs;
 mod pipeline;
+pub mod prefs;
 mod session;
 
 pub use jobs::{Board, ExistingSpace, IndexPlan, JobInfo, JobsView, MissingModel};

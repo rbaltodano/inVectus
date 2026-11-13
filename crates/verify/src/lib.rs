@@ -3,5 +3,7 @@
 pub mod connectors;
 pub mod gap;
 
-pub use connectors::{ExternalHit, KeywordQuery, Source, SourceResult};
+pub use connectors::{
+    CacheUsage, ExternalHit, KeywordQuery, Source, SourceResult, cache_usage, clear_cache,
+};
 pub use gap::{Fetched, Prepared, Verification, VerifyOptions, fetch, finish, prepare, verify_gap};

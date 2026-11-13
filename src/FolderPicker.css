@@ -53,3 +53,18 @@
 .fp-foot .text-btn { display: inline-flex; align-items: center; gap: 4px; }
 @media (prefers-reduced-motion: reduce) { .fp-node, .fp-edge, .fp-node.lit, .fp-node.dim, .fp-edge.dim, .fp-node.gone, .fp-edge.gone { animation: none; } }
 :root[data-flicker="off"] :is(.fp-node, .fp-edge, .fp-node.lit, .fp-node.dim, .fp-edge.dim, .fp-node.gone, .fp-edge.gone) { animation: none; }
+/* The path box (filled by a click, or pasted) and "Set as default": a square that fills in. */
+.fp-path { flex: 1; min-width: 220px; font-size: 12px; }
+.integration-modal .fp-default { flex-direction: row; }
+.fp-default { position: relative; display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.fp-default input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.fp-default-box { position: relative; width: 14px; height: 14px; flex: none; border: 1px solid var(--line-2); border-radius: 2px; }
+.fp-default-box::after { content: ""; position: absolute; inset: 2px; border-radius: 1px; background: var(--text); opacity: 0; }
+.fp-default input:checked + .fp-default-box { border-color: var(--text-2); }
+.fp-default input:checked + .fp-default-box::after { opacity: 1; }
+.fp-default input:checked + .fp-default-box.touched::after { animation: item-flicker 150ms step-end backwards; }
+.fp-default input:not(:checked) + .fp-default-box.touched::after { animation: item-flicker-out 150ms step-end; }
+.fp-default input:focus-visible + .fp-default-box { outline: 1px solid var(--accent); outline-offset: 2px; }
+.fp-default:has(input:disabled) { opacity: .5; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .fp-default-box.touched::after { animation: none !important; } }
+:root[data-flicker="off"] .fp-default-box.touched::after { animation: none !important; }

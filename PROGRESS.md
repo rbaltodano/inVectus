@@ -3258,3 +3258,15 @@ Checked on arm64 macOS only.
   with the pan.
 - Checks: `npm run build`; 58 UI tests pass (the setting test now covers both switches). Mock
   harness: grid offset equals the world offset after a drag. Not checked in the packaged app.
+
+## 2026-11-13 — Agent-folder picker: path box, Browse selects, Set as default
+
+- A path box replaces "Nothing chosen": clicking a chip fills it with the full path; a typed or
+  pasted path opens with Enter (a folder opens selected; a file opens its folder with the file
+  chosen). Allow grants the path in the box; the backend still resolves and checks it.
+- A folder picked with Browse… opens already selected.
+- "Set as default": a square that fills in with a flicker (flickers out when cleared; off with
+  Flicker animations). When ticked, Allow also makes the picker open there next time (browser
+  storage on this computer; falls back to the projects folder if that place is gone).
+- Checks: `npm run build`; 58 UI tests pass; recorded in the mock harness with real mouse input
+  (choose, Browse, tick, Allow). Not checked in the packaged app.

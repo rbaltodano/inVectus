@@ -3,11 +3,13 @@
 // to look around (the dotted grid moves with it, 1:1). Chips flicker in, roughly left to right. Clicking one lights it and everything
 // inside it (light chips, one level after another) while the rest drops to 25%; allowing it
 // flickers the rest away, and a second later the window closes (FlickerPresence flickers it out).
-// Double-click a folder to open it; "Up a level" and the system's own picker reach anywhere else.
+// Double-click a folder to open it; "Up a level" and the system's own picker reach anywhere else
+// (a folder chosen there opens already selected). The path box shows what is chosen, and takes a
+// pasted path (Enter opens it). "Set as default" makes the picker open there next time.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, File, Folder } from "lucide-react";
-import { api, pickDirectory, type FolderNode, type FolderView } from "./api";
+import { api, local, pickDirectory, type FolderNode, type FolderView } from "./api";
 import { ModalBackdrop } from "./Modal";
 import "./FolderPicker.css";
 
@@ -50,21 +52,45 @@ function layout(root: FolderNode, widths: Map<string, number>): Placed[] {
 }
 
 const home = (p: string) => p.replace(/^\/Users\/[^/]+|^\/home\/[^/]+/, "~");
+/** Where the picker opens ("Set as default"; this computer only). */
+const START_KEY = "invectus.agent-picker-start";
+const trimPath = (p: string) => { const t = p.trim(); return t.length > 1 ? t.replace(/\/+$/, "") : t; };
+const parentOf = (p: string) => p.slice(0, Math.max(1, p.lastIndexOf("/")));
 
 export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path: string) => void; onClose: () => void }) {
   const [view, setView] = useState<FolderView>();
   const [error, setError] = useState<string>();
-  const [chosen, setChosen] = useState<string>();
+  // The path box: filled by clicking a chip, or typed/pasted. A chip is chosen when it matches.
+  const [path, setPath] = useState("");
+  const [asDefault, setAsDefault] = useState(false);
+  const [touched, setTouched] = useState(false);
   const [phase, setPhase] = useState<"choosing" | "allowing" | "allowed">("choosing");
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean }>();
   const canvas = useRef<HTMLDivElement>(null);
 
-  const load = (path?: string) => {
+  /** Show `dir` (default: the saved start, else the projects folder); `select` chooses it too. */
+  const load = async (dir?: string, select = false) => {
     setError(undefined);
-    api.folderTree(path).then((v) => { setView(v); setChosen(undefined); setPan({ x: 0, y: 0 }); }).catch((e) => setError(String(e)));
+    try {
+      const v = await api.folderTree(dir);
+      setView(v); setPan({ x: 0, y: 0 }); setPath(select ? v.tree.path : "");
+      return true;
+    } catch (e) { setError(String(e)); return false; }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const start = local.get<string | null>(START_KEY, null);
+    void (start ? load(start).then((ok) => { if (!ok) void load(); }) : load());
+  }, []);
+  /** A typed or pasted path: open the folder selected, or a file's folder with the file chosen. */
+  const goTo = async () => {
+    const want = trimPath(path);
+    if (!want) return;
+    if (await load(want, true)) return;
+    const shown = await api.folderTree(parentOf(want)).catch(() => undefined);
+    if (shown) { setView(shown); setPan({ x: 0, y: 0 }); setPath(want); setError(undefined); }
+    else setError(`Nothing to show at ${want}`);
+  };
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === "Escape" && phase === "choosing") onClose(); };
     document.addEventListener("keydown", key);
@@ -81,6 +107,8 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
   }, [view, widths]);
   const placed = useMemo(() => (view ? layout(view.tree, widths) : []), [view, widths]);
   const byKey = useMemo(() => new Map(placed.map((p) => [p.key, p])), [placed]);
+  const want = trimPath(path);
+  const chosen = byKey.has(want) && !byKey.get(want)!.more ? want : undefined;
   // Entrance: each chip after its own delay, deeper levels later (left to right).
   const enter = useMemo(() => new Map(placed.map((p) => [p.key, 80 + p.depth * 110 + Math.random() * 380])), [placed]);
   const inside = useMemo(() => {
@@ -117,22 +145,23 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
   const up = () => { setTimeout(() => { drag.current = undefined; }, 0); };
   const choose = (p: Placed) => {
     if (drag.current?.moved || phase !== "choosing" || p.more) return;
-    setChosen(p.key === chosen ? undefined : p.key);
+    setPath(p.key === chosen ? "" : p.key);
   };
 
   const allow = async () => {
-    if (!chosen) return;
+    if (!want) return;
     setPhase("allowing"); setError(undefined);
     try {
-      const real = await api.allowAgentFolder(chosen);
+      const real = await api.allowAgentFolder(want);
+      if (asDefault) local.set(START_KEY, byKey.get(want)?.node.dir === false ? parentOf(real) : real);
       setPhase("allowed");
       onAllowed(real);
       setTimeout(onClose, CLOSE_AFTER_MS);
     } catch (e) { setError(String(e)); setPhase("choosing"); }
   };
   const browse = async () => {
-    const p = await pickDirectory(view?.tree.path, "Open a folder in the picker");
-    if (p) load(p);
+    const p = await pickDirectory(view?.tree.path, "Choose a folder for agents");
+    if (p) void load(p, true);
   };
 
   const state = (key: string) => !chosen ? "" : inside.has(key) ? " lit" : phase === "allowed" ? " gone" : " dim";
@@ -175,13 +204,20 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
       </div>
       {error && <p className="err small" role="alert">{error}</p>}
       <div className="fp-foot">
-        <span className="fp-pick small">{chosenNode
-          ? <><span className="fp-pick-name">{chosenNode.node.name}</span> <span className="dim">{chosenNode.node.dir ? `${chosenNode.node.count} inside` : "file"}</span></>
-          : <span className="dim">Nothing chosen</span>}</span>
+        <input className="fp-path mono" value={path} spellCheck={false} placeholder="Paste a path, or click a file or folder" aria-label="Path to let agents read"
+          disabled={phase !== "choosing"} onChange={(e) => setPath(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void goTo(); } }} />
+        <label className="fp-default small" title="Open the picker here next time">
+          <input type="checkbox" checked={asDefault} disabled={phase !== "choosing"} onChange={(e) => { setAsDefault(e.target.checked); setTouched(true); }} />
+          <span className={`fp-default-box${touched ? " touched" : ""}`} aria-hidden="true" />Set as default
+        </label>
+      </div>
+      <div className="fp-foot">
+        <span className="fp-pick small dim">{chosenNode ? (chosenNode.node.dir ? `${chosenNode.node.name}: ${chosenNode.node.count} inside` : `${chosenNode.node.name}: file`) : ""}</span>
         <button type="button" className="text-btn" disabled={!view?.parent || phase !== "choosing"} onClick={() => load(view?.parent ?? undefined)}><ArrowUp size={13} aria-hidden="true" /> Up a level</button>
         <button type="button" className="text-btn" disabled={phase !== "choosing"} onClick={browse}>Browse…</button>
         <button type="button" className="btn" disabled={phase !== "choosing"} onClick={onClose}>Cancel</button>
-        <button type="button" className="btn primary" disabled={!chosen || phase !== "choosing"} onClick={allow}>{phase === "allowed" ? "Allowed" : phase === "allowing" ? "Allowing…" : "Allow agents"}</button>
+        <button type="button" className="btn primary" disabled={!want || phase !== "choosing"} onClick={allow}>{phase === "allowed" ? "Allowed" : phase === "allowing" ? "Allowing…" : "Allow agents"}</button>
       </div>
     </div>
   </ModalBackdrop>, document.body);

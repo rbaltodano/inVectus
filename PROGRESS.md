@@ -3209,7 +3209,7 @@ Checked on arm64 macOS only.
 
 ## 2026-11-13 — Settings: Flicker animations switch
 
-- Settings → Appearance → Motion → Flicker animations (on by default, per computer in local
+- Settings → Appearance → Flicker animations (on by default, per computer in local
   storage). Off, `data-flicker="off"` on the root stops every flicker in CSS (cards, menus, popup
   windows, table cells, source rows, Home's gap card), popup windows close at once, the
   Integrations filter swaps at once, and the map's squares show without flickering. The system's

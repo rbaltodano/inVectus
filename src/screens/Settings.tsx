@@ -121,8 +121,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
                 })}
               </div>
             </section>
-            <section aria-labelledby="s-motion" className="panel settings-group stack gap">
-              <div className="settings-group-heading"><h3 id="s-motion">Motion</h3><p>How cards, menus and windows arrive and leave.</p></div>
+            <section aria-label="Flicker animations" className="panel settings-group stack gap">
               <label className="check top settings-switch-row">
                 <input type="checkbox" role="switch" checked={flicker} onChange={() => chooseFlicker(!flicker)} />
                 <span><b>Flicker animations</b><div className="muted small">Cards, menus and windows flicker in and out like the map’s squares. Turn off to have them appear and close at once. Always off when your system asks for reduced motion.</div></span>

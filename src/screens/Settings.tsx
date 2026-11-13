@@ -5,6 +5,7 @@ import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type Proj
 import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
+import OutboundLog from "../OutboundLog";
 import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 
@@ -59,7 +60,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
   const reset = () => { if (defaults && project) { setWeights(defaults); local.set(weightsKey(project.root), null); } };
   const llmReady = llms.some((l) => l.installed);
   const changed = weights && defaults && JSON.stringify(weights) !== JSON.stringify(defaults);
-  const projectEmpty = !project ? <div className="settings-project-empty"><Layers size={24} aria-hidden="true" /><h3>No project open</h3><p>Open a project from the sidebar to change its network switch, gap weights and calibration, or inspect its embedding spaces.</p></div> : null;
+  const projectEmpty = !project ? <div className="settings-project-empty"><Layers size={24} aria-hidden="true" /><h3>No project open</h3><p>Open a project from the sidebar to change its external checks, gap weights and calibration, or inspect its embedding spaces.</p></div> : null;
 
   return <div className="page settings-page">
     <header className="settings-header">
@@ -146,9 +147,14 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             {project && <section aria-labelledby="s-net" className="panel settings-group stack gap">
               <h3 id="s-net">Network</h3>
               <label className="check top settings-switch-row">
-                <input type="checkbox" role="switch" checked={!project.network_enabled} disabled={busy}
+                <input type="checkbox" role="switch" checked={project.network_enabled} disabled={busy}
                   onChange={() => run(async () => setProject(await api.setNetwork(!project.network_enabled)))} />
-                <span><b>Offline</b><div className="muted small">Blocks model downloads and outside-source checks for this project. Import, indexing, search, map, gaps and descriptions always run offline.</div></span>
+                <span><b>External checks</b><div className="muted small">Checking a gap sends its description to the sources below. Off until you turn it on. Pulling from your integrations and downloading models don’t need it; import, indexing, search, map, gaps and descriptions always run on this computer.</div></span>
+              </label>
+              <label className="check top settings-switch-row">
+                <input type="checkbox" role="switch" checked={project.agent_access} disabled={busy}
+                  onChange={() => run(async () => setProject(await api.setAgentAccess(!project.agent_access)))} />
+                <span><b>Agent access</b><div className="muted small">Lets AI agents (Claude Code, Codex and others you connect) read this project’s items, gaps and files through inVectus. What they read can reach their provider. New projects start with your last choice.</div></span>
               </label>
               {project.offline_env && <div className="note small">INVECTUS_OFFLINE is set: every network use is refused whatever this switch says.</div>}
               <fieldset className="settings-sources">
@@ -165,6 +171,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
               </fieldset>
               <div className="muted small">Results are cached in the project for 7 days.</div>
             </section>}
+            <OutboundLog />
 
           </div>
           <div id="settings-section-scoring" role="tabpanel" aria-labelledby="settings-tab-scoring" className="settings-section" hidden={section !== "scoring"}>

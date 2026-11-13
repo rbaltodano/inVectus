@@ -255,46 +255,96 @@ pub fn parse_openalex(v: &serde_json::Value) -> Result<(u64, Vec<ExternalHit>)> 
     Ok((v["meta"]["count"].as_u64().unwrap_or(0), hits))
 }
 
-/// Last request time per source, shared across threads.
-static LAST: Mutex<[Option<Instant>; 4]> = Mutex::new([None; 4]);
+/// Earliest time of the next request per source, shared across threads. Only read and moved
+/// forward under the lock; the waiting happens outside it.
+static NEXT_SLOT: Mutex<[Option<Instant>; 4]> = Mutex::new([None; 4]);
 
-fn get_json(source: Source, url: &str, params: &[(&str, &str)]) -> Result<serde_json::Value> {
-    invectus_core::net::ensure_online(&format!("{} verification", source.name()))?;
-    let mut last_err = None;
-    for attempt in 0..3 {
-        {
-            let mut last = LAST.lock().unwrap();
-            let slot = &mut last[source as usize];
-            if let Some(t) = *slot {
-                let wait = source.spacing().saturating_sub(t.elapsed());
-                std::thread::sleep(wait);
-            }
-            *slot = Some(Instant::now());
-        }
-        let mut req = ureq::get(url).header("User-Agent", USER_AGENT);
-        for (k, v) in params {
-            req = req.query(*k, *v);
-        }
-        match req.call() {
-            Ok(resp) => {
-                let body = resp.into_body().read_to_string()?;
-                return serde_json::from_str(&body)
-                    .with_context(|| format!("{} returned invalid JSON", source.name()));
-            }
-            Err(e) => {
-                last_err = Some(e);
-                std::thread::sleep(Duration::from_secs(1 << attempt));
+/// Most attempts per request (the first try plus two retries), and the whole budget for one
+/// verification's network work.
+const ATTEMPTS: u32 = 3;
+pub const BUDGET: Duration = Duration::from_secs(90);
+
+thread_local! {
+    /// The cancel token and deadline of the verification running on this thread.
+    static LIMITS: std::cell::RefCell<(Option<invectus_core::CancelToken>, Option<Instant>)> =
+        const { std::cell::RefCell::new((None, None)) };
+}
+
+/// Run `f` with network waits bounded by `deadline` and stopped by `cancel`.
+pub fn with_limits<T>(
+    cancel: Option<&invectus_core::CancelToken>,
+    deadline: Instant,
+    f: impl FnOnce() -> T,
+) -> T {
+    let before = LIMITS.with(|l| l.replace((cancel.cloned(), Some(deadline))));
+    struct Restore(Option<(Option<invectus_core::CancelToken>, Option<Instant>)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            if let Some(b) = self.0.take() {
+                LIMITS.with(|l| *l.borrow_mut() = b);
             }
         }
     }
-    Err(last_err.expect("at least one attempt")).with_context(|| format!("GET {url}"))
+    let _restore = Restore(Some(before));
+    f()
 }
 
-fn cache_path(project: &Project, source: Source, key: &str) -> PathBuf {
+/// Sleep `d` unless cancelled or past the deadline first.
+fn wait(d: Duration) -> Result<()> {
+    let (cancel, deadline) = LIMITS.with(|l| l.borrow().clone());
+    let end = Instant::now() + d;
+    loop {
+        if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+            bail!("cancelled");
+        }
+        if deadline.is_some_and(|t| Instant::now() >= t) {
+            bail!("the outside sources took too long; try again later");
+        }
+        let left = end.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Ok(());
+        }
+        std::thread::sleep(left.min(Duration::from_millis(100)));
+    }
+}
+
+#[cfg(test)]
+static ROUTE: Mutex<Option<String>> = Mutex::new(None);
+
+/// `url`, or under test the same host and path on a local stand-in.
+fn routed(url: &str) -> String {
+    #[cfg(test)]
+    if let Some(base) = ROUTE.lock().unwrap().clone()
+        && let Some(rest) = url.strip_prefix("https://")
+    {
+        return format!("{base}/{rest}");
+    }
+    url.to_string()
+}
+
+/// The client for outside sources: https only, no redirects (a redirect could replay an API
+/// key elsewhere), bounded connect, answer and total times (shorter under test).
+fn agent() -> ureq::Agent {
+    let t = |real: u64, test: u64| Some(Duration::from_secs(if cfg!(test) { test } else { real }));
+    ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .https_only(!cfg!(test))
+        .max_redirects(0)
+        .timeout_connect(t(10, 2))
+        .timeout_recv_response(t(20, 2))
+        .timeout_global(t(30, 3))
+        .build()
+        .into()
+}
+
+fn get_json(source: Source, url: &str, params: &[(&str, &str)]) -> Result<serde_json::Value> {
+    let body = get_text_with(source, url, params, &[])?;
+    serde_json::from_str(&body).with_context(|| format!("{} returned invalid JSON", source.name()))
+}
+
+fn cache_path(root: &std::path::Path, source: Source, key: &str) -> PathBuf {
     let h = hex::encode(Sha256::digest(key.as_bytes()));
-    project
-        .root
-        .join("cache")
+    root.join("cache")
         .join("verify")
         .join(source.name())
         .join(format!("{}.json", &h[..32]))
@@ -313,9 +363,19 @@ pub fn search(
     query: &KeywordQuery,
     max: usize,
 ) -> Result<SourceResult> {
+    search_in(&project.root, source, query, max)
+}
+
+/// [`search`] for the project at `root`, without holding the project.
+pub fn search_in(
+    root: &std::path::Path,
+    source: Source,
+    query: &KeywordQuery,
+    max: usize,
+) -> Result<SourceResult> {
     let q = source.query(query);
     let key = format!("{}|{q}|{}|{max}", source.name(), query.reviews_only);
-    let path = cache_path(project, source, &key);
+    let path = cache_path(root, source, &key);
     if let Ok(bytes) = std::fs::read(&path)
         && let Ok(mut r) = serde_json::from_slice::<SourceResult>(&bytes)
         && now().saturating_sub(r.fetched_at) < CACHE_DAYS * 86_400
@@ -427,10 +487,7 @@ pub fn search(
             }
         }
     };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    std::fs::write(&path, serde_json::to_vec(&result)?)?;
+    invectus_core::private::write(&path, &serde_json::to_vec(&result)?)?;
     Ok(result)
 }
 
@@ -524,35 +581,64 @@ fn get_text_with(
     headers: &[(&str, &str)],
 ) -> Result<String> {
     invectus_core::net::ensure_online(&format!("{} verification", source.name()))?;
-    let mut last_err = None;
-    for attempt in 0..3 {
-        {
-            let mut last = LAST.lock().unwrap();
-            let slot = &mut last[source as usize];
-            if let Some(t) = *slot {
-                std::thread::sleep(source.spacing().saturating_sub(t.elapsed()));
-            }
-            *slot = Some(Instant::now());
-        }
-        let mut req = ureq::get(url).header("User-Agent", USER_AGENT);
+    if !url.starts_with("https://") {
+        bail!("refusing a non-https address for {}", source.name());
+    }
+    let host = invectus_core::net::host_of(url);
+    let purpose = format!("Gap check: {}", source.name());
+    let agent = agent();
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 0..ATTEMPTS {
+        // Reserve the next slot under the lock, then wait for it outside the lock.
+        let slot = {
+            let mut next = NEXT_SLOT.lock().unwrap_or_else(|e| e.into_inner());
+            let now = Instant::now();
+            let at = next[source as usize].map_or(now, |t| t.max(now));
+            next[source as usize] = Some(at + source.spacing());
+            at
+        };
+        wait(slot.saturating_duration_since(Instant::now()))?;
+        let target = routed(url);
+        let mut req = agent.get(&target).header("User-Agent", USER_AGENT);
         for (k, v) in params {
             req = req.query(*k, *v);
         }
         for (k, v) in headers {
             req = req.header(*k, *v);
         }
-        match req.call() {
-            Ok(resp) => return Ok(resp.into_body().read_to_string()?),
-            Err(ureq::Error::StatusCode(code @ (401 | 403))) => {
-                bail!("{} refused the API key (HTTP {code})", source.name())
-            }
+        let resp = match req.call() {
+            Ok(r) => r,
             Err(e) => {
-                last_err = Some(e);
-                std::thread::sleep(Duration::from_secs(2 << attempt));
+                invectus_core::net::record(url, &purpose, None);
+                last_err = Some(anyhow::Error::new(e).context(format!("GET {host}")));
+                wait(Duration::from_secs(1 << attempt))?;
+                continue;
             }
+        };
+        let status = resp.status().as_u16();
+        invectus_core::net::record(url, &purpose, Some(status));
+        match status {
+            200 => {
+                return resp
+                    .into_body()
+                    .with_config()
+                    .limit(16 * 1024 * 1024)
+                    .read_to_string()
+                    .with_context(|| format!("reading {}'s answer", source.name()));
+            }
+            300..=399 => bail!(
+                "{} answered with a redirect (HTTP {status}); not followed",
+                source.name()
+            ),
+            401 | 403 => bail!("{} refused the request (HTTP {status})", source.name()),
+            429 | 500..=599 => {
+                last_err = Some(anyhow::anyhow!("{} answered HTTP {status}", source.name()));
+                wait(Duration::from_secs(2 << attempt))?;
+            }
+            _ => bail!("{} answered HTTP {status}", source.name()),
         }
     }
-    Err(last_err.expect("at least one attempt")).with_context(|| format!("GET {url}"))
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("no attempt was made")))
 }
 
 #[cfg(test)]
@@ -658,27 +744,184 @@ mod tests {
             groups: vec![vec!["x".into()]],
             reviews_only: false,
         };
-        // SAFETY: tests in this crate do not read the variable concurrently.
-        unsafe { std::env::set_var("INVECTUS_OFFLINE", "1") };
-        let err = search(&p, Source::OpenAlex, &q, 5).unwrap_err().to_string();
+        invectus_core::net::scoped_offline(true, || {
+            let err = search(&p, Source::OpenAlex, &q, 5).unwrap_err().to_string();
+            assert!(err.contains("offline"), "{err}");
+            let cached = SourceResult {
+                source: "openalex".into(),
+                query: q.openalex(),
+                total: Some(1),
+                hits: vec![],
+                cached: false,
+                fetched_at: now(),
+            };
+            let path = cache_path(
+                &p.root,
+                Source::OpenAlex,
+                &format!("openalex|{}|false|5", q.openalex()),
+            );
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, serde_json::to_vec(&cached).unwrap()).unwrap();
+            let r = search(&p, Source::OpenAlex, &q, 5).unwrap();
+            assert!(r.cached && r.total == Some(1));
+        });
+    }
+
+    // ---- Availability and boundaries (audit 2026-11-12, item 2) --------------------------
+
+    /// One stand-in at a time: the route is process-wide.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    /// A local server that answers every request with `reply(n)` (n counts from 1) after
+    /// `delay`; returns the request counter.
+    fn stand_in(
+        delay: Duration,
+        reply: fn(usize) -> (u16, &'static str),
+    ) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+        use std::io::{BufRead, BufReader, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = count.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                std::thread::spawn(move || {
+                    let mut r = BufReader::new(stream.try_clone().unwrap());
+                    let mut line = String::new();
+                    while r.read_line(&mut line).unwrap_or(0) > 0 && line != "\r\n" {
+                        line.clear();
+                    }
+                    std::thread::sleep(delay);
+                    let (status, body) = reply(n);
+                    let _ = write!(
+                        stream,
+                        "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                });
+            }
+        });
+        *ROUTE.lock().unwrap() = Some(format!("http://{addr}"));
+        count
+    }
+
+    fn query() -> KeywordQuery {
+        KeywordQuery {
+            groups: vec![vec!["retina".into()]],
+            reviews_only: false,
+        }
+    }
+
+    fn fresh_root() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn offline_sends_zero_requests() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let count = stand_in(Duration::ZERO, |_| (200, "{}"));
+        let root = fresh_root();
+        let err = invectus_core::net::scoped_offline(true, || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5)
+                .unwrap_err()
+                .to_string()
+        });
         assert!(err.contains("offline"), "{err}");
-        let cached = SourceResult {
-            source: "openalex".into(),
-            query: q.openalex(),
-            total: Some(1),
-            hits: vec![],
-            cached: false,
-            fetched_at: now(),
-        };
-        let path = cache_path(
-            &p,
-            Source::OpenAlex,
-            &format!("openalex|{}|false|5", q.openalex()),
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 0);
+        *ROUTE.lock().unwrap() = None;
+    }
+
+    #[test]
+    fn a_stalled_source_times_out() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let _count = stand_in(Duration::from_secs(30), |_| (200, "{}"));
+        let root = fresh_root();
+        let t = Instant::now();
+        // Three attempts, each cut off by the answer deadline, with backoff between.
+        let err = with_limits(None, Instant::now() + Duration::from_secs(20), || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5).unwrap_err()
+        });
+        assert!(
+            t.elapsed() < Duration::from_secs(15),
+            "took {:?}: {err:#}",
+            t.elapsed()
         );
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, serde_json::to_vec(&cached).unwrap()).unwrap();
-        let r = search(&p, Source::OpenAlex, &q, 5).unwrap();
-        assert!(r.cached && r.total == Some(1));
-        unsafe { std::env::remove_var("INVECTUS_OFFLINE") };
+        *ROUTE.lock().unwrap() = None;
+    }
+
+    #[test]
+    fn the_budget_bounds_the_whole_check() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let _count = stand_in(Duration::from_secs(30), |_| (200, "{}"));
+        let root = fresh_root();
+        let t = Instant::now();
+        let err = with_limits(None, Instant::now() + Duration::from_secs(1), || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5)
+                .unwrap_err()
+                .to_string()
+        });
+        assert!(err.contains("too long"), "{err}");
+        assert!(
+            t.elapsed() < Duration::from_secs(5),
+            "took {:?}",
+            t.elapsed()
+        );
+        *ROUTE.lock().unwrap() = None;
+    }
+
+    #[test]
+    fn cancelling_stops_a_check_promptly() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let _count = stand_in(Duration::ZERO, |_| (503, "{}"));
+        let root = fresh_root();
+        let cancel = invectus_core::CancelToken::default();
+        let c2 = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            c2.cancel();
+        });
+        let t = Instant::now();
+        let err = with_limits(Some(&cancel), Instant::now() + BUDGET, || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5)
+                .unwrap_err()
+                .to_string()
+        });
+        assert!(err.contains("cancelled"), "{err}");
+        assert!(
+            t.elapsed() < Duration::from_secs(2),
+            "took {:?}",
+            t.elapsed()
+        );
+        *ROUTE.lock().unwrap() = None;
+    }
+
+    #[test]
+    fn retries_are_bounded_and_redirects_refused() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let count = stand_in(Duration::ZERO, |_| (500, "{}"));
+        let root = fresh_root();
+        let _ = with_limits(None, Instant::now() + BUDGET, || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5)
+        });
+        assert_eq!(
+            count.load(std::sync::atomic::Ordering::SeqCst),
+            ATTEMPTS as usize
+        );
+        let count = stand_in(Duration::ZERO, |_| (302, ""));
+        let root = fresh_root();
+        let err = with_limits(None, Instant::now() + BUDGET, || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5)
+                .unwrap_err()
+                .to_string()
+        });
+        assert!(err.contains("redirect"), "{err}");
+        assert_eq!(
+            count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "a redirect is not retried"
+        );
+        *ROUTE.lock().unwrap() = None;
     }
 }

@@ -409,23 +409,13 @@ pub fn list_models() -> OpResult<Vec<ModelInfo>> {
         .collect())
 }
 
-/// Download an embedding model at its pinned revision: explicit network use, refused while the
-/// open project is offline; checksums are verified. Runs as a job.
-pub fn install_model(
-    emit: &Emit,
-    session: &Shared,
-    board: &SharedBoard,
-    model: &str,
-) -> OpResult<JobInfo> {
+/// Download an embedding model at its pinned revision: explicit network use, refused in offline
+/// mode; checksums are verified. Runs as a job.
+pub fn install_model(emit: &Emit, board: &SharedBoard, model: &str) -> OpResult<JobInfo> {
     let spec = registry::spec(model).map_err(err)?;
+    // Downloads only fetch public model files, so the project's external-checks switch does not
+    // apply; offline mode still refuses them.
     invectus_core::net::ensure_online(&format!("downloading model {}", spec.key)).map_err(err)?;
-    if let Ok(guard) = session.try_lock()
-        && guard
-            .as_ref()
-            .is_some_and(|s| !s.project.config.network_enabled)
-    {
-        return Err("offline mode is on for this project: turn it off to download a model".into());
-    }
     let mut info = JobInfo::new("download", None, format!("Downloading {}", spec.key));
     info.models = vec![spec.key.into()];
     spawn_job(
@@ -450,24 +440,19 @@ pub type Work = Box<
         + Send,
 >;
 
-/// Pull a Google Sheet or Notion database into its project snapshot as a background job
-/// (`pull`). Network use: needs the project's network switch (or `allow_network`, the CLI's
-/// `--network`) and is refused in offline mode. Importing afterwards reads the snapshot offline.
+/// Pull a source (Google Sheet, Notion, Zotero, Airtable, forms, boards) into its project
+/// snapshot as a background job (`pull`). Network use, started only by the person: it reads
+/// their own data into the project and sends none of the collection out, so the external-checks
+/// switch does not apply (owner decision 2026-11-12). Offline mode refuses it. Importing
+/// afterwards reads the snapshot offline.
 pub fn start_pull(
     emit: &Emit,
     session: &Shared,
     board: &SharedBoard,
     spec: &str,
-    allow_network: bool,
 ) -> OpResult<JobInfo> {
     let (source, root) = with_session(session, |s| {
         ensure_idle(board, &s.project)?;
-        if !allow_network && !s.project.config.network_enabled {
-            anyhow::bail!(
-                "this project's network switch is off: turn it on in Settings → Network to pull \
-                 from outside sources"
-            );
-        }
         invectus_core::net::ensure_online("pulling a source")?;
         let source = resolve_source(spec, None, Some(&s.project.root))?;
         if !source.is_remote() {
@@ -567,25 +552,30 @@ pub fn spawn_job(emit: &Emit, board: &SharedBoard, info: JobInfo, work: Work) ->
     let (info, cancel) = board.lock().unwrap().begin(info)?;
     emit(&info);
     let (emit, board, id) = (emit.clone(), board.clone(), info.id);
+    // The job runs under the offline policy of whoever started it (a forwarded offline agent
+    // stays offline on the job's thread).
+    let offline = invectus_core::net::offline();
     std::thread::spawn(move || {
-        let mut last: Option<Instant> = None;
-        let mut tick = |phase: &str, done: usize, total: usize| {
-            // At most ten updates a second, but always the last one of a phase.
-            if done < total && last.is_some_and(|t| t.elapsed() < Duration::from_millis(100)) {
-                return;
-            }
-            last = Some(Instant::now());
-            if let Some(j) = board.lock().unwrap().progress(id, phase, done, total) {
+        invectus_core::net::scoped_offline(offline, || {
+            let mut last: Option<Instant> = None;
+            let mut tick = |phase: &str, done: usize, total: usize| {
+                // At most ten updates a second, but always the last one of a phase.
+                if done < total && last.is_some_and(|t| t.elapsed() < Duration::from_millis(100)) {
+                    return;
+                }
+                last = Some(Instant::now());
+                if let Some(j) = board.lock().unwrap().progress(id, phase, done, total) {
+                    emit(&j);
+                }
+            };
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(&cancel, &mut tick)))
+                    .map_err(|_| "the job stopped unexpectedly (internal error)".to_string())
+                    .and_then(|r| r.map_err(|e| format!("{e:#}")));
+            if let Some(j) = board.lock().unwrap().finish(id, result) {
                 emit(&j);
             }
-        };
-        let result =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(&cancel, &mut tick)))
-                .map_err(|_| "the job stopped unexpectedly (internal error)".to_string())
-                .and_then(|r| r.map_err(|e| format!("{e:#}")));
-        if let Some(j) = board.lock().unwrap().finish(id, result) {
-            emit(&j);
-        }
+        })
     });
     Ok(info)
 }

@@ -2,7 +2,7 @@
 //! `data.records:read`). One row per record: `record_id`, `created_time`, then each field in the
 //! order first seen (Airtable leaves empty fields out of a record).
 
-use super::{Paced, PullContext, fmt_number};
+use super::{Paced, PullContext, fmt_number, guard};
 use anyhow::{Result, bail};
 use serde_json::Value;
 use std::time::Duration;
@@ -17,7 +17,13 @@ pub(super) fn records(
     cx: &mut PullContext,
 ) -> Result<(Vec<String>, Vec<Vec<String>>)> {
     // Airtable allows five requests a second per base.
-    let mut a = Paced::new(Duration::from_millis(220));
+    let mut a = Paced::new(
+        Duration::from_millis(220),
+        "https://api.airtable.com",
+        "Airtable",
+    )
+    .cancellable(cx.cancel);
+    let mut bound = guard::Pages::new("Airtable");
     let auth = format!("Bearer {token}");
     let mut fields: Vec<String> = Vec::new();
     let mut records: Vec<(String, String, serde_json::Map<String, Value>)> = Vec::new();
@@ -26,12 +32,17 @@ pub(super) fn records(
         if cx.cancel.is_cancelled() {
             bail!("cancelled");
         }
-        let mut url = format!("{API}/{base}/{table}?pageSize=100");
+        let mut url = format!(
+            "{API}/{}/{}?pageSize=100",
+            guard::enc(base),
+            guard::enc(table)
+        );
         if let Some(v) = view {
-            url.push_str(&format!("&view={v}"));
+            url.push_str(&format!("&view={}", guard::enc(v)));
         }
         if let Some(o) = &offset {
-            url.push_str(&format!("&offset={o}"));
+            bound.next(o)?;
+            url.push_str(&format!("&offset={}", guard::enc(o)));
         }
         let (status, v) = a.get(&url, &[("Authorization", &auth)])?;
         if status != 200 {

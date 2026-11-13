@@ -1,7 +1,8 @@
 //! Pulling a remote source into its local snapshot (SPEC §7.7: explicit network use only).
 //! A pull is the only network step: it writes `<project>/sources/<kind>/<id>.csv` plus a
 //! `.json` record (origin, time, rows, SHA-256) beside it, and imports then read that file
-//! offline. Callers check the project's network switch; [`pull`] refuses in offline mode.
+//! offline. Pulls run only when the person asks and send none of the collection out, so the
+//! project's external-checks switch does not gate them; [`pull`] refuses in offline mode.
 //!
 //! - Google Sheets: the sheet must be shared as "anyone with the link"; the CSV export is
 //!   fetched without signing in.
@@ -16,6 +17,7 @@
 mod airtable;
 pub mod browse;
 mod canny;
+pub(crate) mod guard;
 mod productboard;
 #[cfg(test)]
 mod stand_in;
@@ -35,6 +37,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const USER_AGENT: &str = concat!("inVectus/", env!("CARGO_PKG_VERSION"));
 /// Largest CSV export accepted from Google Sheets.
 const MAX_SHEET_BYTES: u64 = 200 * 1024 * 1024;
+/// Largest single JSON answer accepted from an API (one page of results).
+const MAX_ANSWER_BYTES: u64 = 64 * 1024 * 1024;
 const NOTION_API: &str = "https://api.notion.com/v1";
 const NOTION_VERSION: &str = "2022-06-28";
 /// Notion allows about three requests a second per integration.
@@ -141,9 +145,9 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs()),
     };
-    std::fs::write(
-        snapshot.with_extension("json"),
-        serde_json::to_vec_pretty(&json!({ "source": source, "pull": &pulled }))?,
+    invectus_core::private::write(
+        &snapshot.with_extension("json"),
+        &serde_json::to_vec_pretty(&json!({ "source": source, "pull": &pulled }))?,
     )?;
     Ok(pulled)
 }
@@ -174,20 +178,34 @@ fn need_token(cx: &PullContext, name: &str, env: &str) -> Result<String> {
     })
 }
 
-/// GET requests to one API, spaced and retried on rate limits (429) and server errors.
+/// Requests to one API: bound to its exact origin ([`guard`]), spaced, retried on rate limits
+/// (429) and server errors a bounded number of times, never redirected, and cancellable while
+/// waiting. Every call is recorded in the outbound log.
 pub(crate) struct Paced {
     agent: ureq::Agent,
     spacing: Duration,
     last: Option<Instant>,
+    origin: &'static str,
+    service: &'static str,
+    cancel: Option<CancelToken>,
 }
 
 impl Paced {
-    pub(crate) fn new(spacing: Duration) -> Self {
+    pub(crate) fn new(spacing: Duration, origin: &'static str, service: &'static str) -> Self {
         Self {
-            agent: agent(),
+            agent: guard::agent(),
             spacing,
             last: None,
+            origin,
+            service,
+            cancel: None,
         }
+    }
+
+    /// Stop waiting (spacing, retry backoff) as soon as `cancel` is set.
+    pub(crate) fn cancellable(mut self, cancel: &CancelToken) -> Self {
+        self.cancel = Some(cancel.clone());
+        self
     }
 
     /// `(status, JSON body)`; the caller turns statuses other than 200 into errors.
@@ -200,6 +218,10 @@ impl Paced {
         self.request(url, &[], Some(body))
     }
 
+    fn wait(&self, d: Duration) -> Result<()> {
+        wait_cancellable(d, self.cancel.as_ref())
+    }
+
     fn request(
         &mut self,
         url: &str,
@@ -207,11 +229,14 @@ impl Paced {
         body: Option<&Value>,
     ) -> Result<(u16, Value)> {
         let method = if body.is_some() { "POST" } else { "GET" };
+        // The boundary: nothing is sent unless the URL is on this service's exact origin.
+        guard::check_url(url, self.origin)?;
+        let shown = invectus_core::net::host_of(url);
         let url = routed(url);
         let url = url.as_str();
         for attempt in 0..5u32 {
             if let Some(t) = self.last {
-                std::thread::sleep(self.spacing.saturating_sub(t.elapsed()));
+                self.wait(self.spacing.saturating_sub(t.elapsed()))?;
             }
             self.last = Some(Instant::now());
             let resp = match body {
@@ -233,9 +258,20 @@ impl Paced {
                     }
                     req.call()
                 }
-            }
-            .with_context(|| format!("{method} {url}"))?;
+            };
+            let resp = match resp {
+                Ok(r) => r,
+                Err(e) => {
+                    invectus_core::net::record(self.origin, self.service, None);
+                    // The error names the host only: URLs can carry ids and cursors.
+                    return Err(anyhow::Error::new(e).context(format!("{method} {shown}")));
+                }
+            };
             let status = resp.status().as_u16();
+            invectus_core::net::record(self.origin, self.service, Some(status));
+            if (300..400).contains(&status) {
+                return Err(guard::refuse_redirect(self.service, status));
+            }
             let wait = ["retry-after", "backoff"].iter().find_map(|h| {
                 resp.headers()
                     .get(*h)
@@ -243,11 +279,13 @@ impl Paced {
                     .and_then(|v| v.trim().parse::<u64>().ok())
             });
             if status == 429 || status >= 500 {
-                std::thread::sleep(Duration::from_secs(wait.unwrap_or(1 << attempt).min(60)));
+                self.wait(Duration::from_secs(wait.unwrap_or(1 << attempt).min(60)))?;
                 continue;
             }
             let text = resp
                 .into_body()
+                .with_config()
+                .limit(MAX_ANSWER_BYTES)
                 .read_to_string()
                 .context("reading the answer")?;
             let v = if text.trim().is_empty() {
@@ -257,11 +295,26 @@ impl Paced {
             };
             if let Some(w) = wait {
                 // Zotero's Backoff: slow down before the next request.
-                std::thread::sleep(Duration::from_secs(w.min(60)));
+                self.wait(Duration::from_secs(w.min(60)))?;
             }
             return Ok((status, v));
         }
         bail!("the service kept refusing requests (rate limit); try again in a minute")
+    }
+}
+
+/// Sleep `d`, waking every 100 ms to stop early when `cancel` is set.
+pub(crate) fn wait_cancellable(d: Duration, cancel: Option<&CancelToken>) -> Result<()> {
+    let end = Instant::now() + d;
+    loop {
+        if cancel.is_some_and(CancelToken::is_cancelled) {
+            bail!("cancelled");
+        }
+        let left = end.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Ok(());
+        }
+        std::thread::sleep(left.min(Duration::from_millis(100)));
     }
 }
 
@@ -274,34 +327,69 @@ pub fn last_pull(source: &Source) -> Option<Value> {
         .cloned()
 }
 
+/// The snapshot, owner-only and written atomically (no partial file is left on failure).
 fn write_snapshot(path: &Path, bytes: &[u8]) -> Result<()> {
-    let dir = path.parent().context("snapshot path has no folder")?;
-    std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
-    let tmp = path.with_extension("csv.part");
-    std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::rename(&tmp, path).with_context(|| format!("writing {}", path.display()))
-}
-
-fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        .timeout_global(Some(Duration::from_secs(120)))
-        .build()
-        .into()
+    invectus_core::private::write(path, bytes)
 }
 
 // ---- Google Sheets -------------------------------------------------------------------------
 
 fn google_sheet_csv(id: &str, gid: Option<&str>) -> Result<String> {
-    let mut url = format!("https://docs.google.com/spreadsheets/d/{id}/export?format=csv");
+    let mut url = format!(
+        "https://docs.google.com/spreadsheets/d/{}/export?format=csv",
+        guard::enc(id)
+    );
     if let Some(g) = gid {
-        url.push_str(&format!("&gid={g}"));
+        url.push_str(&format!("&gid={}", guard::enc(g)));
     }
-    let resp = agent()
-        .get(&routed(&url))
-        .header("User-Agent", USER_AGENT)
-        .call()
-        .with_context(|| format!("GET {url}"))?;
+    // No credentials are sent, but redirects are still followed by hand and only within
+    // Google's own hosts: the export answers with a redirect to googleusercontent.com, and a
+    // sheet that is not shared redirects to the sign-in page.
+    let agent = guard::agent();
+    let mut hops = 0;
+    let resp = loop {
+        let u = url::Url::parse(&url).context("Google Sheets gave a malformed address")?;
+        let host = u.host_str().unwrap_or_default().to_string();
+        if host == "accounts.google.com" {
+            bail!(
+                "Google did not share this sheet: set its sharing to \"Anyone with the link\" \
+                 (viewer), or download it as .xlsx or .csv and import the file"
+            );
+        }
+        let google = host == "docs.google.com" || host.ends_with(".googleusercontent.com");
+        if u.scheme() != "https" || !google || !u.username().is_empty() || u.password().is_some() {
+            bail!("Google Sheets redirected to {host}, which is not a Google address; stopped");
+        }
+        let resp = match agent
+            .get(&routed(&url))
+            .header("User-Agent", USER_AGENT)
+            .call()
+        {
+            Ok(r) => r,
+            Err(e) => {
+                invectus_core::net::record(&url, "Google Sheets", None);
+                return Err(anyhow::Error::new(e).context(format!("GET {host}")));
+            }
+        };
+        let status = resp.status().as_u16();
+        invectus_core::net::record(&url, "Google Sheets", Some(status));
+        if !(300..400).contains(&status) {
+            break resp;
+        }
+        hops += 1;
+        if hops > 5 {
+            bail!("Google Sheets redirected too many times");
+        }
+        let next = resp
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .context("Google Sheets redirected without a location")?;
+        url = u
+            .join(next)
+            .context("Google Sheets gave a malformed redirect")?
+            .to_string();
+    };
     let status = resp.status().as_u16();
     let html = resp
         .headers()
@@ -364,14 +452,29 @@ struct Notion<'a> {
     agent: ureq::Agent,
     token: &'a str,
     last: Option<Instant>,
+    cancel: Option<CancelToken>,
 }
 
-impl Notion<'_> {
+impl<'a> Notion<'a> {
+    fn new(token: &'a str, cancel: Option<&CancelToken>) -> Self {
+        Self {
+            agent: guard::agent(),
+            token,
+            last: None,
+            cancel: cancel.cloned(),
+        }
+    }
+
     fn call(&mut self, method: &str, path: &str, body: Option<&Value>) -> Result<Value> {
-        let url = routed(&format!("{NOTION_API}{path}"));
+        let full = format!("{NOTION_API}{path}");
+        guard::check_url(&full, "https://api.notion.com")?;
+        let url = routed(&full);
         for attempt in 0..5 {
             if let Some(t) = self.last {
-                std::thread::sleep(NOTION_SPACING.saturating_sub(t.elapsed()));
+                wait_cancellable(
+                    NOTION_SPACING.saturating_sub(t.elapsed()),
+                    self.cancel.as_ref(),
+                )?;
             }
             self.last = Some(Instant::now());
             let auth = format!("Bearer {}", self.token);
@@ -390,9 +493,19 @@ impl Notion<'_> {
                     .header("Notion-Version", NOTION_VERSION)
                     .header("User-Agent", USER_AGENT)
                     .call()
-            }
-            .with_context(|| format!("{method} {url}"))?;
+            };
+            let resp = match resp {
+                Ok(r) => r,
+                Err(e) => {
+                    invectus_core::net::record(&full, "Notion", None);
+                    return Err(anyhow::Error::new(e).context(format!("{method} api.notion.com")));
+                }
+            };
             let status = resp.status().as_u16();
+            invectus_core::net::record(&full, "Notion", Some(status));
+            if (300..400).contains(&status) {
+                return Err(guard::refuse_redirect("Notion", status));
+            }
             if status == 429 || status >= 500 {
                 let wait = resp
                     .headers()
@@ -400,11 +513,13 @@ impl Notion<'_> {
                     .and_then(|v| v.to_str().ok())
                     .and_then(|v| v.parse::<u64>().ok())
                     .unwrap_or(1 << attempt);
-                std::thread::sleep(Duration::from_secs(wait.min(30)));
+                wait_cancellable(Duration::from_secs(wait.min(30)), self.cancel.as_ref())?;
                 continue;
             }
             let text = resp
                 .into_body()
+                .with_config()
+                .limit(MAX_ANSWER_BYTES)
                 .read_to_string()
                 .context("reading Notion's answer")?;
             let v: Value = serde_json::from_str(&text).context("Notion returned invalid JSON")?;
@@ -425,6 +540,14 @@ impl Notion<'_> {
     }
 }
 
+/// A Notion id from an answer (a block or page id), checked before it goes into a URL path.
+fn notion_id(v: &str) -> Result<&str> {
+    if v.is_empty() || v.len() > 64 || !v.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        bail!("Notion returned an unexpected id");
+    }
+    Ok(v)
+}
+
 /// Columns and rows for a database: `page_id`, `url`, `created_time`, `last_edited_time`, each
 /// property (title first, then by name), then `body`.
 fn notion_database(
@@ -432,12 +555,9 @@ fn notion_database(
     token: &str,
     cx: &mut PullContext,
 ) -> Result<(Vec<String>, Vec<Vec<String>>)> {
-    let mut n = Notion {
-        agent: agent(),
-        token,
-        last: None,
-    };
+    let mut n = Notion::new(token, Some(cx.cancel));
     (cx.progress)("reading database", 0, 0);
+    let id = notion_id(id)?;
     let db = n.call("GET", &format!("/databases/{id}"), None)?;
     let schema = db["properties"]
         .as_object()
@@ -462,9 +582,13 @@ fn notion_database(
 
     let mut pages = Vec::new();
     let mut cursor: Option<String> = None;
+    let mut bound = guard::Pages::new("Notion");
     loop {
         if cx.cancel.is_cancelled() {
             bail!("cancelled");
+        }
+        if let Some(c) = &cursor {
+            bound.next(c)?;
         }
         let mut body = json!({ "page_size": 100 });
         if let Some(c) = &cursor {
@@ -602,13 +726,16 @@ pub(crate) fn fmt_number(f: f64) -> String {
 /// Child pages and databases are not entered (they are their own items).
 fn page_text(n: &mut Notion, block: &str, depth: usize, out: &mut Vec<String>) -> Result<()> {
     let mut cursor: Option<String> = None;
+    let mut bound = guard::Pages::new("Notion");
+    let block = notion_id(block)?;
     loop {
         if out.len() >= MAX_BODY_BLOCKS {
             return Ok(());
         }
         let mut path = format!("/blocks/{block}/children?page_size=100");
         if let Some(c) = &cursor {
-            path.push_str(&format!("&start_cursor={c}"));
+            bound.next(c)?;
+            path.push_str(&format!("&start_cursor={}", guard::enc(c)));
         }
         let v = n.call("GET", &path, None)?;
         for b in v["results"].as_array().into_iter().flatten() {

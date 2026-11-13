@@ -3042,6 +3042,8 @@ real accounts were used.
   connectors). It runs only when the person clicks "Show my … " in the dialog (New project has
   no project yet to hold a switch), offline mode refuses it, and nothing is pulled. The pull
   itself still needs the project's switch. Owner to confirm, or gate listing on the switch too.
+  **Resolved 2026-11-12 (owner):** the switch no longer gates pulls, listing or model
+  downloads; see "Network switch narrowed to External checks" below.
 
 ### Integration check without accounts (2026-11-12, arm64 macOS)
 
@@ -3080,6 +3082,105 @@ real accounts were used.
   binary) can read it, and while that dialog waits the Integrations page shows Connect disabled
   with no hint. Tokens saved from the app itself raise no dialog.
 - Still unchecked on Notion: databases with several data sources (API 2022-06-28).
+
+## 2026-11-12 — Network switch narrowed to External checks (owner decision)
+
+- Owner decision: pulls from the person's own integrations, the listing of what a token can
+  read, and model downloads no longer need the per-project switch. They start only from a click
+  or a command, bring data in over HTTPS, and send none of the collection out. Offline mode
+  (`--offline`, `INVECTUS_OFFLINE=1`) still refuses all of them.
+- The switch stays for calls that send text derived from the collection to another service
+  (PubMed, OpenAlex, Semantic Scholar, arXiv checks; a cloud LLM later), renamed "External
+  checks" in Settings → Network (on = allowed; the old control was an inverted "Offline").
+  `project.json` keeps the `network_enabled` field, so existing projects load unchanged.
+- CLI: `invectus pull` no longer needs `--network` (still accepted, hidden); `status` prints
+  "external checks: on/off". `verify` keeps `--network`.
+- SPEC §7.7, AGENTS.md (engine rules), docs/integrations.md, docs/architecture.md and
+  docs/beta-release.md updated to match.
+
+## 2026-11-12 — Security pass: audit of the Nov 10–12 commits (baseline 66fa1ec)
+
+An external audit listed six areas; Fable 5.2 reviewed the code independently (it confirmed all
+six, found more) and then reviewed the diff (three bypasses found and fixed before commit).
+Checked on arm64 macOS only.
+
+- **Offline handoff.**
+  - `--offline` is now a process flag (`net::force_offline`), with no environment change.
+  - A request forwarded from an MCP server to the app carries `offline`. The app runs it under
+    `net::scoped_offline` (thread-local, only ever stricter); a request that does not say counts as
+    offline. Jobs carry the policy of whoever started them.
+  - Tests: an offline caller is offline in an online app, and the app thread and environment stay
+    untouched; jobs inherit the policy; offline gap checks send zero requests.
+- **Credentials (pulls and listings).**
+  - Each client is bound to one exact origin (`remote/guard.rs`): https, the host exactly, port
+    443, no user info. That covers Productboard's `links.next`.
+  - Clients never follow redirects; a 3xx is an error. Google Sheets follows redirects by hand
+    within Google hosts.
+  - Cursors and ids are percent-encoded; paging is bounded (50,000 pages) and stops on a repeated
+    cursor. Error text names the host only. Answers are capped at 64 MB, and retry waits are
+    cancellable.
+  - Airtable ids must be alphanumeric, and every snapshot name is checked to sit directly in
+    `sources/<kind>/`.
+  - Stand-in tests: a foreign next link gets no token (four forms); a Zotero redirect gets no key;
+    repeated cursor; an encoded cursor arrives whole; a stalled service times out; cancel during a
+    429 wait; Sheets redirects.
+- **Gap checks.**
+  - Own client: https only, no redirects, 10/20/30 s. 3 attempts, a 90 s budget, cancellable; rate
+    slots are reserved outside the lock.
+  - Split into prepare/fetch/finish; the session is not held while the sources answer. Tauri
+    `cancel_verification` and a Stop button; the unused `network` override on the Tauri command is
+    removed.
+  - Tests: offline sends zero requests, stall, budget, cancel, bounded retries, redirect not
+    retried.
+- **Model downloads:** https only, bounded waits, logged.
+- **Network activity:** every call is logged with host, purpose and status only
+  (`net::record`/`outbound_log`), shown in Settings → Network. It is per process: CLI and MCP-server
+  calls do not appear in the app yet.
+- **Agent file access** (`orchestration/grants.rs`).
+  - Agent tools read only the projects folder, the open project, and folders granted per machine
+    (`invectus agents allow|revoke|list`). Every tool that names a project checks its location.
+  - Paths are canonicalised, including the final symlink.
+  - Tests: symlink and `..` escapes, outside folders, and every tool naming an outside project.
+- **Agent access (owner decision 2026-11-12).**
+  - A per-project switch, off by default, governs content-reading agent tools; status, listing and
+    jobs stay available. New projects start with the person's last choice.
+  - It is set in New project (step 03, under the agent cards) and in Settings → Network, or with
+    `invectus agents access on|off`.
+  - Tests: a tool naming a project with access off is refused, whatever is open.
+- **Consent per machine.**
+  - External checks and agent access count only when `<data dir>/inVectus/consent.json` records
+    them for that folder, so a copied project arrives with both off.
+  - Every reload of the config applies this (`load_config`).
+  - Turning a switch off writes the project first.
+- **Private files** (`core/private.rs`).
+  - Folders are 0700 and files 0600 whatever the umask, with an exclusive unique temporary and
+    rename, removed on failure.
+  - Used for the project tree, `project.json`, snapshots and records, the verify cache, exports,
+    grants and consent.
+  - Older projects are tightened on open (best effort).
+- **Retention.**
+  - Pulled copies stay until removed: `invectus sources list|forget`.
+  - `forget` refuses while a collection still uses the copy, and removes the copy, its record and
+    any stray `.part` file.
+- **Tests and tooling.**
+  - Test processes use their own data folder: `paths::use_data_dir_for_tests` in process, and
+    `INVECTUS_DATA_DIR` for child processes. The person's real grants and consent are not touched.
+  - Validation: `cargo test --workspace --release` passes; clippy `-D warnings` clean; fmt;
+    `npm run build`; 57 UI tests.
+- **Docs:** `docs/security.md` (trust boundaries and what is not covered) and
+  `docs/encryption-plan.md` (approved: keychain key with a recovery code, a prototype vector
+  layer first, always on).
+- **Not done / known risks:**
+  - Encryption at rest is not started.
+  - No app UI for agent grants or for removing copies (CLI only).
+  - The log does not show CLI/MCP calls, `gh` starring or client sign-in probes.
+  - Windows sets no explicit ACL, and Linux tokens do not survive a reboot.
+  - Spreadsheet imports have no size cap.
+  - The handoff transition lock is held during a forwarded verify (bounded).
+  - Consent is keyed by path, so a foreign project dropped at a consented path inherits it.
+  - Grants do not bind an agent with its own shell.
+  - The env override can point at other settings.
+  - Windows and Linux are untested.
 
 ## 2026-11-12 — Case study
 

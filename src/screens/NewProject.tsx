@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Folder } from "lucide-react";
 import { LAST_AGENT, useAgentOptions } from "../agentOptions";
-import { AgentPicker } from "../AgentChip";
+import AgentCards, { rememberAgent } from "../AgentCards";
 import { api, inTauri, local, pickDirectory, type JobInfo, type ProjectInfo } from "../api";
 import type { Page } from "../App";
 import SourcePicker, { type Picked } from "../SourcePicker";
@@ -22,6 +22,8 @@ export default function NewProject({ onCreated, onIntegrations, blocked }: Props
   const [sources, setSources] = useState<Picked[]>([]);
   const [agent, setAgent] = useState<string>();
   const [agentPicked, setAgentPicked] = useState(false);
+  // Agent access starts as the person's last choice (off until they first turn it on).
+  const [access, setAccess] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const { agents, fallback } = useAgentOptions();
@@ -29,6 +31,7 @@ export default function NewProject({ onCreated, onIntegrations, blocked }: Props
   useEffect(() => {
     if (!inTauri) return;
     api.defaultDir().then(setDir).catch(() => undefined);
+    api.agentAccessDefault().then(setAccess).catch(() => undefined);
   }, []);
 
   // Default to the agent chosen last time (see useAgentOptions) until one is picked here.
@@ -45,8 +48,10 @@ export default function NewProject({ onCreated, onIntegrations, blocked }: Props
     setError(undefined); setBusy(true);
     try {
       const p = await api.open(joinPath(dir, projectName), true);
-      const withAgent = agent ? await api.setProjectAgent(p.root, agent).catch(() => p) : p;
-      if (agent) local.set(LAST_AGENT, agent);
+      const chosen = agent ? await api.setProjectAgent(p.root, agent).catch(() => p) : p;
+      // Recorded on this computer; new projects start with the same choice next time.
+      const withAgent = await api.setAgentAccess(access).catch(() => chosen);
+      if (agent) { local.set(LAST_AGENT, agent); rememberAgent(agent); }
       // Each chosen source goes through Import in turn.
       const [first, ...rest] = sources.map((p) => p.path);
       onCreated(withAgent, first ? { kind: "import", path: first, next: rest } : undefined);
@@ -61,8 +66,6 @@ export default function NewProject({ onCreated, onIntegrations, blocked }: Props
         <h1><input className="np-title" autoFocus aria-label="Project name" value={name} placeholder={stem || "New project"}
           onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }} /></h1>
         <p className="dim new-project-lede">A project is a folder on this computer: one dataset, its index and map, and your decisions.</p></div>
-      {/* The agent for this project, as in the project header; saved when the project is created. */}
-      <div className="np-agent-pick"><AgentPicker value={agent} onChoose={(id) => { setAgent(id); setAgentPicked(true); }} /></div>
     </div>
 
     <section className="new-project-section" aria-labelledby="np-where">
@@ -79,6 +82,13 @@ export default function NewProject({ onCreated, onIntegrations, blocked }: Props
     <section className="new-project-section" aria-labelledby="np-data">
       <h2 id="np-data"><span className="np-step">02</span>Import existing data <span className="dim np-optional">optional</span></h2>
       <SourcePicker picked={sources} onChange={setSources} onIntegrations={onIntegrations} disabled={!!blocked} />
+    </section>
+
+    {/* Who does the project's writing work, and whether agents may read it; saved on create. */}
+    <section className="new-project-section" aria-labelledby="np-agent">
+      <h2 id="np-agent"><span className="np-step">03</span>Agent</h2>
+      <AgentCards agents={agents} value={agent} onChoose={(id) => { setAgent(id); setAgentPicked(true); }}
+        access={access} onAccess={setAccess} disabled={!!blocked} />
     </section>
 
 

@@ -235,9 +235,11 @@ impl Server {
             .app
             .as_mut()
             .ok_or("the inVectus app is not reachable")?;
+        // The caller's offline restriction travels with the request; the app applies it on top
+        // of its own (policies only get stricter).
         let req = json!({
             "op": "tool", "client": self.agent.client, "name": name, "arguments": args,
-            "project": self.app_target,
+            "project": self.app_target, "offline": invectus_core::net::offline(),
         });
         match app.request(&req) {
             Ok(r) => r,
@@ -293,6 +295,20 @@ fn initialize(params: &Value) -> Value {
 
 #[cfg(test)]
 mod tests {
+    /// A temporary folder agents may read, in this test process's own data folder, with agent
+    /// access on for projects created from here on (the person's real settings are untouched).
+    fn granted_dir() -> tempfile::TempDir {
+        invectus_core::paths::use_data_dir_for_tests(
+            std::env::temp_dir().join(format!("invectus-cli-test-{}", std::process::id())),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        invectus_orchestration::grants::allow(dir.path()).unwrap();
+        // Turning access on once makes it the default for the projects these tests create.
+        let seed_dir = tempfile::tempdir().unwrap();
+        let mut seed = invectus_core::Project::create(&seed_dir.path().join("seed")).unwrap();
+        seed.set_agent_access(true).unwrap();
+        dir
+    }
     use super::*;
     use invectus_orchestration as orch;
 
@@ -304,7 +320,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn app_following_calls_refuse_a_different_project() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = granted_dir();
         let sock = dir.path().join("agent.sock");
         let session = orch::Shared::default();
         let board = orch::SharedBoard::default();
@@ -455,7 +471,7 @@ mod tests {
                 json!(["compact", "full"])
             );
         }
-        let dir = tempfile::tempdir().unwrap();
+        let dir = granted_dir();
         let root = dir.path().join("detail.invectus");
         invectus_core::Project::create(&root).unwrap();
         let full = server.call(
@@ -481,7 +497,7 @@ mod tests {
 
     #[test]
     fn lists_and_opens_projects() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = granted_dir();
         invectus_core::Project::create(&dir.path().join("b")).unwrap();
         invectus_core::Project::create(&dir.path().join("a")).unwrap();
         std::fs::create_dir(dir.path().join("not-a-project")).unwrap();
@@ -539,7 +555,7 @@ mod tests {
             eprintln!("skipped: {} is not installed", registry::DEFAULT_MODEL);
             return;
         }
-        let dir = tempfile::tempdir().unwrap();
+        let dir = granted_dir();
         let csv = dir.path().join("notes.csv");
         let topics = [
             "retinal detachment surgery outcomes",

@@ -16,8 +16,17 @@
 .np-folder { flex: none; width: 38px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line-2); background: none; color: var(--ink); cursor: pointer; }
 .np-folder:hover { border-color: var(--accent); color: var(--accent); }
 
-/* The agent picker sits at the top right of the heading, as in the project header. */
-.np-agent-pick { flex: none; padding-top: 18px; }
+/* 03 Agent: recent agents as cards, "More" for the rest, and agent access under them. */
+.agent-cards { display: flex; flex-direction: column; gap: 18px; }
+.agent-access-row { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; cursor: pointer; max-width: 640px; }
+.agent-access-row > span { display: flex; flex-direction: column; gap: 4px; }
+.agent-access-title { font-size: 13px; color: var(--text); }
+.agent-access-row input[role="switch"] { padding: 0; margin-top: 1px; }
+.agent-dialog { width: min(480px, calc(100vw - 32px)); }
+.agent-dialog-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r); max-height: 340px; overflow: auto; }
+.agent-dialog-rows > li + li .choice-row { border-top: 1px solid var(--line); }
+.agent-dialog-mark { width: 22px; display: grid; place-items: center; flex: none; }
+.agent-dialog-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 
 .new-project-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .new-project-actions .btn { margin-top: 12px; }

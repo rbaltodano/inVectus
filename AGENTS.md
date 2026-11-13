@@ -51,8 +51,10 @@ macOS, Windows, Linux. `unsearch` is an internal crate name only; nothing user-f
   dimensions, precision, runtime). Never compare vectors from different spaces; a query encoder
   from another runtime is admitted only after a recorded parity check.
 - **No hidden network.** Import, embedding, search, clustering, gap scans, descriptions and
-  calibration run offline. Network use is explicit only: model downloads, and verification
-  connectors with `--network` (or the project's network switch). `--offline` /
+  calibration run offline. Network use is explicit only, started by the person: model
+  downloads, pulls from their own integrations, and verification connectors. Anything that
+  sends text derived from the collection to another service (verification connectors, a cloud
+  LLM) also needs the project's External checks switch (or `--network`). `--offline` /
   `INVECTUS_OFFLINE=1` must refuse all of it. Load models from verified local files only.
 - **Absence claims are careful.** Keep exact re-scoring and the exhaustive route; nearest
   neighbours are not proof of absence. Verdicts say "in this collection", carry their

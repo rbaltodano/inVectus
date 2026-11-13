@@ -216,8 +216,9 @@ export default function GapDetailView({ ctx, id }: { ctx: Ctx; id: number }) {
           <div className="row wrap">
             <button type="button" className="btn" disabled={verify.busy || offline} onClick={() => verify.run(async () => setVerification(await api.verify(tref, id)))}>
               {verify.busy ? "Searching…" : `${outside ? "Check again" : "Check"}: ${sourceNames(ctx.project.verify_sources)}`}</button>
+            {verify.busy && <button type="button" className="btn" onClick={() => { void api.cancelVerification(); }}>Stop</button>}
           </div>
-          {offline && <div className="note small">Offline: switch the network on (top right) to search outside sources. Results are cached in the project.</div>}
+          {offline && <div className="note small">{project.offline_env ? "INVECTUS_OFFLINE is set, so outside checks are refused." : "Checking sends this gap’s description to the outside sources. Turn on External checks in Settings → Network to allow it. Results are cached in the project."}</div>}
           <ErrorLine error={verify.error} />
           {outside && <>
             <div>{outside.summary}</div>

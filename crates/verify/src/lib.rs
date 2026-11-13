@@ -4,4 +4,4 @@ pub mod connectors;
 pub mod gap;
 
 pub use connectors::{ExternalHit, KeywordQuery, Source, SourceResult};
-pub use gap::{Verification, VerifyOptions, verify_gap};
+pub use gap::{Fetched, Prepared, Verification, VerifyOptions, fetch, finish, prepare, verify_gap};

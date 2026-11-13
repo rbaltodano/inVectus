@@ -31,7 +31,7 @@ export interface JobInfo {
 export interface MissingModel { key: string; repo: string; megabytes: number }
 export interface IndexPlan { models: string[]; missing: MissingModel[]; notes: string[] }
 export interface ProjectInfo {
-  root: string; name: string; warning: string | null; network_enabled: boolean; offline_env: boolean; verify_sources: string[];
+  root: string; name: string; warning: string | null; network_enabled: boolean; agent_access: boolean; offline_env: boolean; verify_sources: string[];
   preferred_agent_model?: string | null;
   /** Who does this project's writing work: an agent client id, or `on-device`. */
   agent?: string | null;
@@ -148,6 +148,9 @@ export interface Verification {
 export interface TableRef { project?: string; collection: string; space: string | null }
 
 /** Something an integration can pull (a Notion database, a Zotero collection, a form…). */
+/** One network call the app made: host and purpose only, never paths, ids or contents. */
+export interface OutboundCall { at_ms: number; host: string; purpose: string; status: number | null }
+
 export interface SourceChoice {
   /** What a pull takes (`notion:<id>`, `zotero:collection:<KEY>`, …). */
   spec: string; title: string;
@@ -166,6 +169,8 @@ export const api = {
   info: () => invoke<ProjectInfo>("project_info"),
   rename: (path: string, name: string) => invoke<string>("rename_project", { path, name }),
   setNetwork: (enabled: boolean) => invoke<ProjectInfo>("set_network", { enabled }),
+  setAgentAccess: (enabled: boolean) => invoke<ProjectInfo>("set_agent_access", { enabled }),
+  agentAccessDefault: () => invoke<boolean>("agent_access_default"),
   setVerifySources: (sources: string[]) => invoke<ProjectInfo>("set_verify_sources", { sources }),
   setAgentModel: (project: string, model: string | null) => invoke<ProjectInfo>("set_agent_model", { project, model }),
   setProjectAgent: (project: string, agent: string | null) => invoke<ProjectInfo>("set_project_agent", { project, agent }),
@@ -204,7 +209,9 @@ export const api = {
   bookmark: (t: TableRef, gapId: number) => invoke<void>("bookmark_gap", { form: t, gapId }),
   removeBookmark: (t: TableRef, kind: string, coreKey: string) => invoke<void>("remove_gap_bookmark", { form: t, kind, coreKey }),
   describe: (t: TableRef, gapId: number, at: number | null) => invoke<DescribeResult>("describe_gap", { form: t, gapId, t: at }),
-  verify: (t: TableRef, gapId: number) => invoke<Verification>("verify_gap", { form: t, gapId, network: false }),
+  verify: (t: TableRef, gapId: number) => invoke<Verification>("verify_gap", { form: t, gapId }),
+  cancelVerification: () => invoke<boolean>("cancel_verification"),
+  outboundLog: () => invoke<OutboundCall[]>("outbound_log"),
   // Connect an AI agent: plan shows the change; apply makes it. `custom` takes a file and key.
   connectClients: () => invoke<ClientInfo[]>("connect_clients"),
   connectPlan: (client: AgentClient, custom?: CustomClient) => invoke<ConnectPlan>("connect_plan", { client, file: custom?.file ?? null, key: custom?.key ?? null }),

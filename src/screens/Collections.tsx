@@ -102,7 +102,7 @@ function CollectionPanel({ ctx, c, open, onToggle }: { ctx: Ctx; c: Collection; 
     {tables.length === 0 && plan && plan.models.length > 0 && <button type="button" className="btn primary start" disabled={busy || isRunning(job)} onClick={() => index(null, true)}>Index and map with {plan.models.join(", ")}</button>}
     <div className="collection-actions">
       {c.source_spec && <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={pullAndUpdate}
-        title={project.network_enabled ? "Pulls the latest copy (network), then imports it with the same columns and roles" : "Turn on this project's network switch (Settings → Network) to pull"}>{pullJob !== undefined ? "Pulling…" : "Pull and update"}</button>}
+        title="Pulls the latest copy (network), then imports it with the same columns and roles">{pullJob !== undefined ? "Pulling…" : "Pull and update"}</button>}
       {c.reimportable && !c.source_spec && <button type="button" className="text-btn" disabled={busy || isRunning(job)} onClick={reimport}
         title={c.source_path ? `Imports ${c.source_path} again with the same columns and roles` : undefined}>Update from source</button>}
       {tables.some((t) => t.origin === "embedded") && <button type="button" className="text-btn" onClick={() => { const t = tables[0]; ctx.pickTable(t); ctx.go({ view: "project", tab: "search" }); }}>Search this collection</button>}

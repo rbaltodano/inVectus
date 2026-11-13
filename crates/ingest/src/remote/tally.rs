@@ -2,7 +2,7 @@
 //! `submission_id`, `submitted_at`, one column per question. Choice answers given as option ids
 //! are turned into their labels when the question lists its options.
 
-use super::{Paced, PullContext, fmt_number};
+use super::{Paced, PullContext, fmt_number, guard};
 use anyhow::{Result, bail};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -15,7 +15,9 @@ pub(super) fn submissions(
     token: &str,
     cx: &mut PullContext,
 ) -> Result<(Vec<String>, Vec<Vec<String>>)> {
-    let mut t = Paced::new(Duration::from_millis(250));
+    let mut t = Paced::new(Duration::from_millis(250), API, "Tally").cancellable(cx.cancel);
+    let mut bound = guard::Pages::new("Tally");
+    let form = guard::enc(form);
     let auth = format!("Bearer {token}");
     let mut questions: Vec<(String, String)> = Vec::new();
     let mut options: HashMap<String, String> = HashMap::new();
@@ -25,6 +27,7 @@ pub(super) fn submissions(
         if cx.cancel.is_cancelled() {
             bail!("cancelled");
         }
+        bound.next(&page.to_string())?;
         let url = format!("{API}/forms/{form}/submissions?page={page}&filter=completed");
         let (status, v) = t.get(&url, &[("Authorization", &auth)])?;
         if status != 200 {

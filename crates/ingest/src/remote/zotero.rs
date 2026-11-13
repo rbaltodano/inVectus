@@ -45,7 +45,7 @@ fn check(status: u16, v: &Value, what: &str) -> Result<()> {
 /// `users/<id>` for the key's own library, or `groups/<id>`.
 fn library_path(z: &mut Paced, library: &str, key: &str) -> Result<String> {
     if let Some(id) = library.strip_prefix("group:") {
-        return Ok(format!("groups/{id}"));
+        return Ok(format!("groups/{}", super::guard::enc(id)));
     }
     let (status, v) = z.get(
         &format!("{API}/keys/current"),
@@ -64,11 +64,12 @@ pub(super) fn items(
     key: &str,
     cx: &mut PullContext,
 ) -> Result<(Vec<String>, Vec<Vec<String>>)> {
-    let mut z = Paced::new(Duration::from_millis(150));
+    let mut z = Paced::new(Duration::from_millis(150), API, "Zotero").cancellable(cx.cancel);
+    let mut bound = super::guard::Pages::new("Zotero");
     (cx.progress)("reading library", 0, 0);
     let lib = library_path(&mut z, library, key)?;
     let scope = match collection {
-        Some(c) => format!("{lib}/collections/{c}/items/top"),
+        Some(c) => format!("{lib}/collections/{}/items/top", super::guard::enc(c)),
         None => format!("{lib}/items/top"),
     };
     let mut rows = Vec::new();
@@ -77,6 +78,7 @@ pub(super) fn items(
         if cx.cancel.is_cancelled() {
             bail!("cancelled");
         }
+        bound.next(&start.to_string())?;
         let url = format!("{API}/{scope}?format=json&include=data&limit={PAGE}&start={start}");
         let (status, v) = z.get(
             &url,

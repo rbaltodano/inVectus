@@ -12,8 +12,10 @@ pub const PROJECT_SUFFIX: &str = "invectus";
 pub struct ProjectConfig {
     pub format_version: u32,
     pub name: String,
-    /// Connectors and cloud LLM calls are refused unless this is true (SPEC §7.7). P1 has no
-    /// connectors; the flag is persisted so later milestones inherit the default.
+    /// The "External checks" switch: calls that send text derived from the collection to
+    /// another service (verification connectors, a cloud LLM) are refused unless this is true
+    /// (SPEC §7.7). Pulls and model downloads do not need it. The field keeps its old name so
+    /// existing `project.json` files load unchanged.
     pub network_enabled: bool,
     /// Requested model for future MCP agent work; the agent client controls execution.
     #[serde(default)]
@@ -26,6 +28,10 @@ pub struct ProjectConfig {
     /// `None`: PubMed and OpenAlex.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verify_sources: Option<Vec<String>>,
+    /// Whether AI agents may read this project through inVectus tools (item text, titles,
+    /// gaps, source files). Off unless the person turned it on, on this machine.
+    #[serde(default)]
+    pub agent_access: bool,
 }
 
 pub struct Project {
@@ -41,9 +47,9 @@ impl Project {
         if root.join("project.json").exists() {
             bail!("{} already contains a project", root.display());
         }
+        // Owner-only from the start (audit 2026-11-12, item 6).
         for dir in ["vectors", "cache", "exports"] {
-            std::fs::create_dir_all(root.join(dir))
-                .with_context(|| format!("creating {}", root.join(dir).display()))?;
+            crate::private::create_dir_all(&root.join(dir))?;
         }
         let name = root
             .file_stem()
@@ -56,14 +62,21 @@ impl Project {
             preferred_agent_model: None,
             agent: None,
             verify_sources: None,
+            agent_access: false,
         };
         write_json_atomic(&root.join("project.json"), &config)?;
         let store = Store::open(&root.join("project.duckdb"))?;
-        Ok(Self {
+        crate::private::restrict(&root.join("project.duckdb"))?;
+        let mut project = Self {
             root,
             config,
             store,
-        })
+        };
+        // New projects start with the person's last agent-access choice on this machine.
+        if agent_access_default() {
+            project.set_agent_access(true)?;
+        }
+        Ok(project)
     }
 
     pub fn open(path: &Path) -> Result<Self> {
@@ -72,7 +85,19 @@ impl Project {
         } else {
             with_suffix(path)
         };
-        let config = read_config(&root)?;
+        let config = load_config(&root)?;
+        // Projects made by older versions: tighten the folder and its standard parts. Best
+        // effort: a project on read-only media or owned by someone else still opens.
+        let mut parts = vec![root.clone(), root.join("project.duckdb")];
+        parts.extend(["vectors", "cache", "exports", "sources"].map(|d| root.join(d)));
+        for part in parts.iter().filter(|p| p.exists()) {
+            if let Err(e) = crate::private::restrict(part) {
+                eprintln!(
+                    "warning: could not make {} owner-only: {e:#}",
+                    part.display()
+                );
+            }
+        }
         let store = Store::open(&root.join("project.duckdb"))?;
         Ok(Self {
             root,
@@ -81,10 +106,34 @@ impl Project {
         })
     }
 
-    /// Turn the project's network switch on or off and save `project.json`.
+    /// Turn the project's External checks switch on or off: recorded on this machine and in
+    /// `project.json`.
     pub fn set_network_enabled(&mut self, enabled: bool) -> Result<()> {
+        // Turning off writes the project first, so a failure to record consent cannot leave the
+        // switch on; turning on records consent first.
+        if enabled {
+            set_machine_consent(&self.root, Kind::ExternalChecks, true)?;
+        }
         self.config.network_enabled = enabled;
-        write_json_atomic(&self.root.join("project.json"), &self.config)
+        write_json_atomic(&self.root.join("project.json"), &self.config)?;
+        if !enabled {
+            set_machine_consent(&self.root, Kind::ExternalChecks, false)?;
+        }
+        Ok(())
+    }
+
+    /// Let AI agents read this project, or stop them: recorded on this machine and in
+    /// `project.json`. New projects then start with the same choice.
+    pub fn set_agent_access(&mut self, enabled: bool) -> Result<()> {
+        if enabled {
+            set_machine_consent(&self.root, Kind::AgentAccess, true)?;
+        }
+        self.config.agent_access = enabled;
+        write_json_atomic(&self.root.join("project.json"), &self.config)?;
+        if !enabled {
+            set_machine_consent(&self.root, Kind::AgentAccess, false)?;
+        }
+        Ok(())
     }
 
     /// Choose the outside sources gap checks use (`None`: the default pair) and save it.
@@ -108,7 +157,7 @@ impl Project {
         let mut config = read_config(&self.root)?;
         config.preferred_agent_model = model.map(|s| s.trim().to_owned());
         write_json_atomic(&self.root.join("project.json"), &config)?;
-        self.config = config;
+        self.config = load_config(&self.root)?;
         Ok(())
     }
 
@@ -126,7 +175,7 @@ impl Project {
         let mut config = read_config(&self.root)?;
         config.agent = agent.map(str::to_owned);
         write_json_atomic(&self.root.join("project.json"), &config)?;
-        self.config = config;
+        self.config = load_config(&self.root)?;
         Ok(())
     }
 
@@ -191,6 +240,16 @@ fn valid_name(name: &str) -> Result<String> {
     Ok(name.to_owned())
 }
 
+/// The project's settings as they apply on this machine: External checks and agent access
+/// count only when this machine recorded the person's consent for this folder, so a copied or
+/// shared project arrives with both off. Every reload of `self.config` goes through here.
+fn load_config(root: &Path) -> Result<ProjectConfig> {
+    let mut config = read_config(root)?;
+    config.network_enabled = config.network_enabled && machine_consent(root, Kind::ExternalChecks);
+    config.agent_access = config.agent_access && machine_consent(root, Kind::AgentAccess);
+    Ok(config)
+}
+
 fn read_config(root: &Path) -> Result<ProjectConfig> {
     let path = root.join("project.json");
     let raw = std::fs::read(&path)
@@ -248,10 +307,97 @@ pub fn cloud_sync_warning(path: &Path) -> Option<String> {
 }
 
 pub fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(value)?)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(())
+    crate::private::replace(path, &serde_json::to_vec_pretty(value)?)
+}
+
+// ---- Consent kept per machine --------------------------------------------------------------
+
+/// `<OS data dir>/inVectus/consent.json`: the project folders on this machine whose External
+/// checks and agent access the person turned on, and the agent-access choice new projects start
+/// with. Consent lives here, not only in the project, so a copied or shared project never
+/// arrives with checks or agent access already allowed.
+#[derive(Default, Serialize, Deserialize)]
+struct Consent {
+    #[serde(default)]
+    external_checks: Vec<String>,
+    #[serde(default)]
+    agent_access: Vec<String>,
+    /// The last agent-access choice the person made; new projects start with it.
+    #[serde(default)]
+    agent_access_default: bool,
+}
+
+#[derive(Clone, Copy)]
+enum Kind {
+    ExternalChecks,
+    AgentAccess,
+}
+
+fn consent_file() -> Option<PathBuf> {
+    crate::paths::app_data_dir().map(|d| d.join("consent.json"))
+}
+
+/// Read-modify-write of the consent file is serialised within the process.
+static CONSENT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn read_consent() -> Consent {
+    consent_file()
+        .and_then(|f| std::fs::read(f).ok())
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default()
+}
+
+fn write_consent(c: &Consent) -> Result<()> {
+    let Some(file) = consent_file() else {
+        bail!("no OS data folder to keep consent choices in");
+    };
+    crate::private::write(&file, &serde_json::to_vec_pretty(c)?)
+}
+
+fn root_key(root: &Path) -> String {
+    root.canonicalize()
+        .unwrap_or_else(|_| root.to_path_buf())
+        .display()
+        .to_string()
+}
+
+fn machine_consent(root: &Path, kind: Kind) -> bool {
+    let c = read_consent();
+    let list = match kind {
+        Kind::ExternalChecks => &c.external_checks,
+        Kind::AgentAccess => &c.agent_access,
+    };
+    list.contains(&root_key(root))
+}
+
+fn set_machine_consent(root: &Path, kind: Kind, on: bool) -> Result<()> {
+    let _lock = CONSENT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let key = root_key(root);
+    let mut c = read_consent();
+    let list = match kind {
+        Kind::ExternalChecks => &mut c.external_checks,
+        Kind::AgentAccess => {
+            c.agent_access_default = on;
+            &mut c.agent_access
+        }
+    };
+    // Replace this project's entry. Others are kept even when their folder is not reachable
+    // right now (an unmounted drive), except vanished folders under the temp folder (test runs).
+    let tmp = std::env::temp_dir();
+    list.retain(|r| {
+        r != &key
+            && !(Path::new(r).starts_with(&tmp) && !Path::new(r).join("project.json").exists())
+    });
+    if on {
+        list.push(key);
+    }
+    write_consent(&c)
+}
+
+/// Whether new projects start with agent access on: the person's last choice on this machine
+/// (off until they first turn it on).
+pub fn agent_access_default() -> bool {
+    read_consent().agent_access_default
 }
 
 #[cfg(test)]
@@ -361,5 +507,51 @@ mod tests {
         p.root = dir.path().join("missing");
         assert!(p.rename("Not saved").is_err());
         assert_eq!(p.config.name, "demo");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_folder_is_owner_only_and_copies_do_not_carry_consent() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = Project::create(&dir.path().join("a")).unwrap();
+        for d in ["", "vectors", "cache", "exports"] {
+            let m = std::fs::metadata(p.root.join(d))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(m, 0o700, "{d}");
+        }
+        for f in ["project.json", "project.duckdb"] {
+            let m = std::fs::metadata(p.root.join(f))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(m, 0o600, "{f}");
+        }
+        p.set_network_enabled(true).unwrap();
+        let root = p.root.clone();
+        drop(p);
+        assert!(
+            Project::open(&root).unwrap().config.network_enabled,
+            "kept on this machine"
+        );
+        // A copy of the folder (another path, or another machine) arrives with checks off,
+        // even though its project.json says they were on.
+        let copy = dir.path().join("copy.invectus");
+        std::fs::create_dir_all(&copy).unwrap();
+        for f in ["project.json", "project.duckdb"] {
+            std::fs::copy(root.join(f), copy.join(f)).unwrap();
+        }
+        let raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(copy.join("project.json")).unwrap()).unwrap();
+        assert_eq!(raw["network_enabled"], true);
+        assert!(!Project::open(&copy).unwrap().config.network_enabled);
+        Project::open(&root)
+            .unwrap()
+            .set_network_enabled(false)
+            .unwrap();
     }
 }

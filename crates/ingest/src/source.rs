@@ -135,6 +135,32 @@ impl Source {
     /// A Google Sheets link or a Notion database (`notion:<id>` or a notion.so link) as a pulled
     /// source whose snapshot lives under `project_root/sources/`; `None` for anything else.
     pub fn parse_remote(spec: &str, project_root: &Path) -> Result<Option<Self>> {
+        let source = Self::parse_remote_unchecked(spec, project_root)?;
+        if let Some(s) = &source {
+            // Ids come from links people paste: whatever they hold, the snapshot stays a plain
+            // file name directly inside `<project>/sources/<kind>/`.
+            let path = s.path();
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            let safe = !name.is_empty()
+                && !name.starts_with('.')
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+            let inside = path
+                .parent()
+                .and_then(Path::parent)
+                .is_some_and(|p| p == project_root.join("sources"));
+            if !safe || !inside {
+                bail!("this link has characters inVectus does not accept in a source id: {spec}");
+            }
+        }
+        Ok(source)
+    }
+
+    fn parse_remote_unchecked(spec: &str, project_root: &Path) -> Result<Option<Self>> {
         let spec = spec.trim();
         if let Some((id, gid)) = google_sheet_id(spec)? {
             let file = format!("{id}-{}.csv", gid.as_deref().unwrap_or("default"));
@@ -494,7 +520,11 @@ fn airtable_table(spec: &str) -> Result<Option<(String, String, Option<String>)>
     };
     let id = |prefix: &str| {
         rest.split('/')
-            .find(|p| p.starts_with(prefix) && p.len() == 17)
+            .find(|p| {
+                p.starts_with(prefix)
+                    && p.len() == 17
+                    && p.chars().all(|c| c.is_ascii_alphanumeric())
+            })
             .map(String::from)
     };
     match (id("app"), id("tbl")) {

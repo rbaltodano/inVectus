@@ -161,6 +161,8 @@ pub struct ProjectInfo {
     pub name: String,
     pub warning: Option<String>,
     pub network_enabled: bool,
+    /// Whether AI agents may read this project (see `ProjectConfig::agent_access`).
+    pub agent_access: bool,
     /// Outside sources gap checks use (`pubmed`, `openalex`, `semanticscholar`, `arxiv`).
     pub verify_sources: Vec<String>,
     pub preferred_agent_model: Option<String>,
@@ -266,6 +268,7 @@ pub fn project_info(s: &Session, board: &SharedBoard) -> anyhow::Result<ProjectI
         name: s.project.config.name.clone(),
         warning: s.project.storage_warning(),
         network_enabled: s.project.config.network_enabled,
+        agent_access: s.project.config.agent_access,
         verify_sources: invectus_verify::VerifyOptions::for_project(&s.project)
             .sources
             .iter()
@@ -355,7 +358,19 @@ pub fn rename_project(session: &Shared, path: &str, name: &str) -> OpResult<Stri
     }
 }
 
-/// Turn the project's network switch on or off (verification connectors use it).
+/// Let AI agents read the open project, or stop them. New projects start with this choice.
+pub fn set_agent_access(
+    session: &Shared,
+    board: &SharedBoard,
+    enabled: bool,
+) -> OpResult<ProjectInfo> {
+    with_session(session, |s| {
+        s.project.set_agent_access(enabled)?;
+        project_info(s, board)
+    })
+}
+
+/// Turn the project's External checks switch on or off (verification connectors use it).
 pub fn set_network(session: &Shared, board: &SharedBoard, enabled: bool) -> OpResult<ProjectInfo> {
     with_session(session, |s| {
         s.project.set_network_enabled(enabled)?;
@@ -583,11 +598,76 @@ pub fn export_gaps(session: &Shared, form: TableForm, format: &str) -> OpResult<
             other => anyhow::bail!("unknown export format {other:?} (csv, markdown)"),
         };
         let dir = s.project.root.join("exports");
-        std::fs::create_dir_all(&dir)?;
         let path = dir.join(export_file_name(&table.collection_id, &list.run_id, ext));
-        std::fs::write(&path, text)?;
+        // Owner-only like the rest of the project; sharing the file is the person's choice.
+        invectus_core::private::write(&path, text.as_bytes())?;
         Ok(path.display().to_string())
     })
+}
+
+/// The cancel token of the gap check in progress, if any (one at a time per process).
+static VERIFYING: Mutex<Option<(u64, invectus_core::CancelToken)>> = Mutex::new(None);
+static VERIFY_IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Check a gap against the project's outside sources without holding the session while the
+/// network answers (audit 2026-11-12, item 2): read under the lock, ask the sources unlocked
+/// (bounded and cancellable through [`cancel_verification`]), then rank and save under the lock
+/// again. Never overrides the project's External checks switch.
+pub fn verify_gap_unlocked(
+    session: &Shared,
+    form: &TableForm,
+    gap_id: i32,
+) -> OpResult<invectus_verify::Verification> {
+    let (prepared, table) = with_session_wait(session, |s| {
+        form.ensure_project(&s.project)?;
+        let table =
+            invectus_index::select_table(&s.project, &form.collection, form.space.as_deref())?;
+        let opts = invectus_verify::VerifyOptions::for_project(&s.project);
+        Ok((
+            invectus_verify::prepare(&s.project, &table, gap_id, &opts)?,
+            table,
+        ))
+    })?;
+    let cancel = invectus_core::CancelToken::default();
+    let id = VERIFY_IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    {
+        let mut slot = VERIFYING.lock().map_err(err)?;
+        if slot.is_some() {
+            return Err("another gap check is running; wait for it or stop it".into());
+        }
+        *slot = Some((id, cancel.clone()));
+    }
+    // Clears the slot only while it still holds this check.
+    struct Clear(u64);
+    impl Drop for Clear {
+        fn drop(&mut self) {
+            if let Ok(mut s) = VERIFYING.lock()
+                && s.as_ref().is_some_and(|(id, _)| *id == self.0)
+            {
+                *s = None;
+            }
+        }
+    }
+    let _clear = Clear(id);
+    let fetched = invectus_verify::fetch(&prepared, Some(&cancel));
+    if cancel.is_cancelled() {
+        return Err("the gap check was stopped".into());
+    }
+    with_session_wait(session, |s| {
+        encoder_for(s, &table)?;
+        let encoder = &mut s.encoder.as_mut().expect("loaded above").1;
+        invectus_verify::finish(&s.project, &table, encoder, &prepared, fetched)
+    })
+}
+
+/// Stop the gap check in progress; `false` when none is running.
+pub fn cancel_verification() -> bool {
+    VERIFYING
+        .lock()
+        .ok()
+        .and_then(|s| s.clone())
+        .map(|(_, c)| c.cancel())
+        .is_some()
 }
 
 #[cfg(test)]

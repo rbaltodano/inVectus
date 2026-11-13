@@ -193,9 +193,25 @@ impl ModelStore {
 
 fn download_verified(url: &str, f: &ModelFile, to: &Path) -> Result<()> {
     let tmp = to.with_extension("partial");
-    let mut reader = ureq::get(url)
-        .call()
-        .with_context(|| format!("GET {url}"))?
+    // Public files, no credentials: Hugging Face redirects to its CDN, so redirects are
+    // followed, but only over https. Waits are bounded; a stalled transfer fails instead of
+    // hanging (no total limit: large files on slow links are legitimate).
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .https_only(true)
+        .max_redirects(5)
+        .timeout_connect(Some(std::time::Duration::from_secs(15)))
+        .timeout_recv_response(Some(std::time::Duration::from_secs(60)))
+        .timeout_per_read(Some(std::time::Duration::from_secs(60)))
+        .build()
+        .into();
+    let resp = agent.get(url).call();
+    invectus_core::net::record(
+        url,
+        "Model download",
+        resp.as_ref().ok().map(|r| r.status().as_u16()),
+    );
+    let mut reader = resp
+        .with_context(|| format!("GET {}", invectus_core::net::host_of(url)))?
         .into_body()
         .into_reader();
     let mut out = File::create(&tmp)?;
@@ -309,14 +325,13 @@ mod tests {
 
     #[test]
     fn download_is_refused_offline() {
-        // SAFETY: tests in this crate do not read INVECTUS_OFFLINE concurrently except this one.
-        unsafe { std::env::set_var("INVECTUS_OFFLINE", "1") };
         let root = tempfile::tempdir().unwrap();
-        let err = ModelStore::new(root.path())
-            .download(fake_spec(b"z"), &mut |_| {})
-            .unwrap_err()
-            .to_string();
-        unsafe { std::env::remove_var("INVECTUS_OFFLINE") };
+        let err = invectus_core::net::scoped_offline(true, || {
+            ModelStore::new(root.path())
+                .download(fake_spec(b"z"), &mut |_| {})
+                .unwrap_err()
+                .to_string()
+        });
         assert!(err.contains("offline"), "{err}");
     }
 }

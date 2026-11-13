@@ -308,8 +308,10 @@ jobs(job_id TEXT PK, kind TEXT, params JSON, state TEXT, progress REAL, checkpoi
 Long work (import, embed, cluster, scan, verify) runs as **resumable jobs**: checkpointed in `jobs`, cancellable, idempotent, with progress events streamed to the UI. The embed job skips items whose `input_hash` is already stored (gapmap pattern).
 
 ### 7.7 Privacy and network
-- **Network is off by default** after model download. A visible per-project switch enables connectors and the cloud LLM, and every outbound call is logged in the UI.
+- **Nothing goes online by itself.** Every network call starts from the person: a model download, a pull from their own integration, or a check. Pulls and downloads bring data in and send none of the collection out, so they need no switch (owner decision 2026-11-12).
+- **Sending text out needs consent.** Anything that sends text derived from the collection to another service (verification connectors, the cloud LLM) is off by default and needs the visible per-project **External checks** switch. Every outbound call is logged in the UI.
 - An offline mode hard-fails any network call (like gapmap's `--offline`).
+- Integration tokens live in the system keychain with read-only scopes; transfers use HTTPS.
 - Exports include titles and links only, unless the user chooses otherwise.
 
 ---

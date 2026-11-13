@@ -4,7 +4,7 @@
 //! when it has none, and a plain summary says how many look like matches. Titles and links are
 //! shown so a person can judge: similarity alone is not the verdict.
 
-use crate::connectors::{ExternalHit, KeywordQuery, Source, SourceResult, search};
+use crate::connectors::{ExternalHit, KeywordQuery, Source, SourceResult};
 use anyhow::{Context, Result, bail};
 use invectus_core::store::VectorTableRecord;
 use invectus_core::{InputKind, Project, TextEmbedder};
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub struct VerifyOptions {
     pub sources: Vec<Source>,
     pub max_per_source: usize,
-    /// Allow network access for this command even when the project's network switch is off.
+    /// Allow this check even when the project's external-checks switch is off.
     pub allow_network: bool,
 }
 
@@ -111,6 +111,33 @@ fn accepted_description(
     Ok(None)
 }
 
+/// A check prepared from the project (under its lock): what to ask and what to compare with.
+/// Holds no reference to the project, so the network work can run without the lock.
+#[derive(Clone, Debug)]
+pub struct Prepared {
+    pub root: std::path::PathBuf,
+    collection_id: String,
+    space_id: String,
+    run_id: String,
+    gap_id: i32,
+    kind: String,
+    label: String,
+    query: KeywordQuery,
+    compared_with: String,
+    match_at: f32,
+    notes: Vec<String>,
+    opts: VerifyOptions,
+}
+
+/// What the outside sources answered.
+#[derive(Clone, Debug)]
+pub struct Fetched {
+    sources: Vec<SourceSummary>,
+    hits: Vec<ExternalHit>,
+}
+
+/// Check a gap end to end while holding `project` (the CLI). The app and agents use
+/// [`prepare`], [`fetch`] and [`finish`] so no lock is held during network waits.
 pub fn verify_gap(
     project: &Project,
     table: &VectorTableRecord,
@@ -118,11 +145,24 @@ pub fn verify_gap(
     gap_id: i32,
     opts: &VerifyOptions,
 ) -> Result<Verification> {
+    let p = prepare(project, table, gap_id, opts)?;
+    let f = fetch(&p, None);
+    finish(project, table, encoder, &p, f)
+}
+
+/// Read what the check needs from the project. Refused unless External checks is on (or the
+/// CLI's `--network` override is given).
+pub fn prepare(
+    project: &Project,
+    table: &VectorTableRecord,
+    gap_id: i32,
+    opts: &VerifyOptions,
+) -> Result<Prepared> {
     if !opts.allow_network && !project.config.network_enabled {
         bail!(
-            "network is off for this project: turn on its network switch (Settings → Network in \
-             the app) or pass --network to the CLI to query {} (results are cached in the \
-             project)",
+            "external checks are off for this project: checking a gap sends its description to {}. \
+             Turn on External checks (Settings → Network in the app) or pass --network to the \
+             CLI (results are cached in the project)",
             opts.sources
                 .iter()
                 .map(|s| s.name())
@@ -190,40 +230,6 @@ pub fn verify_gap(
         }
     };
 
-    let mut sources = Vec::new();
-    let mut hits: Vec<ExternalHit> = Vec::new();
-    for s in &opts.sources {
-        match search(project, *s, &query, opts.max_per_source) {
-            Ok(SourceResult {
-                source,
-                query,
-                total,
-                hits: h,
-                cached,
-                ..
-            }) => {
-                sources.push(SourceSummary {
-                    source,
-                    query,
-                    total,
-                    fetched: h.len(),
-                    cached,
-                    error: None,
-                });
-                hits.extend(h);
-            }
-            Err(e) => sources.push(SourceSummary {
-                source: s.name().into(),
-                query: s.query(&query),
-                total: None,
-                fetched: 0,
-                cached: false,
-                error: Some(format!("{e:#}")),
-            }),
-        }
-    }
-
-    // Re-rank by local similarity of each title to the description.
     let match_at = project
         .store
         .latest_calibration(&table.collection_id, &table.space_id)?
@@ -233,6 +239,85 @@ pub fn verify_gap(
             notes.push("no calibration: the match threshold defaults to 0.8".into());
             0.8
         });
+    Ok(Prepared {
+        root: project.root.clone(),
+        collection_id: table.collection_id.clone(),
+        space_id: table.space_id.clone(),
+        run_id: run.run_id.clone(),
+        gap_id,
+        kind: gap.kind.as_str().into(),
+        label,
+        query,
+        compared_with,
+        match_at,
+        notes,
+        opts: opts.clone(),
+    })
+}
+
+/// Ask the outside sources (network; no project lock needed). Bounded by
+/// [`crate::connectors::BUDGET`] and stopped early by `cancel`. Per-source failures are kept in
+/// the result rather than failing the whole check.
+pub fn fetch(p: &Prepared, cancel: Option<&invectus_core::CancelToken>) -> Fetched {
+    let deadline = std::time::Instant::now() + crate::connectors::BUDGET;
+    crate::connectors::with_limits(cancel, deadline, || {
+        let query = &p.query;
+        let opts = &p.opts;
+        let mut sources = Vec::new();
+        let mut hits: Vec<ExternalHit> = Vec::new();
+        for s in &opts.sources {
+            match crate::connectors::search_in(&p.root, *s, query, opts.max_per_source) {
+                Ok(SourceResult {
+                    source,
+                    query,
+                    total,
+                    hits: h,
+                    cached,
+                    ..
+                }) => {
+                    sources.push(SourceSummary {
+                        source,
+                        query,
+                        total,
+                        fetched: h.len(),
+                        cached,
+                        error: None,
+                    });
+                    hits.extend(h);
+                }
+                Err(e) => sources.push(SourceSummary {
+                    source: s.name().into(),
+                    query: s.query(query),
+                    total: None,
+                    fetched: 0,
+                    cached: false,
+                    error: Some(format!("{e:#}")),
+                }),
+            }
+        }
+
+        Fetched { sources, hits }
+    })
+}
+
+/// Rank the answers with the local model and save the verification (under the project lock).
+pub fn finish(
+    project: &Project,
+    table: &VectorTableRecord,
+    encoder: &mut dyn TextEmbedder,
+    p: &Prepared,
+    f: Fetched,
+) -> Result<Verification> {
+    if project.root != p.root
+        || table.collection_id != p.collection_id
+        || table.space_id != p.space_id
+    {
+        bail!("the project or collection changed while checking; check the gap again");
+    }
+    let Fetched { sources, hits } = f;
+    let mut notes = p.notes.clone();
+    let match_at = p.match_at;
+    let compared_with = p.compared_with.clone();
     let mut ranked = Vec::new();
     if !hits.is_empty() {
         let q = encoder
@@ -280,10 +365,10 @@ pub fn verify_gap(
             .into(),
     );
     let v = Verification {
-        gap_id,
-        kind: gap.kind.as_str().into(),
-        label,
-        query,
+        gap_id: p.gap_id,
+        kind: p.kind.clone(),
+        label: p.label.clone(),
+        query: p.query.clone(),
         compared_with,
         sources,
         hits: ranked,
@@ -295,8 +380,8 @@ pub fn verify_gap(
     project.store.save_verification(
         &table.collection_id,
         &table.space_id,
-        &run.run_id,
-        gap_id,
+        &p.run_id,
+        p.gap_id,
         &serde_json::to_value(&v)?,
     )?;
     Ok(v)

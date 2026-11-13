@@ -60,8 +60,9 @@ scores. A visually empty area is not automatically a validated gap.
 ## Network boundary
 
 Import, embeddings, search, calibration, clustering and gap scans are local.
-Models load from verified local files. Downloads are explicit; optional PubMed and
-OpenAlex connectors require the network switch or `--network`. Offline mode refuses
+Models load from verified local files. Model downloads and pulls are explicit (a click or a
+command). Optional PubMed and OpenAlex connectors send a gap's description out, so they
+require the project's External checks switch or `--network`. Offline mode refuses all
 network use. Connector results are cached in the project.
 
 Local descriptions use llama.cpp and a separately installed model. The synthetic

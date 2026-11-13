@@ -15,6 +15,7 @@ duckdb.workspace = true
 arrow-array.workspace = true
 calamine.workspace = true
 ureq.workspace = true
+url.workspace = true
 sha2.workspace = true
 hex.workspace = true
 

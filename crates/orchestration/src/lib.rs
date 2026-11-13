@@ -6,6 +6,7 @@
 pub mod agent;
 pub mod connect;
 pub mod github;
+pub mod grants;
 pub mod handoff;
 pub mod jobs;
 mod pipeline;

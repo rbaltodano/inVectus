@@ -222,7 +222,6 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
           {(source.kind === "typeform" || source.kind === "tally") && ` Needs your ${remoteName} token from Integrations. Only completed responses are pulled.`}
           {source.kind === "canny" && " Needs your Canny API key from Integrations."}
           {source.kind === "productboard" && " Needs your Productboard token from Integrations."}
-          {!ctx.project.network_enabled && " This project's network switch is off: turn it on in Settings → Network first."}
         </div>
       </div>}
       {source && !source.needs_pull && <div className="panel row wrap">

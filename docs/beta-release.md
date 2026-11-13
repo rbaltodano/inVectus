@@ -6,7 +6,7 @@ verify Windows, Linux, an older macOS release, or an installation on another mac
 ## Current setup and update path
 
 Use the existing explicit-download path for beta preparation: installers contain no model
-weights. In the desktop app, create/open a project, enable its network switch, then use
+weights. In the desktop app, create/open a project, then use
 Settings → Embedding models → Download…. The confirmation gives the model, source and size.
 Install `bge-small-en-v1.5` (about 134 MB from the pinned Xenova conversion on Hugging Face),
 then switch the project offline. Imports, embedding, search and gap scans run locally.

@@ -22,8 +22,9 @@ pub fn socket_path() -> Result<PathBuf> {
     if let Some(p) = std::env::var_os("INVECTUS_AGENT_SOCKET") {
         return Ok(PathBuf::from(p));
     }
-    let base = dirs::data_dir().ok_or_else(|| anyhow::anyhow!("no OS data folder"))?;
-    Ok(base.join("inVectus").join("agent.sock"))
+    let base =
+        invectus_core::paths::app_data_dir().ok_or_else(|| anyhow::anyhow!("no OS data folder"))?;
+    Ok(base.join("agent.sock"))
 }
 
 /// What the app does with a request (status or a tool call).
@@ -267,7 +268,13 @@ pub fn app_handler(
                     "query": args.get("query").or_else(|| args.get("idea")), "gap_id": args.get("gap_id"),
                     "ok": true, "error": null, "at_ms": crate::jobs::now_ms(),
                 }));
-                let result = agent.run_tool(&name, args.clone());
+                // An offline caller stays offline here, whatever this app's own state; a request
+                // that does not say (an older client) is treated as offline. Applied to this
+                // thread only, and carried into any job the tool starts.
+                let caller_offline = req["offline"].as_bool().unwrap_or(true);
+                let result = invectus_core::net::scoped_offline(caller_offline, || {
+                    agent.run_tool(&name, args.clone())
+                });
                 activity(&serde_json::json!({
                     "call_id": call_id, "phase": "finished",
                     "client": agent.client,
@@ -344,6 +351,88 @@ mod tests {
         let form: crate::TableForm =
             serde_json::from_value(serde_json::json!({"project":a,"collection":"papers"})).unwrap();
         assert!(crate::with_session_wait(&session, |s| form.ensure_project(&s.project)).is_err());
+    }
+
+    /// Audit 2026-11-12 (1): an offline agent's request is run offline by an online app; a
+    /// request that does not say is treated as offline; the app's own process is untouched.
+    #[test]
+    fn offline_caller_stays_offline_in_an_online_app() {
+        invectus_core::paths::use_data_dir_for_tests(
+            std::env::temp_dir().join(format!("invectus-orch-test-{}", std::process::id())),
+        );
+        if invectus_core::net::offline() {
+            return; // the whole test process is offline; nothing to distinguish
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let session = crate::Shared::default();
+        let board = crate::SharedBoard::default();
+        let root = crate::open_project(
+            &session,
+            &board,
+            dir.path().join("a").to_str().unwrap(),
+            true,
+        )
+        .unwrap()
+        .root;
+        // External checks on in the app's project: the most permissive app state.
+        crate::set_network(&session, &board, true).unwrap();
+        let handler = app_handler(
+            session,
+            board,
+            crate::agent::log_emitter(),
+            Arc::new(|_| {}),
+        );
+        let status = |offline: Option<bool>| {
+            let mut req = serde_json::json!({"op":"tool", "name":"project_status", "project":root, "arguments":{}});
+            if let Some(o) = offline {
+                req["offline"] = serde_json::json!(o);
+            }
+            handler(req).unwrap()["offline_env"].as_bool().unwrap()
+        };
+        assert!(
+            status(Some(true)),
+            "an offline caller is offline in the app"
+        );
+        assert!(
+            status(None),
+            "a caller that does not say is treated as offline"
+        );
+        assert!(
+            !status(Some(false)),
+            "an online caller in an online app is online"
+        );
+        assert!(
+            !invectus_core::net::offline(),
+            "the app thread is not left offline"
+        );
+        assert!(
+            std::env::var_os("INVECTUS_OFFLINE").is_none(),
+            "the environment is untouched"
+        );
+    }
+
+    /// A job started under an offline policy runs offline on its own thread.
+    #[test]
+    fn jobs_inherit_the_offline_policy_of_their_starter() {
+        let board = crate::SharedBoard::default();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let tx = Mutex::new(tx);
+        invectus_core::net::scoped_offline(true, || {
+            crate::spawn_job(
+                &crate::agent::log_emitter(),
+                &board,
+                crate::JobInfo::new("pull", None, "test".into()),
+                Box::new(move |_c, _t| {
+                    tx.lock()
+                        .unwrap()
+                        .send(invectus_core::net::offline())
+                        .unwrap();
+                    Ok((serde_json::json!({}), false))
+                }),
+            )
+            .unwrap();
+        });
+        assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap());
     }
 
     #[test]

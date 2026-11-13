@@ -1,7 +1,7 @@
 //! Canny API (v1) with the account's secret API key (Settings → API). One row per post:
 //! a feature request with its status, votes, board, category, tags and author.
 
-use super::{Paced, PullContext, fmt_number};
+use super::{Paced, PullContext, fmt_number, guard};
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -50,7 +50,9 @@ pub(super) fn posts(
     key: &str,
     cx: &mut PullContext,
 ) -> Result<(Vec<String>, Vec<Vec<String>>)> {
-    let mut c = Paced::new(Duration::from_millis(300));
+    let mut c =
+        Paced::new(Duration::from_millis(300), "https://canny.io", "Canny").cancellable(cx.cancel);
+    let mut bound = guard::Pages::new("Canny");
     (cx.progress)("reading boards", 0, 0);
     let board = board.map(|b| board_id(&mut c, key, b)).transpose()?;
     let mut rows = Vec::new();
@@ -59,6 +61,7 @@ pub(super) fn posts(
         if cx.cancel.is_cancelled() {
             bail!("cancelled");
         }
+        bound.next(&skip.to_string())?;
         let mut body = json!({ "apiKey": key, "limit": PAGE, "skip": skip, "sort": "newest" });
         if let Some(b) = &board {
             body["boardID"] = json!(b);

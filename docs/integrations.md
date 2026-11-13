@@ -14,8 +14,10 @@ parsing and the snapshot round trip only).
 - **Google Sheets** and **Notion** are *pulled sources*. A pull is the only network step: it
   writes `<project>/sources/<kind>/<id>.csv` and a `.json` record (origin, time, rows,
   SHA-256). Import, re-import, search and gaps read that copy offline.
-- A pull needs the project's network switch (or the CLI's `--network`) and is refused by
-  `--offline` / `INVECTUS_OFFLINE=1`. It runs as a cancellable `pull` job in the app.
+- A pull runs only when the person asks. It reads their own data in and sends none of the
+  collection out, so it does not need the project's External checks switch (owner decision
+  2026-11-12); `--offline` / `INVECTUS_OFFLINE=1` refuses it. It runs as a cancellable `pull`
+  job in the app.
 - "Pull and update" on a collection pulls again, then re-imports with the saved mapping.
 
 ## Google Sheets

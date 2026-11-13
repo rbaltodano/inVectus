@@ -2,7 +2,7 @@
 //! `responses:read`). One row per completed response: `response_id`, `submitted_at`, one column
 //! per question (in form order; questions inside groups included), then hidden fields.
 
-use super::{Paced, PullContext, fmt_number};
+use super::{Paced, PullContext, fmt_number, guard};
 use anyhow::{Result, bail};
 use serde_json::Value;
 use std::time::Duration;
@@ -43,7 +43,10 @@ pub(super) fn responses(
     token: &str,
     cx: &mut PullContext,
 ) -> Result<(Vec<String>, Vec<Vec<String>>)> {
-    let mut t = Paced::new(Duration::from_millis(600));
+    let mut t = Paced::new(Duration::from_millis(600), API, "Typeform").cancellable(cx.cancel);
+    let mut bound = guard::Pages::new("Typeform");
+    let form = guard::enc(form);
+    let form = form.as_str();
     let auth = format!("Bearer {token}");
     (cx.progress)("reading form", 0, 0);
     let (status, def) = t.get(&format!("{API}/forms/{form}"), &[("Authorization", &auth)])?;
@@ -67,7 +70,8 @@ pub(super) fn responses(
         }
         let mut url = format!("{API}/forms/{form}/responses?page_size=1000&completed=true");
         if let Some(b) = &before {
-            url.push_str(&format!("&before={b}"));
+            bound.next(b)?;
+            url.push_str(&format!("&before={}", guard::enc(b)));
         }
         let (status, v) = t.get(&url, &[("Authorization", &auth)])?;
         check(status, &v)?;

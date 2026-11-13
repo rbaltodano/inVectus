@@ -884,8 +884,8 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .settings-content .check.settings-switch-row { flex-direction: row-reverse; align-items: center; gap: 24px; justify-content: space-between; }
 .settings-switch-row > span { flex: 1; }
 .settings-switch-row b { display: block; margin-bottom: 5px; font-size: 13px; }
-.settings-content input[role="switch"] { appearance: none; -webkit-appearance: none; flex: 0 0 34px; width: 34px; height: 20px; border: 1px solid var(--line-2); border-radius: 20px; margin: 0; cursor: pointer; background-color: var(--surface-2); background-image: radial-gradient(circle at 9px 50%, var(--text) 5px, transparent 6px); }
-.settings-content input[role="switch"]:checked { background-color: var(--accent); border-color: var(--accent); background-image: radial-gradient(circle at calc(100% - 9px) 50%, var(--bg) 5px, transparent 6px); }
+.settings-content input[role="switch"], .agent-access-row input[role="switch"] { appearance: none; -webkit-appearance: none; flex: 0 0 34px; width: 34px; height: 20px; border: 1px solid var(--line-2); border-radius: 20px; margin: 0; cursor: pointer; background-color: var(--surface-2); background-image: radial-gradient(circle at 9px 50%, var(--text) 5px, transparent 6px); }
+.settings-content input[role="switch"]:checked, .agent-access-row input[role="switch"]:checked { background-color: var(--accent); border-color: var(--accent); background-image: radial-gradient(circle at calc(100% - 9px) 50%, var(--bg) 5px, transparent 6px); }
 .settings-content input[role="switch"]:disabled { opacity: .5; cursor: default; }
 .settings-themes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .settings-theme { display: flex; min-width: 0; flex-direction: column; gap: 11px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; }

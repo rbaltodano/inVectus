@@ -4,6 +4,7 @@ pub mod gapmap;
 pub mod import;
 pub mod mapping;
 pub mod remote;
+pub mod snapshots;
 pub mod source;
 
 pub use chunk::{ChunkPolicy, TokenChunking};

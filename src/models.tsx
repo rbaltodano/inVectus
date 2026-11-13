@@ -7,7 +7,7 @@ import { isRunning } from "./jobs";
  *  network is needed. Nothing downloads without the click, and never while offline. */
 export function DownloadConsent({ model, project, onClose }: { model: MissingModel; project?: ProjectInfo; onClose?: () => void }) {
   const { start, busy, error, current } = useStartJob();
-  const offline = !project || !project.network_enabled || project.offline_env;
+  const offline = !!project?.offline_env;
   const downloading = isRunning(current) && current!.kind === "download" && current!.models.includes(model.key);
   return <section role="dialog" aria-modal="false" aria-labelledby={`dl-${model.key}`} className="panel stack gap consent">
     <h3 id={`dl-${model.key}`}>Download {model.key}?</h3>
@@ -17,7 +17,7 @@ export function DownloadConsent({ model, project, onClose }: { model: MissingMod
       <dt>Version</dt><dd>pinned revision; every file's SHA-256 is checked</dd>
     </dl>
     <div className="small">This goes online once for this model. Indexing and search then run offline. Models are shared by all projects.</div>
-    {offline && <div className="note small">{project?.offline_env ? "INVECTUS_OFFLINE is set, so downloads are refused." : project ? "This project is offline. Enable network access in Settings → Network to download." : "Open a project and switch its network on to download."}</div>}
+    {offline && <div className="note small">INVECTUS_OFFLINE is set, so downloads are refused.</div>}
     <ErrorLine error={error} />
     <div className="row end">
       {onClose && <button type="button" className="btn" onClick={onClose}>Not now</button>}

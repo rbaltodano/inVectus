@@ -102,10 +102,9 @@ fn start(handler: impl Fn(&Request) -> Reply + Send + Sync + 'static) -> StandIn
             let mut body = vec![0; len];
             reader.read_exact(&mut body).unwrap();
             let (path, q) = target.split_once('?').unwrap_or((&target, ""));
-            let query = q
-                .split('&')
-                .filter_map(|kv| kv.split_once('='))
-                .map(|(k, v)| (k.to_string(), v.to_string()))
+            // Decoded like a real server would, so encoded cursors arrive as sent.
+            let query = url::form_urlencoded::parse(q.as_bytes())
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
                 .collect();
             let req = Request {
                 method,
@@ -820,4 +819,225 @@ fn google_sheets_explains_private_and_missing_sheets() {
     assert!(e.contains("Anyone with the link"), "{e}");
     let e = pull_spec(&sheet("missing"), "").unwrap_err().to_string();
     assert!(e.contains("no sheet at this link"), "{e}");
+}
+
+// ---- Security boundaries (audit 2026-11-12, items 2 and 3) -----------------------------------
+
+/// Requests that reached a host other than `allowed` (the stand-in serves every host, so a
+/// leaked request shows up here instead of on the internet).
+fn foreign(s: &StandIn, allowed: &str) -> Vec<Request> {
+    s.seen()
+        .into_iter()
+        .filter(|r| !r.path.starts_with(allowed))
+        .collect()
+}
+
+#[test]
+fn productboard_next_link_to_another_origin_gets_no_token() {
+    for next in [
+        "https://evil.example/features?pageLimit=100",
+        "http://api.productboard.com/features?pageLimit=100",
+        "https://api.productboard.com.evil.example/features",
+        "https://api.productboard.com@evil.example/features",
+    ] {
+        let next = next.to_string();
+        let s = start(move |req| {
+            if req.path == "api.productboard.com/features" {
+                return ok(json!({ "data": [], "links": { "next": next.clone() } }));
+            }
+            status(404, json!({}))
+        });
+        let err = pull_spec("productboard:features", "pb_token")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("refusing to send credentials"), "{err}");
+        assert!(
+            foreign(&s, "api.productboard.com/").is_empty(),
+            "{:?}",
+            foreign(&s, "api.productboard.com/")
+        );
+        assert_eq!(s.seen().len(), 1, "only the first page was requested");
+    }
+}
+
+#[test]
+fn redirects_are_never_followed_with_a_key() {
+    // Zotero sends its key in a custom header, which an HTTP client would replay on redirect.
+    let s = start(|req| {
+        if req.path.starts_with("api.zotero.org/") {
+            return Reply {
+                status: 302,
+                body: String::new(),
+                headers: vec![("Location".into(), "https://evil.example/steal".into())],
+            };
+        }
+        ok(json!({}))
+    });
+    let err = pull_spec("zotero:library", "zot_key")
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("redirect"), "{err}");
+    assert!(
+        foreign(&s, "api.zotero.org/").is_empty(),
+        "the redirect target got a request"
+    );
+}
+
+#[test]
+fn a_repeated_cursor_stops_the_pull() {
+    let _s = start(|req| {
+        let p = req.path.trim_start_matches("api.notion.com/v1/");
+        if p == format!("databases/{DB}") {
+            return ok(
+                json!({ "object": "database", "properties": { "Name": { "type": "title" } } }),
+            );
+        }
+        // Every page says there is more, with the same cursor.
+        ok(json!({ "results": [], "has_more": true, "next_cursor": "same" }))
+    });
+    let err = pull_spec(&format!("notion:{DB}"), "ntn_good")
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("same page cursor"), "{err}");
+}
+
+#[test]
+fn cursors_arrive_as_one_encoded_value() {
+    let s = start(|req| {
+        if req.path.ends_with(&format!("{BASE}/{TABLE}")) {
+            return ok(match req.query.get("offset").map(String::as_str) {
+                None => json!({ "records": [], "offset": "a&b=c#d/e f" }),
+                Some(_) => json!({ "records": [] }),
+            });
+        }
+        status(404, json!({}))
+    });
+    pull_spec(&format!("airtable:{BASE}/{TABLE}"), "pat").unwrap();
+    let offsets: Vec<String> = s
+        .seen()
+        .iter()
+        .filter_map(|r| r.query.get("offset").cloned())
+        .collect();
+    assert_eq!(offsets, ["a&b=c#d/e f"], "the cursor is not split or cut");
+}
+
+#[test]
+fn a_stalled_service_times_out() {
+    let _s = start(|_| {
+        std::thread::sleep(std::time::Duration::from_secs(8));
+        ok(json!({}))
+    });
+    let t = std::time::Instant::now();
+    let err = pull_spec("tally:w4Kx9b", "tly").unwrap_err();
+    assert!(
+        t.elapsed() < std::time::Duration::from_secs(7),
+        "took {:?}",
+        t.elapsed()
+    );
+    let _ = err;
+}
+
+#[test]
+fn cancelling_stops_a_rate_limit_wait() {
+    let _s = start(|_| Reply {
+        status: 429,
+        body: "{}".into(),
+        headers: vec![("Retry-After".into(), "60".into())],
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let source = Source::parse_remote("tally:w4Kx9b", dir.path())
+        .unwrap()
+        .unwrap();
+    let cancel = CancelToken::default();
+    let c2 = cancel.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        c2.cancel();
+    });
+    let mut progress = |_: &str, _: usize, _: usize| {};
+    let mut cx = PullContext {
+        token: Some("tly".into()),
+        cancel: &cancel,
+        progress: &mut progress,
+    };
+    let t = std::time::Instant::now();
+    let err = pull(&source, &mut cx).unwrap_err().to_string();
+    assert!(err.contains("cancelled"), "{err}");
+    assert!(
+        t.elapsed() < std::time::Duration::from_secs(3),
+        "took {:?}",
+        t.elapsed()
+    );
+}
+
+#[test]
+fn google_sheets_redirects_stay_on_google() {
+    let id = "public00000000000000000000000000000000000000";
+    // To a non-Google host: refused before any request goes there.
+    let s = start(|req| {
+        if req.path.starts_with("docs.google.com/") {
+            return Reply {
+                status: 307,
+                body: String::new(),
+                headers: vec![("Location".into(), "https://evil.example/x.csv".into())],
+            };
+        }
+        ok(json!({}))
+    });
+    let err = pull_spec(
+        &format!("https://docs.google.com/spreadsheets/d/{id}/edit"),
+        "",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("not a Google address"), "{err}");
+    assert!(foreign(&s, "docs.google.com/").is_empty());
+    drop(s);
+    // To the sign-in page: the sheet is not shared.
+    let _s = start(|req| {
+        if req.path.starts_with("docs.google.com/") {
+            return Reply {
+                status: 302,
+                body: String::new(),
+                headers: vec![(
+                    "Location".into(),
+                    "https://accounts.google.com/ServiceLogin".into(),
+                )],
+            };
+        }
+        ok(json!({}))
+    });
+    let err = pull_spec(
+        &format!("https://docs.google.com/spreadsheets/d/{id}/edit"),
+        "",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("did not share"), "{err}");
+    drop(_s);
+    // To googleusercontent.com: followed, as the real export does.
+    let _s = start(|req| {
+        if req.path.starts_with("docs.google.com/") {
+            return Reply {
+                status: 307,
+                body: String::new(),
+                headers: vec![(
+                    "Location".into(),
+                    "https://doc-0s-sheets.googleusercontent.com/export/x".into(),
+                )],
+            };
+        }
+        Reply {
+            status: 200,
+            body: "name,idea\nA,B\n".into(),
+            headers: vec![("Content-Type".into(), "text/csv".into())],
+        }
+    });
+    let (h, rows) = pull_spec(
+        &format!("https://docs.google.com/spreadsheets/d/{id}/edit"),
+        "",
+    )
+    .unwrap();
+    assert_eq!(h, ["name", "idea"]);
+    assert_eq!(rows.len(), 1);
 }

@@ -425,7 +425,7 @@ function Workspace({ project, setProject, refresh, initialStack, goRoute, onRena
   return <>
     <header className="head">
       <div className="project-heading"><button type="button" className="eyebrow project-back" onClick={() => goRoute({ view: "projects" })}><ArrowLeft size={14} aria-hidden="true" />Back to Projects</button><h1><ProjectName name={project.name} onSave={onRename} /></h1><div className="path">{tilde(project.root)}</div></div>
-      {/* The network switch lives in Settings → Network. */}
+      {/* The External checks switch lives in Settings → Network. */}
       <div className="head-actions"><AgentChip project={project} setProject={setProject} /></div>
     </header>
     <WorkspaceSplit>

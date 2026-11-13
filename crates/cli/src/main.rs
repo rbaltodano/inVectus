@@ -80,8 +80,9 @@ enum Command {
         /// zotero:group:<id>), Airtable table link, Typeform or Tally form link, or
         /// canny:all / canny:board:<name>, or productboard:notes / productboard:features.
         source: String,
-        /// Allow this command to use the network although the project's network switch is off.
-        #[arg(long)]
+        /// No longer needed: pulls read your own data in and are allowed unless offline mode is
+        /// on. Accepted so older scripts keep working.
+        #[arg(long, hide = true)]
         network: bool,
     },
     /// Tokens for integrations that need one (Notion, Zotero, Airtable), kept in the system
@@ -89,6 +90,19 @@ enum Command {
     Integrations {
         #[command(subcommand)]
         command: IntegrationsCommand,
+    },
+    /// Folders AI agents may read through inVectus (inspect and import). Agents can always use
+    /// the projects folder and the open project; anything else must be granted here.
+    Agents {
+        #[command(subcommand)]
+        command: AgentsCommand,
+    },
+    /// Pulled copies kept in a project (they stay until removed; nothing expires them).
+    Sources {
+        #[command(flatten)]
+        p: ProjectArg,
+        #[command(subcommand)]
+        command: SourcesCommand,
     },
     /// Embed a collection (resumable; re-running skips unchanged items).
     Embed(EmbedArgs),
@@ -496,7 +510,8 @@ enum GapsCommand {
         /// project's choice, else pubmed,openalex).
         #[arg(long, value_delimiter = ',')]
         sources: Vec<invectus_verify::Source>,
-        /// Allow this command to use the network although the project's network switch is off.
+        /// Allow this check although the project's external-checks switch is off (the gap
+        /// description is sent to the chosen sources).
         #[arg(long)]
         network: bool,
         /// Items fetched per source.
@@ -674,14 +689,8 @@ fn models(cli_dir: &Option<PathBuf>) -> Result<ModelStore> {
     }))
 }
 
-fn cmd_pull(p: &ProjectArg, spec: &str, network: bool) -> Result<()> {
+fn cmd_pull(p: &ProjectArg, spec: &str) -> Result<()> {
     let project = open(p)?;
-    if !network && !project.config.network_enabled {
-        bail!(
-            "this project's network switch is off; pass --network to allow this pull, or turn \
-             the switch on in the app"
-        );
-    }
     let source = invectus_orchestration::resolve_source(spec, None, Some(&project.root))?;
     if !source.is_remote() {
         bail!("{} is a local file; import it directly", source.describe());
@@ -717,6 +726,104 @@ fn cmd_pull(p: &ProjectArg, spec: &str, network: bool) -> Result<()> {
         "import it with: invectus import -p {} {spec:?} -c <collection> --text <column>",
         p.project.display()
     );
+    Ok(())
+}
+
+#[derive(Subcommand)]
+enum SourcesCommand {
+    /// Each pulled copy: what it came from, size, when it was pulled, which collections use it.
+    List,
+    /// Remove a pulled copy by the name `list` shows (refused while a collection uses it).
+    Forget { name: String },
+}
+
+fn cmd_sources(p: &ProjectArg, command: SourcesCommand) -> Result<()> {
+    let project = open(p)?;
+    match command {
+        SourcesCommand::List => {
+            let all = invectus_ingest::snapshots::list(&project)?;
+            if all.is_empty() {
+                println!("no pulled copies in this project");
+            }
+            for s in all {
+                println!(
+                    "{}  {}  {} rows  {} bytes  pulled {}  used by: {}",
+                    s.name,
+                    s.origin.as_deref().unwrap_or("?"),
+                    s.rows.map_or("?".into(), |r| r.to_string()),
+                    s.bytes,
+                    s.pulled_at.map_or("?".into(), |t| t.to_string()),
+                    if s.used_by.is_empty() {
+                        "nothing".into()
+                    } else {
+                        s.used_by.join(", ")
+                    }
+                );
+            }
+        }
+        SourcesCommand::Forget { name } => {
+            invectus_ingest::snapshots::forget(&project, &name)?;
+            println!("removed {name}");
+        }
+    }
+    Ok(())
+}
+
+#[derive(Subcommand)]
+enum AgentsCommand {
+    /// List the folders agents may read.
+    List,
+    /// Let agents read files in a folder (and its subfolders).
+    Allow { folder: PathBuf },
+    /// Take a folder back.
+    Revoke { folder: PathBuf },
+    /// Let agents read a project (`on`) or stop them (`off`). New projects start with the
+    /// last choice made on this machine.
+    Access {
+        #[command(flatten)]
+        p: ProjectArg,
+        #[arg(value_parser = ["on", "off"])]
+        state: String,
+    },
+}
+
+fn cmd_agents(command: AgentsCommand) -> Result<()> {
+    use invectus_orchestration::grants;
+    match command {
+        AgentsCommand::List => {
+            println!(
+                "always: {} (projects folder) and the open project",
+                invectus_orchestration::default_projects_dir()
+            );
+            let folders = grants::granted_folders();
+            if folders.is_empty() {
+                println!("granted: none");
+            }
+            for f in folders {
+                println!("granted: {}", f.display());
+            }
+        }
+        AgentsCommand::Allow { folder } => {
+            let real = grants::allow(&folder)?;
+            println!("agents may now read files in {}", real.display());
+        }
+        AgentsCommand::Access { p, state } => {
+            let mut project = open(&p)?;
+            project.set_agent_access(state == "on")?;
+            println!(
+                "agents may {} read {}",
+                if state == "on" { "now" } else { "no longer" },
+                project.root.display()
+            );
+        }
+        AgentsCommand::Revoke { folder } => {
+            if grants::revoke(&folder)? {
+                println!("agents may no longer read {}", folder.display());
+            } else {
+                println!("{} was not granted", folder.display());
+            }
+        }
+    }
     Ok(())
 }
 
@@ -913,8 +1020,8 @@ fn print_json<T: serde::Serialize>(v: &T) -> Result<()> {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     if cli.offline {
-        // SAFETY: set before any other thread is started.
-        unsafe { std::env::set_var("INVECTUS_OFFLINE", "1") };
+        // Process-wide and permanent, without touching the environment.
+        invectus_core::net::force_offline();
     }
     if let Some(d) = &cli.models_dir {
         // The shared orchestration crate finds models through the environment.
@@ -933,8 +1040,10 @@ fn run() -> Result<()> {
         }
         Command::Status { p, json } => status(&open(&p)?, json)?,
         Command::Import(a) => cmd_import(a, &cli.models_dir)?,
-        Command::Pull { p, source, network } => cmd_pull(&p, &source, network)?,
+        Command::Pull { p, source, .. } => cmd_pull(&p, &source)?,
         Command::Integrations { command } => cmd_integrations(command)?,
+        Command::Agents { command } => cmd_agents(command)?,
+        Command::Sources { p, command } => cmd_sources(&p, command)?,
         Command::Embed(a) => cmd_embed(a, &cli.models_dir)?,
         Command::Search(a) => cmd_search(a, &cli.models_dir)?,
         Command::Calibrate(a) => cmd_calibrate(a, &cli.models_dir)?,
@@ -1140,9 +1249,9 @@ fn status(p: &Project, json: bool) -> Result<()> {
     }
     println!("project {} ({})", p.config.name, p.root.display());
     println!(
-        "network: {}",
+        "external checks: {}",
         if p.config.network_enabled {
-            "enabled"
+            "on"
         } else {
             "off"
         }

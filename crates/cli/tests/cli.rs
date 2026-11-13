@@ -4,9 +4,33 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+/// One settings folder (agent grants, consent) for this test process and every `invectus` it
+/// starts, so the person's real settings are never read or written.
+fn data_dir() -> &'static Path {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let d = std::env::temp_dir().join(format!("invectus-cli-it-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        invectus_core::paths::use_data_dir_for_tests(d.clone());
+        d
+    })
+}
+
+/// Let agents read `dir`, with agent access on for projects created from now on.
+fn grant(dir: &Path) {
+    data_dir();
+    invectus_orchestration::grants::allow(dir).unwrap();
+    let seed = tempfile::tempdir().unwrap();
+    invectus_core::Project::create(&seed.path().join("seed"))
+        .unwrap()
+        .set_agent_access(true)
+        .unwrap();
+}
+
 fn cli(models: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_invectus"))
         .args(args)
+        .env("INVECTUS_DATA_DIR", data_dir())
         .env("INVECTUS_MODELS_DIR", models)
         .env_remove("INVECTUS_PROJECT")
         .output()
@@ -377,6 +401,7 @@ impl Mcp {
         use std::process::Stdio;
         let mut child = Command::new(env!("CARGO_BIN_EXE_invectus"))
             .args(["--offline", "mcp"])
+            .env("INVECTUS_DATA_DIR", data_dir())
             .env("INVECTUS_MODELS_DIR", models)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -468,6 +493,7 @@ fn agent_imports_a_csv_and_reports_gaps_over_mcp() {
     }
     std::fs::write(&csv, rows).unwrap();
     let project = dir.path().join("agent").display().to_string();
+    grant(dir.path());
 
     let mut m = Mcp::start(&models);
     let info = m.tool(
@@ -823,6 +849,7 @@ fn mcp_hands_calls_for_the_apps_project_to_the_app() {
     use invectus_orchestration as orch;
     use std::sync::{Arc, Mutex};
     let dir = tempfile::tempdir().unwrap();
+    grant(dir.path());
     let sock = dir.path().join("agent.sock");
     let session = orch::Shared::default();
     let board = orch::SharedBoard::default();
@@ -846,6 +873,7 @@ fn mcp_hands_calls_for_the_apps_project_to_the_app() {
     let run = |lines: Vec<serde_json::Value>, socket: Option<&Path>| {
         use std::io::Write;
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_invectus"));
+        cmd.env("INVECTUS_DATA_DIR", data_dir());
         cmd.args(["--offline", "mcp"])
             .env("INVECTUS_MODELS_DIR", dir.path())
             .stdin(std::process::Stdio::piped())

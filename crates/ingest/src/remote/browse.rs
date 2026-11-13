@@ -3,7 +3,7 @@
 //! Tally forms, Canny boards. Network use like a pull: the caller runs it only on the person's
 //! request, and offline mode refuses it. Each choice carries the spec a pull takes.
 
-use super::{Notion, Paced, agent, plain};
+use super::{Notion, Paced, guard, plain};
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -78,13 +78,10 @@ fn text(v: &Value) -> Option<String> {
 // ---- Notion: databases shared with the integration ----------------------------------------
 
 fn notion(token: &str) -> Result<Vec<Choice>> {
-    let mut n = Notion {
-        agent: agent(),
-        token,
-        last: None,
-    };
+    let mut n = Notion::new(token, None);
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
+    let mut bound = guard::Pages::new("Notion");
     loop {
         let mut body = json!({
             "filter": { "property": "object", "value": "database" },
@@ -92,6 +89,7 @@ fn notion(token: &str) -> Result<Vec<Choice>> {
             "page_size": 100,
         });
         if let Some(c) = &cursor {
+            bound.next(c)?;
             body["start_cursor"] = json!(c);
         }
         let v = n.call("POST", "/search", Some(&body))?;
@@ -133,7 +131,7 @@ const ZOTERO: &str = "https://api.zotero.org";
 const ZOTERO_PAGE: usize = 100;
 
 fn zotero(key: &str) -> Result<Vec<Choice>> {
-    let mut z = Paced::new(Duration::from_millis(150));
+    let mut z = Paced::new(Duration::from_millis(150), ZOTERO, "Zotero");
     let headers = [("Zotero-API-Key", key), ("Zotero-API-Version", "3")];
     let get = |z: &mut Paced, url: &str| -> Result<Value> {
         let (status, v) = z.get(url, &headers)?;
@@ -247,7 +245,12 @@ fn zotero_choices(prefix: &str, library: &str, collections: &[Value]) -> Vec<Cho
 const AIRTABLE: &str = "https://api.airtable.com/v0";
 
 fn airtable(token: &str) -> Result<Vec<Choice>> {
-    let mut a = Paced::new(Duration::from_millis(220));
+    let mut a = Paced::new(
+        Duration::from_millis(220),
+        "https://api.airtable.com",
+        "Airtable",
+    );
+    let mut bound = guard::Pages::new("Airtable");
     let auth = format!("Bearer {token}");
     let mut get = |url: &str| -> Result<Value> {
         let (status, v) = a.get(url, &[("Authorization", &auth)])?;
@@ -271,7 +274,10 @@ fn airtable(token: &str) -> Result<Vec<Choice>> {
     let mut offset: Option<String> = None;
     loop {
         let url = match &offset {
-            Some(o) => format!("{AIRTABLE}/meta/bases?offset={o}"),
+            Some(o) => {
+                bound.next(o)?;
+                format!("{AIRTABLE}/meta/bases?offset={}", guard::enc(o))
+            }
             None => format!("{AIRTABLE}/meta/bases"),
         };
         let v = get(&url)?;
@@ -285,7 +291,7 @@ fn airtable(token: &str) -> Result<Vec<Choice>> {
     for b in bases.iter().take(MAX_AIRTABLE_BASES) {
         let Some(id) = text(&b["id"]) else { continue };
         let name = text(&b["name"]).unwrap_or_else(|| id.clone());
-        let tables = get(&format!("{AIRTABLE}/meta/bases/{id}/tables"))?;
+        let tables = get(&format!("{AIRTABLE}/meta/bases/{}/tables", guard::enc(&id)))?;
         out.extend(airtable_choices(&id, &name, &tables));
         if out.len() >= MAX_CHOICES {
             break;
@@ -325,10 +331,14 @@ fn airtable_choices(base: &str, base_name: &str, tables: &Value) -> Vec<Choice> 
 // ---- Typeform and Tally: forms --------------------------------------------------------------
 
 fn typeform(token: &str) -> Result<Vec<Choice>> {
-    let mut t = Paced::new(Duration::from_millis(500));
+    let mut t = Paced::new(
+        Duration::from_millis(500),
+        "https://api.typeform.com",
+        "Typeform",
+    );
     let auth = format!("Bearer {token}");
     let mut out = Vec::new();
-    for page in 1.. {
+    for page in 1..=guard::MAX_PAGES {
         let (status, v) = t.get(
             &format!("https://api.typeform.com/forms?page_size=200&page={page}"),
             &[("Authorization", &auth)],
@@ -343,7 +353,7 @@ fn typeform(token: &str) -> Result<Vec<Choice>> {
         }
         out.extend(typeform_choices(&v));
         let pages = v["page_count"].as_u64().unwrap_or(1);
-        if page >= pages || out.len() >= MAX_CHOICES {
+        if page as u64 >= pages || out.len() >= MAX_CHOICES {
             break;
         }
     }
@@ -368,10 +378,10 @@ fn typeform_choices(v: &Value) -> Vec<Choice> {
 }
 
 fn tally(token: &str) -> Result<Vec<Choice>> {
-    let mut t = Paced::new(Duration::from_millis(250));
+    let mut t = Paced::new(Duration::from_millis(250), "https://api.tally.so", "Tally");
     let auth = format!("Bearer {token}");
     let mut out = Vec::new();
-    for page in 1.. {
+    for page in 1..=guard::MAX_PAGES {
         let (status, v) = t.get(
             &format!("https://api.tally.so/forms?page={page}"),
             &[("Authorization", &auth)],
@@ -413,7 +423,7 @@ fn tally_choices(v: &Value) -> Vec<Choice> {
 // ---- Canny: boards --------------------------------------------------------------------------
 
 fn canny(key: &str) -> Result<Vec<Choice>> {
-    let mut c = Paced::new(Duration::from_millis(300));
+    let mut c = Paced::new(Duration::from_millis(300), "https://canny.io", "Canny");
     let (status, v) = c.post_json(
         "https://canny.io/api/v1/boards/list",
         &json!({ "apiKey": key }),

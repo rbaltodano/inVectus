@@ -162,7 +162,7 @@ export default function Integrations() {
         </section>;
       })}
       </div>
-      {!filtered && <p className="integrations-footnote">Online sources are pulled once, when you ask, and then work offline. Outside checks run only when a project's network switch is on.</p>}
+      {!filtered && <p className="integrations-footnote">Online sources are pulled once, when you ask, and then work offline. Checking gaps against outside sources runs only when a project’s External checks switch is on.</p>}
     </div>
   </div>;
 }

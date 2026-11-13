@@ -1156,7 +1156,7 @@ pub fn mcpb_manifest(version: &str) -> Value {
             Calibrated, offline search over your own inVectus projects.",
         "long_description": "Runs the inVectus engine on this computer over stdio. Search, \
             calibrated verdicts and gap analysis run offline on your projects; verification \
-            against PubMed and OpenAlex runs only when a project's network switch is on. \
+            against PubMed and OpenAlex runs only when a project's External checks switch is on. \
             Agents can suggest decisions and write descriptions; the person decides.",
         "author": { "name": "Ryan Baltodano" },
         "license": "MIT",

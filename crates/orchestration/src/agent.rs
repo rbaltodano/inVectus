@@ -93,11 +93,71 @@ impl Agent {
         Ok(result)
     }
 
+    /// Folders agent tools may read: the projects folder, the open project, and folders the
+    /// person granted on this machine ([`crate::grants`]).
+    fn file_roots(&self) -> Vec<std::path::PathBuf> {
+        let mut roots = vec![orch::user_path(&orch::default_projects_dir())];
+        roots.extend(self.open_root());
+        roots.extend(crate::grants::granted_folders());
+        roots
+    }
+
+    /// `source` as given when it is a remote source (a link or `notion:` style spec), else the
+    /// file it names resolved and checked against [`Self::file_roots`].
+    fn allowed_source(&self, source: &str, project: Option<&std::path::Path>) -> OpResult<String> {
+        let probe = project.map_or_else(std::env::temp_dir, std::path::Path::to_path_buf);
+        if invectus_ingest::source::Source::parse_remote(source, &probe)
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            return Ok(source.to_string());
+        }
+        let real = crate::grants::check_within(&orch::user_path(source), &self.file_roots())
+            .map_err(orch::err)?;
+        Ok(real.display().to_string())
+    }
+
     fn run_tool_inner(&mut self, name: &str, args: Value) -> OpResult<Value> {
+        // Agent access (owner decision 2026-11-12): tools that return a project's content or
+        // read files for it work only when the person allowed agents to read this project.
+        // Finding and opening projects, status and jobs stay available, so the agent can say
+        // why it is blocked.
+        if !matches!(
+            name,
+            "list_projects" | "open_project" | "project_status" | "job_status" | "cancel_job"
+        ) {
+            // Resolve the project the tool will work on first (a tool may name another one),
+            // then check that project.
+            let wanted = args
+                .get("project")
+                .and_then(Value::as_str)
+                .map(String::from);
+            if wanted.is_some() || self.open_root().is_some() {
+                self.ensure_open(wanted.as_deref())?;
+            }
+            let allowed = self
+                .session
+                .lock()
+                .map_err(orch::err)?
+                .as_ref()
+                .map(|s| s.project.config.agent_access);
+            if allowed == Some(false) {
+                return Err(
+                    "agent access is off for this project: the person can allow AI agents \
+                            to read it in the app (project settings, or when choosing the \
+                            project's agent), or with `invectus agents access on`"
+                        .into(),
+                );
+            }
+        }
         match name {
             "list_projects" => {
                 let a: ListArgs = parse(args)?;
                 let folder = orch::user_path(&a.folder.unwrap_or_else(orch::default_projects_dir));
+                if folder.exists() {
+                    crate::grants::check_within(&folder, &self.file_roots()).map_err(orch::err)?;
+                }
                 Ok(json!({
                     "folder": folder.display().to_string(),
                     "projects": list_projects(&folder, self.open_root().as_deref()),
@@ -111,6 +171,18 @@ impl Agent {
                     let info = with_session_wait(&self.session, |s| orch::project_info(s, &board))?;
                     return value(&info);
                 }
+                // Agents open and create projects only inside the projects folder or folders the
+                // person granted (audit 2026-11-12, item 5).
+                let roots = self.file_roots();
+                let wanted = orch::user_path(&a.project);
+                crate::grants::check_project_location(&wanted, &roots)
+                    .or_else(|_| {
+                        crate::grants::check_project_location(
+                            &wanted.with_extension("invectus"),
+                            &roots,
+                        )
+                    })
+                    .map_err(orch::err)?;
                 let info = orch::open_project(
                     &self.session,
                     &self.board,
@@ -200,11 +272,13 @@ impl Agent {
                     .lock()
                     .ok()
                     .and_then(|g| g.as_ref().map(|s| s.project.root.clone()));
-                value(&orch::inspect_source(&a.source, a.sheet, root.as_deref())?)
+                let source = self.allowed_source(&a.source, root.as_deref())?;
+                value(&orch::inspect_source(&source, a.sheet, root.as_deref())?)
             }
             "import_collection" => {
-                let a: ImportArgs = parse(args)?;
+                let mut a: ImportArgs = parse(args)?;
                 self.ensure_open(a.project.as_deref())?;
+                a.source = self.allowed_source(&a.source, self.open_root().as_deref())?;
                 let form = a.form();
                 let req = orch::request_for_session(&self.session, form)?;
                 let out = orch::import_then_index(&self.emit, &self.session, &self.board, req)?;
@@ -243,19 +317,14 @@ impl Agent {
             "verify_gap" => {
                 let a: GapArgs = parse(args)?;
                 self.ensure_open(a.project.as_deref())?;
-                let r = with_session_wait(&self.session, |s| {
-                    let table = select_table(&s.project, &a.collection, a.space.as_deref())?;
-                    encoder_for(s, &table)?;
-                    let encoder = &mut s.encoder.as_mut().unwrap().1;
-                    invectus_verify::verify_gap(
-                        &s.project,
-                        &table,
-                        encoder,
-                        a.gap_id,
-                        // Never overrides the project's network switch.
-                        &invectus_verify::VerifyOptions::for_project(&s.project),
-                    )
-                })?;
+                // Never overrides the project's External checks switch; the session is free
+                // while the sources answer.
+                let form = orch::TableForm {
+                    project: None,
+                    collection: a.collection.clone(),
+                    space: a.space.clone(),
+                };
+                let r = orch::verify_gap_unlocked(&self.session, &form, a.gap_id)?;
                 value(&r)
             }
             "suggest_decision" => {
@@ -491,6 +560,16 @@ impl Agent {
                         pinned.display()
                     ));
                 }
+                // Only inside the projects folder or folders the person granted.
+                let roots = self.file_roots();
+                crate::grants::check_project_location(&wanted, &roots)
+                    .or_else(|_| {
+                        crate::grants::check_project_location(
+                            &wanted.with_extension("invectus"),
+                            &roots,
+                        )
+                    })
+                    .map_err(orch::err)?;
                 orch::open_project(&self.session, &self.board, p, false).map(|_| ())
             }
         }
@@ -942,9 +1021,10 @@ pub fn tools() -> Value {
         {
             "name": "verify_gap",
             "description": "Check a gap against the project's outside sources (PubMed and OpenAlex by \
-                default; Semantic Scholar and arXiv when chosen). Uses the network, so it is \
-                refused unless the project's network switch is on (the person turns it on in \
-                the app); results are cached in the project.",
+                default; Semantic Scholar and arXiv when chosen). It sends the gap's \
+                description to those services, so it is refused unless the project's External \
+                checks switch is on (the person turns it on in the app); results are cached in \
+                the project.",
             "inputSchema": { "type": "object", "properties": {
                 "project": project, "collection": collection, "space": space,
                 "gap_id": { "type": "integer" }
@@ -1065,9 +1145,83 @@ pub fn tools() -> Value {
 
 #[cfg(test)]
 mod tests {
+    /// A temporary folder granted to agents, with this test process's own data folder (the
+    /// person's real grants and consent are never touched).
+    fn granted_dir() -> tempfile::TempDir {
+        invectus_core::paths::use_data_dir_for_tests(
+            std::env::temp_dir().join(format!("invectus-orch-test-{}", std::process::id())),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        crate::grants::allow(dir.path()).unwrap();
+        dir
+    }
+
+    #[test]
+    fn content_tools_need_agent_access_on_the_project_they_name() {
+        let dir = granted_dir();
+        let a = dir.path().join("a.invectus");
+        let b = dir.path().join("b.invectus");
+        for root in [&a, &b] {
+            let mut p = invectus_core::Project::create(root).unwrap();
+            p.set_agent_access(false).unwrap();
+        }
+        invectus_core::Project::open(&a)
+            .unwrap()
+            .set_agent_access(true)
+            .unwrap();
+        let mut agent = super::Agent::default();
+        agent
+            .run_tool("open_project", serde_json::json!({"project": a}))
+            .unwrap();
+        // A is allowed; naming B (access off) from a tool is refused, not silently opened.
+        let args = serde_json::json!({"project": b, "collection": "x", "query": "q", "k": 1});
+        let e = agent.run_tool("search", args).unwrap_err();
+        assert!(e.contains("agent access is off"), "{e}");
+        // Status still works, so the agent can say why it is blocked.
+        agent
+            .run_tool("project_status", serde_json::json!({"project": b}))
+            .unwrap();
+        // Nothing open at all: the same refusal.
+        let mut fresh = super::Agent::default();
+        let args = serde_json::json!({"project": b, "collection": "x", "query": "q", "k": 1});
+        assert!(
+            fresh
+                .run_tool("search", args)
+                .unwrap_err()
+                .contains("agent access is off")
+        );
+    }
+
+    #[test]
+    fn projects_outside_granted_folders_cannot_be_opened_by_any_tool() {
+        let _granted = granted_dir();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let root = elsewhere.path().join("x.invectus");
+        invectus_core::Project::create(&root).unwrap();
+        let mut agent = super::Agent::default();
+        for (tool, args) in [
+            ("open_project", serde_json::json!({"project": root})),
+            ("project_status", serde_json::json!({"project": root})),
+            (
+                "search",
+                serde_json::json!({"project": root, "collection": "x", "query": "q", "k": 1}),
+            ),
+        ] {
+            let e = agent.run_tool(tool, args).unwrap_err();
+            assert!(e.contains("outside the folders granted"), "{tool}: {e}");
+        }
+        let e = agent
+            .run_tool(
+                "inspect_source",
+                serde_json::json!({"source": "/etc/hosts"}),
+            )
+            .unwrap_err();
+        assert!(e.contains("outside the folders granted"), "{e}");
+    }
+
     #[test]
     fn later_agent_calls_receive_saved_model_preference_without_changing_author() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = granted_dir();
         let root = dir.path().join("preference.invectus");
         let mut agent = super::Agent {
             client: Some("claude-code".into()),

@@ -5,6 +5,8 @@ pub mod item;
 pub mod job;
 pub mod multimodal;
 pub mod net;
+pub mod paths;
+pub mod private;
 pub mod project;
 pub mod secrets;
 pub mod store;

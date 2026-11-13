@@ -144,8 +144,8 @@ async fn inspect_source(
     .await
 }
 
-/// Pull a Google Sheet or Notion database into the open project (network; needs the project's
-/// network switch). Runs as a background job.
+/// Pull a source into the open project (network, started by the person; offline mode refuses
+/// it). Runs as a background job.
 #[tauri::command]
 async fn pull_source(
     app: AppHandle,
@@ -153,7 +153,7 @@ async fn pull_source(
     spec: String,
 ) -> CmdResult<JobInfo> {
     let (session, board, emit) = (state.session.clone(), state.board.clone(), emitter(&app));
-    off_thread(move || orch::start_pull(&emit, &session, &board, &spec, false)).await
+    off_thread(move || orch::start_pull(&emit, &session, &board, &spec)).await
 }
 
 /// Token-based integrations and where each token comes from (`keychain`, `environment`).
@@ -227,7 +227,7 @@ fn list_llms() -> CmdResult<Vec<LlmInfo>> {
 
 #[tauri::command]
 fn install_model(app: AppHandle, state: State<AppState>, model: String) -> CmdResult<JobInfo> {
-    orch::install_model(&emitter(&app), &state.session, &state.board, &model)
+    orch::install_model(&emitter(&app), &state.board, &model)
 }
 
 #[tauri::command]
@@ -540,35 +540,42 @@ async fn describe_gap(
     .await
 }
 
-/// Check a gap against the project's outside sources (network; cached in the project). `network` allows
-/// this call to use the network when the project's switch is off.
+/// Check a gap against the project's outside sources (network, only with the project's
+/// External checks switch on; cached in the project). The session is not held while the sources
+/// answer; [`cancel_verification`] stops it.
 #[tauri::command]
 async fn verify_gap(
     state: State<'_, AppState>,
     form: TableForm,
     gap_id: i32,
-    network: bool,
 ) -> CmdResult<invectus_verify::Verification> {
     let session = state.session.clone();
-    off_thread(move || {
-        with_session(&session, |s| {
-            form.ensure_project(&s.project)?;
-            let table = select_table(&s.project, &form.collection, form.space.as_deref())?;
-            encoder_for(s, &table)?;
-            let encoder = &mut s.encoder.as_mut().unwrap().1;
-            invectus_verify::verify_gap(
-                &s.project,
-                &table,
-                encoder,
-                gap_id,
-                &invectus_verify::VerifyOptions {
-                    allow_network: network,
-                    ..invectus_verify::VerifyOptions::for_project(&s.project)
-                },
-            )
-        })
-    })
-    .await
+    off_thread(move || orch::verify_gap_unlocked(&session, &form, gap_id)).await
+}
+
+/// Let AI agents read the open project, or stop them.
+#[tauri::command]
+async fn set_agent_access(state: State<'_, AppState>, enabled: bool) -> CmdResult<ProjectInfo> {
+    let (session, board) = (state.session.clone(), state.board.clone());
+    off_thread(move || orch::set_agent_access(&session, &board, enabled)).await
+}
+
+/// The agent-access choice new projects start with (the person's last choice).
+#[tauri::command]
+fn agent_access_default() -> bool {
+    invectus_core::project::agent_access_default()
+}
+
+/// Stop the gap check in progress.
+#[tauri::command]
+fn cancel_verification() -> bool {
+    orch::cancel_verification()
+}
+
+/// The network calls this app made (host, purpose, status, time; never paths or contents).
+#[tauri::command]
+fn outbound_log() -> Vec<invectus_core::net::OutboundCall> {
+    invectus_core::net::outbound_log()
 }
 
 /// The scan's default weights, for the settings screen's reset.
@@ -748,6 +755,10 @@ pub fn run() {
             set_project_agent,
             list_llms,
             install_model,
+            cancel_verification,
+            set_agent_access,
+            agent_access_default,
+            outbound_log,
             default_gap_weights,
             export_gaps,
             open_url,

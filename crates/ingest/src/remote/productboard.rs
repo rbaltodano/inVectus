@@ -2,7 +2,7 @@
 //! `notes`: customer feedback (demand) with its customer, company, tags and linked features.
 //! `features`: the roadmap (coverage) with status and timeframe. HTML descriptions become text.
 
-use super::{Paced, PullContext};
+use super::{Paced, PullContext, guard};
 use anyhow::{Result, bail};
 use serde_json::Value;
 use std::time::Duration;
@@ -32,7 +32,8 @@ pub(super) fn entities(
     cx: &mut PullContext,
 ) -> Result<(Vec<String>, Vec<Vec<String>>)> {
     // Productboard allows about 50 requests a second; stay well below.
-    let mut p = Paced::new(Duration::from_millis(100));
+    let mut p = Paced::new(Duration::from_millis(100), API, "Productboard").cancellable(cx.cancel);
+    let mut bound = guard::Pages::new("Productboard");
     let auth = format!("Bearer {token}");
     let headers = [("Authorization", auth.as_str()), ("X-Version", "1")];
     let notes = entity == "notes";
@@ -46,6 +47,9 @@ pub(super) fn entities(
         if cx.cancel.is_cancelled() {
             bail!("cancelled");
         }
+        // `links.next` comes from the answer: the client refuses it unless it is exactly on
+        // https://api.productboard.com, so the token never goes anywhere else.
+        bound.next(&u)?;
         let (status, v) = p.get(&u, &headers)?;
         if status != 200 {
             let msg = v["errors"][0]["detail"]
@@ -72,9 +76,10 @@ pub(super) fn entities(
         );
         // Notes page with a cursor; features with a next link.
         url = match (v["pageCursor"].as_str(), v["links"]["next"].as_str()) {
-            (Some(c), _) if notes && !c.is_empty() => {
-                Some(format!("{API}/notes?pageLimit=100&pageCursor={c}"))
-            }
+            (Some(c), _) if notes && !c.is_empty() => Some(format!(
+                "{API}/notes?pageLimit=100&pageCursor={}",
+                guard::enc(c)
+            )),
             (_, Some(next)) if !next.is_empty() => Some(next.to_string()),
             _ => None,
         };

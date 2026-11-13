@@ -3270,3 +3270,6 @@ Checked on arm64 macOS only.
   storage on this computer; falls back to the projects folder if that place is gone).
 - Checks: `npm run build`; 58 UI tests pass; recorded in the mock harness with real mouse input
   (choose, Browse, tick, Allow). Not checked in the packaged app.
+- Picker header: the title is now "Agent Access" (20 px), with the path box and "Set as default"
+  directly under it in place of the description; the drag and double-click hint moved into the
+  canvas's bottom-left corner.

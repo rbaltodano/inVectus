@@ -1,7 +1,8 @@
 /* The agent-folder picker (FolderPicker.tsx): a dotted canvas with a left-to-right tree. */
 .integration-modal.fp-modal { width: min(940px, 100%); max-width: none; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
-.fp-head { display: flex; flex-direction: column; gap: 6px; }
-.fp-head h3 { font-size: 16px; font-weight: 500; }
+.fp-head { display: flex; flex-direction: column; gap: 12px; }
+.fp-head h3 { font-size: 20px; font-weight: 500; color: var(--ink); }
+.fp-path-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 /* Chosen chips switch to the other theme's colours: paper and ink in dark, the reverse in light. */
 .fp-modal { --fp-lit-bg: #ebe7e0; --fp-lit-ink: #141414; }
 :root[data-theme="light"] .fp-modal { --fp-lit-bg: #202020; --fp-lit-ink: #e8e3db; }
@@ -45,6 +46,7 @@
 @keyframes fp-gone { 0% { opacity: .25; } 16.67% { opacity: .1; } 33.33% { opacity: .22; } 50% { opacity: .07; } 66.67% { opacity: .17; } 83.33% { opacity: .12; } 100% { opacity: 0; } }
 .fp-node.dim, .fp-edge.dim { opacity: .25; animation: fp-dim 150ms step-end; }
 .fp-node.gone, .fp-edge.gone { opacity: 0; animation: fp-gone 150ms step-end; pointer-events: none; }
+.fp-hint { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: var(--dim); pointer-events: none; }
 .fp-where { position: absolute; right: 12px; bottom: 10px; font-size: 11px; color: var(--dim); pointer-events: none; }
 .fp-empty { position: absolute; left: 20px; top: 16px; }
 .fp-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

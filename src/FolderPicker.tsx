@@ -176,8 +176,16 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
   return createPortal(<ModalBackdrop onClick={(e) => { if (e.target === e.currentTarget && phase === "choosing") onClose(); }}>
     <div className="integration-modal fp-modal" role="dialog" aria-modal="true" aria-labelledby="fp-title">
       <div className="fp-head">
-        <h3 id="fp-title">Let agents read a file or folder</h3>
-        <p className="dim small">Drag to look around. Click a file or folder: agents may read it and everything inside. Double-click a folder to open it.</p>
+        <h3 id="fp-title">Agent Access</h3>
+        <div className="fp-path-row">
+          <input className="fp-path mono" value={path} spellCheck={false} placeholder="Paste a path, or click a file or folder below" aria-label="Path agents may read (and everything inside)"
+            disabled={phase !== "choosing"} onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void goTo(); } }} />
+          <label className="fp-default small" title="Open the picker here next time">
+            <input type="checkbox" checked={asDefault} disabled={phase !== "choosing"} onChange={(e) => { setAsDefault(e.target.checked); setTouched(true); }} />
+            <span className={`fp-default-box${touched ? " touched" : ""}`} aria-hidden="true" />Set as default
+          </label>
+        </div>
       </div>
       <div ref={canvas} className="fp-canvas" style={{ backgroundPosition: `${pan.x}px ${pan.y}px` }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         {view && <div ref={world} className="fp-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px)`, width: size.w, height: size.h }}>
@@ -200,18 +208,10 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
             </button>)}
         </div>}
         {!view && !error && <p className="fp-empty dim small">Reading folders…</p>}
+        {view && <span className="fp-hint small">Drag to look around · double-click a folder to open it</span>}
         {view && <span className="fp-where mono">{home(view.tree.path)}</span>}
       </div>
       {error && <p className="err small" role="alert">{error}</p>}
-      <div className="fp-foot">
-        <input className="fp-path mono" value={path} spellCheck={false} placeholder="Paste a path, or click a file or folder" aria-label="Path to let agents read"
-          disabled={phase !== "choosing"} onChange={(e) => setPath(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void goTo(); } }} />
-        <label className="fp-default small" title="Open the picker here next time">
-          <input type="checkbox" checked={asDefault} disabled={phase !== "choosing"} onChange={(e) => { setAsDefault(e.target.checked); setTouched(true); }} />
-          <span className={`fp-default-box${touched ? " touched" : ""}`} aria-hidden="true" />Set as default
-        </label>
-      </div>
       <div className="fp-foot">
         <span className="fp-pick small dim">{chosenNode ? (chosenNode.node.dir ? `${chosenNode.node.name}: ${chosenNode.node.count} inside` : `${chosenNode.node.name}: file`) : ""}</span>
         <button type="button" className="text-btn" disabled={!view?.parent || phase !== "choosing"} onClick={() => load(view?.parent ?? undefined)}><ArrowUp size={13} aria-hidden="true" /> Up a level</button>

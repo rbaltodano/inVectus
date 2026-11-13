@@ -8,6 +8,7 @@ import { DownloadConsent } from "../models";
 import OutboundLog from "../OutboundLog";
 import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
+import { setFlickerSetting, useFlickerSetting } from "../dot-flicker";
 
 const VERIFY_SOURCES: [string, string, string][] = [
   ["pubmed", "PubMed", "Biomedical literature (NCBI)."],
@@ -41,6 +42,8 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
   const [consent, setConsent] = useState<ModelInfo>();
   const [theme, setTheme] = useState<ThemeChoice>(themeChoice);
   const chooseTheme = (t: ThemeChoice) => { setTheme(t); setThemeChoice(t); };
+  const flicker = useFlickerSetting();
+  const chooseFlicker = (on: boolean) => setFlickerSetting(on);
   const jobs = useStartJob();
   const { busy, error, run } = useAction();
   const running = isRunning(jobs.current);
@@ -117,6 +120,13 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
                   </button>;
                 })}
               </div>
+            </section>
+            <section aria-labelledby="s-motion" className="panel settings-group stack gap">
+              <div className="settings-group-heading"><h3 id="s-motion">Motion</h3><p>How cards, menus and windows arrive and leave.</p></div>
+              <label className="check top settings-switch-row">
+                <input type="checkbox" role="switch" checked={flicker} onChange={() => chooseFlicker(!flicker)} />
+                <span><b>Flicker animations</b><div className="muted small">Cards, menus and windows flicker in and out like the map’s squares. Turn off to have them appear and close at once. Always off when your system asks for reduced motion.</div></span>
+              </label>
             </section>
           </div>
           <div id="settings-section-models" role="tabpanel" aria-labelledby="settings-tab-models" className="settings-section" hidden={section !== "models"}>

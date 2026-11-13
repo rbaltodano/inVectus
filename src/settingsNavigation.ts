@@ -1,6 +1,6 @@
 /** Settings search covers the controls inside each category, not just its title. */
 export const SETTINGS_SECTIONS = [
-  { id: "appearance", label: "Appearance", scope: "app", description: "Make inVectus feel at home on your computer.", keywords: "theme light dark system colors" },
+  { id: "appearance", label: "Appearance", scope: "app", description: "Make inVectus feel at home on your computer.", keywords: "theme light dark system colors motion animation flicker" },
   { id: "models", label: "Models", scope: "app", description: "Manage the local models shared by your projects.", keywords: "embedding bge nomic download install language model llm gemma size dimensions" },
   { id: "network", label: "Network", scope: "project", description: "Choose when this project can use outside sources.", keywords: "offline online privacy pubmed openalex semantic scholar arxiv outside sources verification cache downloads" },
   { id: "scoring", label: "Gap scoring", scope: "project", description: "Adjust how gaps are ranked for this project.", keywords: "weights demand per coverage item since last momentum share newer than stale bridges closeness little in between recent saturation penalty reset defaults" },

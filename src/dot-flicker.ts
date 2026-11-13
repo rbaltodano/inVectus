@@ -1,4 +1,40 @@
-import { useRef, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+
+/** Settings → Appearance → Flicker animations (this computer; on unless turned off). Off, or under
+ *  the system's reduced motion, cards, menus and windows appear and close at once and the map's
+ *  squares show without flickering. CSS reads `data-flicker="off"` on the root element. */
+const FLICKER_KEY = "invectus.flicker";
+const FLICKER_EVENT = "invectus-flicker";
+
+export function flickerSetting(): boolean {
+  try { return localStorage.getItem(FLICKER_KEY) !== "off"; } catch { return true; }
+}
+
+export function setFlickerSetting(on: boolean) {
+  try { if (on) localStorage.removeItem(FLICKER_KEY); else localStorage.setItem(FLICKER_KEY, "off"); } catch { /* storage unavailable */ }
+  applyFlickerSetting();
+  window.dispatchEvent(new Event(FLICKER_EVENT));
+}
+
+export function applyFlickerSetting(root: HTMLElement = document.documentElement) {
+  if (flickerSetting()) delete root.dataset.flicker; else root.dataset.flicker = "off";
+}
+
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Whether to skip flicker right now (the setting is off, or the system asks for reduced motion). */
+export const noFlicker = () => !flickerSetting() || reducedMotion();
+
+/** The flicker setting as React state, following changes made in Settings. */
+export function useFlickerSetting(): boolean {
+  const [on, setOn] = useState(flickerSetting);
+  useEffect(() => {
+    const sync = () => setOn(flickerSetting());
+    window.addEventListener(FLICKER_EVENT, sync);
+    return () => window.removeEventListener(FLICKER_EVENT, sync);
+  }, []);
+  return on;
+}
 export const DOT_DELAY_MS = 250;
 export const DOT_FLICKER_MS = 150;
 const LEVELS = [1, 0.2, 0.85, 0.35, 0.7, 0.5];

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as PE } from "react";
 import LineArt from "./LineArt";
 import { fmt, year, KIND_LABEL, type GapView, type JobInfo, type MapData, type MapPoint, type Region } from "./api";
-import { DotFlicker } from "./dot-flicker";
+import { DotFlicker, useFlickerSetting } from "./dot-flicker";
 import { canvasColors, useTheme } from "./theme";
 import { gapFocusArea, interpolateCamera, regionFocusView } from "./map-focus";
 
@@ -141,6 +141,9 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
   const [flicker] = useState(() => new DotFlicker());
   const [flickerFrame, setFlickerFrame] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  // Squares flicker in unless reduced motion or Settings → Flicker animations is off.
+  const flickerOn = useFlickerSetting();
+  const stillSquares = reducedMotion || !flickerOn;
   const [gapEmphasis, setGapEmphasis] = useState(0);
   const gapEmphasisRef = useRef(0);
   const [selectedEmphasis, setSelectedEmphasis] = useState<Record<number, number>>({});
@@ -328,7 +331,7 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
     const list = renderedCells;
     cells.current = list;
     const now = performance.now();
-    const opacity = (key: string) => reducedMotion ? 1 : flicker.opacity(key, now);
+    const opacity = (key: string) => stillSquares ? 1 : flicker.opacity(key, now);
     const squareOpacity = (normal: number) => normal + (0.15 - normal) * gapEmphasis;
 
     // Region outlines: hidden until hover (or the toggle / a marked region).
@@ -423,11 +426,11 @@ export default function DataCircle({ data, gaps, marks, showGaps, showLabels, sh
       g.lineWidth = 3;
       g.beginPath(); g.arc(R, R, R - 2, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); g.stroke();
     }
-    if (!reducedMotion && flicker.pending(now)) {
+    if (!stillSquares && flicker.pending(now)) {
       const frame = requestAnimationFrame(setFlickerFrame);
       return () => cancelAnimationFrame(frame);
     }
-  }, [data, size, view, gaps, mapGaps, marks, showGaps, showOutlines, gapsActive, gapEmphasis, selectedGapId, selectedEmphasis, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion, theme]);
+  }, [data, size, view, gaps, mapGaps, marks, showGaps, showOutlines, gapsActive, gapEmphasis, selectedGapId, selectedEmphasis, hover?.cell, loading, frac, glide, fit, renderedCells, flickerFrame, reducedMotion, stillSquares, theme]);
 
   // Pointer: drag to pan, wheel to zoom, hover to inspect, click to open.
   const at = (e: PE) => { const r = canvas.current!.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };

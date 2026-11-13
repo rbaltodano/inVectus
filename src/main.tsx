@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "@fontsource-variable/martian-mono";
 import "@fontsource-variable/inter";
 import App from "./App";
+import { applyFlickerSetting } from "./dot-flicker";
 import { installMotion } from "./motion";
 import { installTheme } from "./theme";
 
@@ -13,6 +14,7 @@ if ("__TAURI_INTERNALS__" in window && /Mac/.test(navigator.platform)) {
 
 installTheme();
 installMotion();
+applyFlickerSetting();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

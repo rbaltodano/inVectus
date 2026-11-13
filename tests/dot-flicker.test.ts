@@ -47,3 +47,32 @@ test("leaving squares are pruned, and reappearing squares get a fresh entrance",
   dots.clear();
   assert.equal(dots.pending(1000), false);
 });
+
+test("the flicker setting is on by default, persists off, and marks the root element", async () => {
+  const store = new Map<string, string>();
+  const g = globalThis as Record<string, unknown>;
+  g.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) };
+  const root = { dataset: {} as Record<string, string> };
+  const events: string[] = [];
+  g.document = { documentElement: root };
+  g.window = { dispatchEvent: (e: Event) => events.push(e.type) };
+  g.matchMedia = () => ({ matches: false });
+  const { flickerSetting, setFlickerSetting, noFlicker } = await import("../src/dot-flicker.ts");
+  try {
+    assert.equal(flickerSetting(), true);
+    assert.equal(noFlicker(), false);
+    setFlickerSetting(false);
+    assert.equal(flickerSetting(), false);
+    assert.equal(noFlicker(), true);
+    assert.equal(root.dataset.flicker, "off");
+    setFlickerSetting(true);
+    assert.equal(root.dataset.flicker, undefined);
+    assert.equal(store.size, 0);
+    assert.equal(events.length, 2);
+    // Reduced motion wins over the setting.
+    g.matchMedia = () => ({ matches: true });
+    assert.equal(noFlicker(), true);
+  } finally {
+    for (const k of ["localStorage", "document", "window", "matchMedia"]) delete g[k];
+  }
+});

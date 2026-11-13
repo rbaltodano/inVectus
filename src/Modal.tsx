@@ -1,17 +1,15 @@
 // Popup windows leave the way the data circle's squares do: the whole window, backdrop included,
 // flickers out (levels 1, .5, .7, .35, .85, .2, 0 over 150 ms) before it is removed, however it
-// closed (Cancel, Escape, a click outside, or the work finishing).
+// closed (Cancel, Escape, a click outside, or the work finishing). Skipped when flicker is off.
 //
 //   <FlickerPresence show={open}>{open && <ModalBackdrop …>…</ModalBackdrop>}</FlickerPresence>
 //
 // FlickerPresence keeps the last shown children mounted for one flicker after `show` turns off
 // (same component instance, so its state holds); ModalBackdrop reads that and plays the exit.
 import { createContext, useContext, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
-import { DOT_FLICKER_MS } from "./dot-flicker";
+import { DOT_FLICKER_MS, noFlicker } from "./dot-flicker";
 
 const Leaving = createContext(false);
-
-const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function FlickerPresence({ show, children }: { show: boolean; children: ReactNode }) {
   const last = useRef<ReactNode>(null);
@@ -20,7 +18,7 @@ export function FlickerPresence({ show, children }: { show: boolean; children: R
   // Derived during render, so the first frame without `show` already plays the exit (no blink).
   if (show !== prevShow) {
     setPrevShow(show);
-    setLeaving(!show && !reducedMotion());
+    setLeaving(!show && !noFlicker());
   }
   if (show) last.current = children;
   useEffect(() => {

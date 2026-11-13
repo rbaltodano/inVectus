@@ -4,9 +4,8 @@
 // keychain) are pulled into a project only when the person asks, then imported offline
 // (docs/integrations.md).
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
-import { DOT_FLICKER_MS } from "../dot-flicker";
+import { DOT_FLICKER_MS, noFlicker, useFlickerDelays } from "../dot-flicker";
 import IntegrationIcon, { hasIntegrationMark } from "../IntegrationIcon";
-import { useFlickerDelays } from "../dot-flicker";
 import Select from "../Select";
 import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbulb, ListChecks, Map as MapIcon, NotebookText, Search, Sheet, Table2, X, type LucideIcon } from "lucide-react";
 import { api, inTauri, fmt } from "../api";
@@ -78,7 +77,7 @@ export default function Integrations() {
     setCategory(next.category); setStatus(next.status);
     clearTimeout(pending.current);
     const root = results.current;
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduced = noFlicker();
     const show = () => { setApplied(next); setRound((r) => r + 1); };
     if (!root || reduced) { show(); return; }
     const keep = new Set(matching(next).map((e) => e.code));

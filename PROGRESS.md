@@ -3206,3 +3206,16 @@ Checked on arm64 macOS only.
   Connect plan, source dialog and the import table. Menus and popovers are unchanged.
 - Checks: `npm run build`, 57 UI tests pass; close captured from the mock harness (headless
   Chrome screencast, macOS). Not checked in the packaged app.
+
+## 2026-11-13 — Settings: Flicker animations switch
+
+- Settings → Appearance → Motion → Flicker animations (on by default, per computer in local
+  storage). Off, `data-flicker="off"` on the root stops every flicker in CSS (cards, menus, popup
+  windows, table cells, source rows, Home's gap card), popup windows close at once, the
+  Integrations filter swaps at once, and the map's squares show without flickering. The system's
+  reduced-motion setting still turns flicker off whatever the switch says. Springs, page
+  transitions and progress bars are not flicker and are unchanged.
+- Checks: `npm run build`; 58 UI tests pass (new: the setting's default, persistence, root marker
+  and reduced-motion override). In the mock harness (headless Chrome, macOS): the switch stores
+  "off", cards and dialog rows have no animation, and the agent dialog is gone 20 ms after Cancel.
+  Not checked in the packaged app.

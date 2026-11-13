@@ -3070,9 +3070,16 @@ real accounts were used.
 - Fixed from that: the app's Notion defaults now take the title property (the column after the
   fixed four, whatever it is called) as the title and search the title, the prose properties and
   `body`. Before, they searched only `body` (empty on most rows) and left the title unset.
-- Still unchecked on Notion: the listing (`source_choices`) against the real API (a scratch
-  runner stalled on the macOS keychain prompt for a new binary), and databases with several
-  data sources.
+- Packaged app (`inVectus.app`, release build of this commit's parent plus the defaults fix),
+  driven by a Codex agent with computer use: token saved from Integrations; "Show my Notion
+  databases" listed both databases (edited times right); one and two picks; the column table
+  opened with title Idea and Idea, Summary, body searched; 8 items imported; search ranked
+  "Offline search on phones" first. The pull was refused until the project's network switch was
+  turned on (listing is not gated; see the spec-conflict entry).
+- Keychain: a token saved by the CLI makes macOS ask before the app (a different ad-hoc-signed
+  binary) can read it, and while that dialog waits the Integrations page shows Connect disabled
+  with no hint. Tokens saved from the app itself raise no dialog.
+- Still unchecked on Notion: databases with several data sources (API 2022-06-28).
 
 ## 2026-11-12 — Case study
 

@@ -12,6 +12,7 @@ import { useFlickerDelays } from "./dot-flicker";
 import IntegrationIcon, { type IntegrationMarkName } from "./IntegrationIcon";
 import { baseName } from "./paths";
 import "./SourcePicker.css";
+import { FlickerPresence, ModalBackdrop } from "./Modal";
 
 export type SourceId = "file" | "folder" | "sheets" | "notion" | "zotero" | "airtable" | "typeform" | "tally" | "canny" | "productboard";
 interface Source {
@@ -106,7 +107,7 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
     </ul>
     <p className="dim small">More sources: <button type="button" className="text-btn" onClick={onIntegrations}>connect them on Integrations</button></p>
     {error && <p className="err small" role="alert">{error}</p>}
-    {editing && <SourceDialog source={editing} current={chosen(editing.id)?.path} currentAll={chosenAll(editing.id)}
+    <FlickerPresence show={!!editing}>{editing && <SourceDialog source={editing} current={chosen(editing.id)?.path} currentAll={chosenAll(editing.id)}
       onUseFile={async () => {
         // A private sheet: import a downloaded copy instead, as a file (nothing is shared).
         const path = await pickSource(false).catch((e) => { setError(String(e)); return null; });
@@ -121,7 +122,7 @@ export default function SourcePicker({ picked, onChange, onIntegrations, disable
         setEditing(undefined);
       }}
       onRemove={() => { set(editing.id, null); setEditing(undefined); }}
-      onClose={() => setEditing(undefined)} />}
+      onClose={() => setEditing(undefined)} />}</FlickerPresence>
   </div>;
 }
 
@@ -146,7 +147,7 @@ function SourceDialog({ source, current, currentAll, onSave, onSaveAll, onReplac
   }, [onClose]);
   const local = isLocal(source.id);
   const titleId = `source-${source.id}-title`;
-  return createPortal(<div className="integration-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+  return createPortal(<ModalBackdrop onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div ref={box} className="integration-modal stack gap-s source-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="integration-modal-head">
         <span className="integration-mark">{source.mark ? <IntegrationIcon name={source.mark} size={22} /> : source.id === "file"
@@ -184,7 +185,7 @@ function SourceDialog({ source, current, currentAll, onSave, onSaveAll, onReplac
             : <button type="button" className="btn primary" disabled={!value.trim()} onClick={() => onSave(value.trim())}>{current ? "Save" : "Add"}</button>}
       </div>
     </div>
-  </div>, document.body);
+  </ModalBackdrop>, document.body);
 }
 
 /** Lists fetched this session, by source: reopening a dialog shows them without asking again. */

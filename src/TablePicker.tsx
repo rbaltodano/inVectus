@@ -11,6 +11,7 @@ import Select from "./Select";
 import { proseColumns } from "./table-columns";
 export { proseColumns };
 import "./TablePicker.css";
+import { ModalBackdrop } from "./Modal";
 
 export type ColumnRole = "searched" | "title" | "id" | "date" | "url" | "roles" | "kept";
 export interface Assignment { searched: string[]; title: string; id: string; date: string; url: string; roles: string }
@@ -89,7 +90,7 @@ export default function TablePicker({ fileName, columns, sample, rowsRead, assig
   const neutralOnly = !roles.column || (!roles.rules.length && roles.defaultRole === "neutral") || (counts && counts.demand + counts.coverage === 0);
   const notes = checks(columns, sample, assignment, roles, counts, stats, existing);
 
-  return createPortal(<div className="integration-modal-backdrop tp-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+  return createPortal(<ModalBackdrop className="tp-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
     <div className="tp-modal" role="dialog" aria-modal="true" aria-labelledby="tp-title">
       <div className="tp-head">
         <div className="eyebrow">Import · {fileName} · {rowsRead >= 1000 ? "1,000+" : fmt(rowsRead)} rows · {columns.length} columns</div>
@@ -150,7 +151,7 @@ export default function TablePicker({ fileName, columns, sample, rowsRead, assig
         </span>
       </div>
     </div>
-  </div>, document.body);
+  </ModalBackdrop>, document.body);
 }
 
 const proseLike = (name: string) => /abstract|text|body|content|description|summary|title|notes?|comment/i.test(name);

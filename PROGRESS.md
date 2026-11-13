@@ -3196,3 +3196,13 @@ Checked on arm64 macOS only.
 - Saved still uses the older Urban Futures demo capture: the ophthalmology project has no saved
   gaps or decisions, and none were created for the screenshot. The Agents page was not captured
   because it shows the signed-in account email.
+
+## 2026-11-13 — Popup windows flicker out on close
+
+- New `src/Modal.tsx`: `FlickerPresence` keeps a closing window mounted for one flicker (150 ms)
+  and `ModalBackdrop` plays `item-flicker-out` on the window and its backdrop together, however it
+  closes (Cancel, Escape, outside click, or the work finishing). Skipped under reduced motion.
+- Applied to every popup window: agent "More" dialog, Add an agent, integration Connect, agent
+  Connect plan, source dialog and the import table. Menus and popovers are unchanged.
+- Checks: `npm run build`, 57 UI tests pass; close captured from the mock harness (headless
+  Chrome screencast, macOS). Not checked in the packaged app.

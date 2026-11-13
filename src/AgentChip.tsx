@@ -10,6 +10,7 @@ import { useFlickerDelays } from "./dot-flicker";
 import { FlickerSwap, FlickerText } from "./FlickerSwap";
 import ConnectAgents from "./screens/ConnectAgents";
 import "./AgentChip.css";
+import { FlickerPresence, ModalBackdrop } from "./Modal";
 
 /** The project header's pill: saves the choice to the open project. */
 export default function AgentChip({ project, setProject }: { project: ProjectInfo; setProject: (p: ProjectInfo) => void }) {
@@ -70,7 +71,7 @@ export function AgentPicker({ value, onChoose }: { value?: string; onChoose: (id
       </button>
       {error && <p className="err small agent-menu-error" role="alert">{error}</p>}
     </div>, document.body)}
-    {adding && createPortal(<div className="integration-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) { setAdding(false); refresh(); } }}
+    <FlickerPresence show={adding}>{adding && createPortal(<ModalBackdrop onClick={(e) => { if (e.target === e.currentTarget) { setAdding(false); refresh(); } }}
       onKeyDown={(e) => { if (e.key === "Escape") { setAdding(false); refresh(); } }}>
       <div className="integration-modal agent-add-modal" role="dialog" aria-modal="true" aria-labelledby="agent-add-title">
         <div className="agent-add-head">
@@ -80,6 +81,6 @@ export function AgentPicker({ value, onChoose }: { value?: string; onChoose: (id
         </div>
         <ConnectAgents />
       </div>
-    </div>, document.body)}
+    </ModalBackdrop>, document.body)}</FlickerPresence>
   </>;
 }

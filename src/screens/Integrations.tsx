@@ -12,6 +12,7 @@ import { BookMarked, ClipboardList, Database, FileSpreadsheet, Library, Lightbul
 import { api, inTauri, fmt } from "../api";
 import { ErrorLine, useAction } from "../App";
 import Link from "../Link";
+import { FlickerPresence, ModalBackdrop } from "../Modal";
 
 type Category = "tables" | "docs" | "research" | "forms" | "product" | "databases";
 type StatusFilter = "all" | "connected" | "token" | "ready";
@@ -294,7 +295,7 @@ function TokenCard({ it, from, onChange, label, style }: { it: TokenIntegration;
       : it.about}</p>
     {connected && from === "keychain" && <button type="button" className="text-btn integration-disconnect" disabled={action.busy} onClick={disconnect}>Disconnect</button>}
     {!open && <ErrorLine error={action.error} />}
-    {open && <div className="integration-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+    <FlickerPresence show={open}>{open && <ModalBackdrop onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
       onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
       <div className="integration-modal stack gap-s" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="integration-modal-head"><span className="integration-mark">{hasIntegrationMark(it.id) ? <IntegrationIcon name={it.id} /> : <Icon size={22} strokeWidth={1.5} aria-hidden="true" />}</span><h3 id={titleId}>Connect {it.name}</h3></div>
@@ -310,6 +311,6 @@ function TokenCard({ it, from, onChange, label, style }: { it: TokenIntegration;
           <button type="button" className="btn primary small" disabled={action.busy || !token.trim()} onClick={save}>Save token</button>
         </div>
       </div>
-    </div>}
+    </ModalBackdrop>}</FlickerPresence>
   </li>;
 }

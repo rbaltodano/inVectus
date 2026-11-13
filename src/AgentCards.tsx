@@ -7,6 +7,7 @@ import { Check, MoreHorizontal } from "lucide-react";
 import { AgentMark, type AgentOption } from "./agentOptions";
 import { local } from "./api";
 import { useFlickerDelays } from "./dot-flicker";
+import { FlickerPresence, ModalBackdrop } from "./Modal";
 
 /** Agents chosen in New project, most recent first (this computer only). */
 export const RECENT_AGENTS = "invectus.recent-agents";
@@ -66,7 +67,7 @@ export default function AgentCards({ agents, value, onChoose, access, onAccess, 
       <span><span className="agent-access-title">Let agents read this project</span>
         <span className="dim small">Agents can search its items, gaps and files through inVectus. What they read can reach their provider. Your next project starts with this choice.</span></span>
     </label>
-    {more && <AgentDialog agents={agents} value={value} onChoose={(id) => { onChoose(id); setMore(false); }} onClose={() => setMore(false)} />}
+    <FlickerPresence show={more}>{more && <AgentDialog agents={agents} value={value} onChoose={(id) => { onChoose(id); setMore(false); }} onClose={() => setMore(false)} />}</FlickerPresence>
   </div>;
 }
 
@@ -81,7 +82,7 @@ function AgentDialog({ agents, value, onChoose, onClose }: {
     return () => document.removeEventListener("keydown", key);
   }, [onClose]);
   const flicker = useFlickerDelays();
-  return createPortal(<div className="integration-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+  return createPortal(<ModalBackdrop onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <div ref={box} className="integration-modal stack gap-s agent-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-dialog-title">
       <div className="integration-modal-head"><h3 id="agent-dialog-title">Choose an agent</h3></div>
       <p className="dim small">Connected agents and the on-device model. Connect more on the Agents page.</p>
@@ -96,5 +97,5 @@ function AgentDialog({ agents, value, onChoose, onClose }: {
       </ul>
       <div className="integration-modal-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
     </div>
-  </div>, document.body);
+  </ModalBackdrop>, document.body);
 }

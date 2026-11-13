@@ -10,6 +10,7 @@ import { ago, describe, useAgentActivity } from "../agents";
 import AgentIcon from "../AgentIcon";
 import { useFlickerDelays } from "../dot-flicker";
 import { clientName, registerClients } from "../agentIdentity";
+import { FlickerPresence, ModalBackdrop } from "../Modal";
 /** The id the backend takes for a client that is not listed. */
 const CUSTOM_ID = "custom";
 
@@ -106,7 +107,7 @@ export default function ConnectAgents() {
         </div>
       </div>
     </details>
-    {plan && <div className="integration-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setPlan(undefined); }}
+    <FlickerPresence show={!!plan}>{plan && <ModalBackdrop onClick={(e) => { if (e.target === e.currentTarget) setPlan(undefined); }}
       onKeyDown={(e) => { if (e.key === "Escape") setPlan(undefined); }}>
       <div className="integration-modal connect-plan stack gap-s" role="dialog" aria-modal="true" aria-label={`Connect ${plan.display_name}`}>
         <div className="integration-modal-head"><span className="integration-mark"><AgentIcon client={plan.client} size={22} /></span><h3>Connect {plan.display_name}</h3></div>
@@ -121,7 +122,7 @@ export default function ConnectAgents() {
           {canApply && <button type="button" className="btn primary small" autoFocus disabled={action.busy} onClick={apply}>Make this change</button>}
         </div>
       </div>
-    </div>}
+    </ModalBackdrop>}</FlickerPresence>
     {done && <div className="note small">{done}</div>}
     <ErrorLine error={action.error} />
     <details className="settings-agent-about">

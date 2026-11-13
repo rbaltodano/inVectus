@@ -1067,6 +1067,9 @@ button, input, select, textarea, .side-search, .btn, .text-btn, .net { border-ra
 .integrations-agents .connect-more > summary { padding: 4px 0 0; }
 .integrations-agents .connect-more[open] > summary { margin-bottom: 16px; }
 .integration-modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / .45); }
+/* Closing: the window and its backdrop flicker out together (Modal.tsx). */
+.integration-modal-backdrop.is-leaving { animation: item-flicker-out 150ms step-end forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .integration-modal-backdrop.is-leaving { animation: none; } }
 .integration-modal { width: min(560px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; padding: 22px; border: 1px solid var(--line-2); border-style: solid; border-radius: 12px; background: var(--bg); box-shadow: 0 20px 60px var(--shadow); }
 .integration-modal-head { display: flex; align-items: center; gap: 10px; }
 .integration-modal-head h3 { font-size: 16px; font-weight: 500; }

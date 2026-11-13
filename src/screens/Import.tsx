@@ -9,6 +9,7 @@ import { DownloadConsent } from "../models";
 import Select from "../Select";
 import TablePicker, { type Assignment } from "../TablePicker";
 import IndexingIndicator from "../IndexingIndicator";
+import { FlickerPresence } from "../Modal";
 
 const ROLE_NOTE: Record<Role, string> = { neutral: "Neither asks nor answers; context only", demand: "Asks for or needs something", coverage: "Answers a need" };
 
@@ -238,13 +239,13 @@ export default function Import({ ctx, onDone, onCancel, initialPath }: { ctx: Ct
       </div>
     </>}
 
-    {step === 1 && source && !folder && tableOpen && <TablePicker fileName={sourceName} columns={source.columns} sample={source.sample} rowsRead={source.rows_read}
+    <FlickerPresence show={step === 1 && !!source && !folder && tableOpen}>{step === 1 && source && !folder && tableOpen && <TablePicker fileName={sourceName} columns={source.columns} sample={source.sample} rowsRead={source.rows_read}
       assignment={assignment} onChange={setAssignment} busy={busy}
       roles={{ column: roleColumn, rules: rules.filter((r) => r.value.trim()), defaultRole }} counts={counts} stats={previewStats}
       existing={exists ? collection : undefined}
       onImport={() => { setTableOpen(false); void doImport(); }} onList={() => setTableOpen(false)}
       onRoles={() => { setTableOpen(false); setTimeout(() => document.getElementById("roles")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
-      onCancel={() => { setTableOpen(false); setStep(0); }} />}
+      onCancel={() => { setTableOpen(false); setStep(0); }} />}</FlickerPresence>
     {step === 1 && source && <>
       <div className="panel row wrap">
         <span className="strong">{sourceName}</span>

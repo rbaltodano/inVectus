@@ -3254,7 +3254,7 @@ Checked on arm64 macOS only.
 - Settings → Appearance → **Window flicker** (on by default, per computer): popup windows flicker
   out on close, independent of Flicker animations (`data-window-flicker="off"` on the root; the
   window exit no longer follows the first switch). Reduced motion still turns both off.
-- Agent-folder picker: denser, smaller grid dots (12 px apart, 0.7 px), and the grid moves 1:1
+- Agent-folder picker: denser, smaller, fainter grid dots (12 px apart, 0.7 px, 7% ink), and the grid moves 1:1
   with the pan.
 - Checks: `npm run build`; 58 UI tests pass (the setting test now covers both switches). Mock
   harness: grid offset equals the world offset after a drag. Not checked in the packaged app.

@@ -8,7 +8,7 @@
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .fp-modal { --fp-lit-bg: #202020; --fp-lit-ink: #e8e3db; } }
 .fp-canvas { position: relative; height: min(440px, 55vh); overflow: hidden; cursor: grab; touch-action: none; user-select: none;
   border: 1px solid var(--line); border-radius: var(--r); background-color: var(--bg);
-  background-image: radial-gradient(circle, rgba(var(--ink-rgb), .14) .7px, transparent 1px); background-size: 12px 12px;
+  background-image: radial-gradient(circle, rgba(var(--ink-rgb), .07) .7px, transparent 1px); background-size: 12px 12px;
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 70px), transparent), linear-gradient(to bottom, #000 calc(100% - 50px), transparent);
   -webkit-mask-composite: source-in; mask-composite: intersect; }
 .fp-canvas:active { cursor: grabbing; }

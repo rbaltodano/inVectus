@@ -3062,6 +3062,17 @@ real accounts were used.
   which holds text now opens with its prose columns searched (it opened with Import disabled).
 - Not checked against the real services: Notion, Zotero, Airtable, Typeform, Tally, Canny,
   Productboard (no tokens on this Mac); Google Sheets private sheets (real redirect to sign-in).
+- Notion, real (later the same day): an internal connection token in the keychain, and a test
+  database written by the connection (8 rows; title property "Idea", rich text, select,
+  multi-select, number, date, url, checkbox; two pages with nested blocks). `invectus pull`
+  read it in 5.4 s on API version 2022-06-28; all columns and page text came through. Imported,
+  embedded (bge-small) and searched. Page URLs now come back on `app.notion.com`.
+- Fixed from that: the app's Notion defaults now take the title property (the column after the
+  fixed four, whatever it is called) as the title and search the title, the prose properties and
+  `body`. Before, they searched only `body` (empty on most rows) and left the title unset.
+- Still unchecked on Notion: the listing (`source_choices`) against the real API (a scratch
+  runner stalled on the macOS keychain prompt for a new binary), and databases with several
+  data sources.
 
 ## 2026-11-12 — Case study
 

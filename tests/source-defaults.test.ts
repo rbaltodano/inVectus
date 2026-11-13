@@ -51,3 +51,15 @@ test("with no column named like text, the prose columns are searched", () => {
   assert.equal(d.id, "record_id");
   assert.deepEqual(columnDefaults("file", ["a", "b"], [["1", "2"]]).searched, [], "nothing prose-like: the person chooses");
 });
+
+test("Notion: the title property is whatever comes after the fixed columns; prose properties and body are searched", () => {
+  const cols = ["page_id", "url", "created_time", "last_edited_time", "Idea", "Area", "Done", "Link", "Submitted", "Summary", "Tags", "Votes", "body"];
+  const sample = [
+    ["p1", "https://app.notion.com/p/1", "2026-11-12", "2026-11-12", "Offline search on phones", "Search", "true", "https://example.com/1", "2026-10-02", "Let people search without signal.", "mobile", "14", "Notes\nRaised in three calls."],
+    ["p2", "https://app.notion.com/p/2", "2026-11-12", "2026-11-12", "Student discount", "Pricing", "false", "https://example.com/2", "2026-10-21", "Half price with a school email address.", "", "3", ""],
+  ];
+  const d = columnDefaults("notion", cols, sample);
+  assert.equal(d.title, "Idea");
+  assert.deepEqual(d.searched, ["Idea", "Summary", "body"]);
+  assert.deepEqual([d.id, d.url], ["page_id", "url"]);
+});

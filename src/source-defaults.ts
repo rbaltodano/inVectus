@@ -33,8 +33,17 @@ export function columnDefaults(kind: string, columns: string[], sample: (string 
       const open = proseColumns(answers, sample.map((row) => answers.map((c) => row[columns.indexOf(c)] ?? null)));
       return { ...base, searched: open.length ? open : base.searched, title: "", id: has(columns, id), date: has(columns, "submitted_at"), url: "" };
     }
-    case "notion":
-      return { ...base, id: has(columns, "page_id") || base.id, date: base.date || has(columns, "created_time"), url: has(columns, "url") || base.url };
+    case "notion": {
+      // The pull writes page_id, url, created_time, last_edited_time, then the title property
+      // (whatever the database calls it), the other properties, and body last. Search the
+      // title, the properties that hold prose, and the page text.
+      const fixed = ["page_id", "url", "created_time", "last_edited_time"];
+      const title = columns[0] === "page_id" && columns.length > 5 ? columns[4] : base.title;
+      const props = columns.filter((c) => !fixed.includes(c) && c !== title && c !== "body");
+      const prose = proseColumns(props, sample.map((row) => props.map((c) => row[columns.indexOf(c)] ?? null)));
+      const searched = [title, ...prose, has(columns, "body")].filter(Boolean);
+      return { ...base, searched: searched.length ? searched : base.searched, title, id: has(columns, "page_id") || base.id, date: base.date || has(columns, "created_time"), url: has(columns, "url") || base.url };
+    }
     case "airtable":
       return { ...base, id: has(columns, "record_id") || base.id, date: base.date || has(columns, "created_time") };
     default:

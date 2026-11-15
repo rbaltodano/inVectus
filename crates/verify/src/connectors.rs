@@ -308,6 +308,23 @@ fn wait(d: Duration) -> Result<()> {
     }
 }
 
+/// Every attempt shares the check's remaining budget, including response-body reads.
+/// Checking here also prevents a cancelled check from starting another request.
+fn request_timeout() -> Result<Duration> {
+    wait(Duration::ZERO)?;
+    let maximum = Duration::from_secs(if cfg!(test) { 3 } else { 30 });
+    LIMITS.with(|l| match l.borrow().1 {
+        Some(deadline) => {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                bail!("the outside sources took too long; try again later");
+            }
+            Ok(remaining.min(maximum))
+        }
+        None => Ok(maximum),
+    })
+}
+
 #[cfg(test)]
 static ROUTE: Mutex<Option<String>> = Mutex::new(None);
 
@@ -617,6 +634,74 @@ pub fn parse_arxiv(xml: &str) -> Result<(u64, Vec<ExternalHit>)> {
     Ok((total, hits))
 }
 
+/// How one request ended.
+enum Reply {
+    /// No answer: refused, timed out or failed in transit (retried).
+    Failed(anyhow::Error),
+    /// HTTP 200, but the body could not be read (not retried).
+    Unreadable(anyhow::Error),
+    Body(String),
+    /// Any other status; the body is not read.
+    Status(u16),
+}
+
+/// Run one request on a helper thread and wait for it here, so cancellation or the end of the
+/// budget stops the check at once rather than after the request (up to 30 s). An abandoned
+/// request still ends by itself within its own timeout; its reply is logged and dropped, never
+/// returned or cached.
+fn send(
+    req: ureq::RequestBuilder<ureq::typestate::WithoutBody>,
+    source: Source,
+    url: &str,
+    purpose: &str,
+) -> Result<Reply> {
+    use std::sync::mpsc::{RecvTimeoutError, sync_channel};
+    let (tx, rx) = sync_channel(1);
+    let (url, purpose) = (url.to_string(), purpose.to_string());
+    std::thread::Builder::new()
+        .name(format!("invectus-check-{}", source.name()))
+        .spawn(move || {
+            let reply = match req.call() {
+                Err(e) => {
+                    invectus_core::net::record(&url, &purpose, None);
+                    Reply::Failed(anyhow::Error::new(e))
+                }
+                Ok(resp) => {
+                    let status = resp.status().as_u16();
+                    invectus_core::net::record(&url, &purpose, Some(status));
+                    if status == 200 {
+                        match resp
+                            .into_body()
+                            .with_config()
+                            .limit(16 * 1024 * 1024)
+                            .read_to_string()
+                        {
+                            Ok(body) => Reply::Body(body),
+                            Err(e) => Reply::Unreadable(anyhow::Error::new(e)),
+                        }
+                    } else {
+                        Reply::Status(status)
+                    }
+                }
+            };
+            let _ = tx.send(reply);
+        })
+        .context("starting a request")?;
+    loop {
+        // Cancellation or expiry while waiting (including for the body) ends the check, and a
+        // reply that arrives at the same moment is not used.
+        wait(Duration::ZERO)?;
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(reply) => {
+                wait(Duration::ZERO)?;
+                return Ok(reply);
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => bail!("the request stopped unexpectedly"),
+        }
+    }
+}
+
 fn get_text(source: Source, url: &str, params: &[(&str, &str)]) -> Result<String> {
     get_text_with(source, url, params, &[])
 }
@@ -653,26 +738,21 @@ fn get_text_with(
         for (k, v) in headers {
             req = req.header(*k, *v);
         }
-        let resp = match req.call() {
-            Ok(r) => r,
-            Err(e) => {
-                invectus_core::net::record(url, &purpose, None);
-                last_err = Some(anyhow::Error::new(e).context(format!("GET {host}")));
+        let timeout = request_timeout()?;
+        let req = req.config().timeout_global(Some(timeout)).build();
+        let status = match send(req, source, url, &purpose)? {
+            Reply::Failed(e) => {
+                last_err = Some(e.context(format!("GET {host}")));
                 wait(Duration::from_secs(1 << attempt))?;
                 continue;
             }
-        };
-        let status = resp.status().as_u16();
-        invectus_core::net::record(url, &purpose, Some(status));
-        match status {
-            200 => {
-                return resp
-                    .into_body()
-                    .with_config()
-                    .limit(16 * 1024 * 1024)
-                    .read_to_string()
-                    .with_context(|| format!("reading {}'s answer", source.name()));
+            Reply::Unreadable(e) => {
+                return Err(e.context(format!("reading {}'s answer", source.name())));
             }
+            Reply::Body(body) => return Ok(body),
+            Reply::Status(status) => status,
+        };
+        match status {
             300..=399 => bail!(
                 "{} answered with a redirect (HTTP {status}); not followed",
                 source.name()
@@ -922,20 +1002,75 @@ mod tests {
     #[test]
     fn the_budget_bounds_the_whole_check() {
         let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-        let _count = stand_in(Duration::from_secs(30), |_| (200, "{}"));
+        let count = stand_in(Duration::from_secs(30), |_| (200, "{}"));
         let root = fresh_root();
         let t = Instant::now();
-        let err = with_limits(None, Instant::now() + Duration::from_secs(1), || {
+        let err = with_limits(None, Instant::now() + Duration::from_millis(250), || {
             search_in(root.path(), Source::OpenAlex, &query(), 5)
                 .unwrap_err()
                 .to_string()
         });
         assert!(err.contains("too long"), "{err}");
         assert!(
-            t.elapsed() < Duration::from_secs(5),
+            t.elapsed() < Duration::from_millis(1500),
             "took {:?}",
             t.elapsed()
         );
+        // The abandoned request may reach the stand-in after the check gave up (it runs on a
+        // helper thread), but no retry follows it.
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(count.load(std::sync::atomic::Ordering::SeqCst) <= 1);
+        *ROUTE.lock().unwrap() = None;
+    }
+
+    #[test]
+    fn expired_or_cancelled_checks_send_no_requests() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let count = stand_in(Duration::ZERO, |_| (200, "{}"));
+        let root = fresh_root();
+        let error = with_limits(None, Instant::now(), || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5).unwrap_err()
+        });
+        assert!(error.to_string().contains("too long"), "{error:#}");
+        let cancel = invectus_core::CancelToken::default();
+        cancel.cancel();
+        let error = with_limits(Some(&cancel), Instant::now() + BUDGET, || {
+            search_in(root.path(), Source::OpenAlex, &query(), 5).unwrap_err()
+        });
+        assert!(error.to_string().contains("cancelled"), "{error:#}");
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 0);
+        *ROUTE.lock().unwrap() = None;
+    }
+
+    #[test]
+    fn cancellation_during_a_request_discards_the_reply() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        // The stand-in answers only after 2.5 s (inside the 3 s test timeout): cancelling
+        // must not wait for it.
+        let count = stand_in(Duration::from_millis(2500), |_| (200, "{}"));
+        let cancel = invectus_core::CancelToken::default();
+        let c2 = cancel.clone();
+        let seen = count.clone();
+        let cancelling = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while seen.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                assert!(Instant::now() < deadline, "no request reached the server");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            c2.cancel();
+        });
+        let t = Instant::now();
+        let error = with_limits(Some(&cancel), Instant::now() + BUDGET, || {
+            get_text(Source::OpenAlex, "https://api.openalex.org/works", &[]).unwrap_err()
+        });
+        cancelling.join().unwrap();
+        assert!(error.to_string().contains("cancelled"), "{error:#}");
+        assert!(
+            t.elapsed() < Duration::from_millis(1500),
+            "took {:?}",
+            t.elapsed()
+        );
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
         *ROUTE.lock().unwrap() = None;
     }
 

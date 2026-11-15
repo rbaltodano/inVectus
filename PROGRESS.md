@@ -3134,8 +3134,8 @@ Checked on arm64 macOS only.
     retried.
 - **Model downloads:** https only, bounded waits, logged.
 - **Network activity:** every call is logged with host, purpose and status only
-  (`net::record`/`outbound_log`), shown in Settings → Network. It is per process: CLI and MCP-server
-  calls do not appear in the app yet.
+  (`net::record`/`outbound_log`), shown in Settings → Network. Since 2026-11-15 the CLI and MCP-server
+  calls appear there too (shared log, below).
 - **Agent file access** (`orchestration/grants.rs`).
   - Agent tools read only the projects folder, the open project, and folders granted per machine
     (`invectus agents allow|revoke|list`). Every tool that names a project checks its location.
@@ -3273,3 +3273,46 @@ Checked on arm64 macOS only.
 - Picker header: the title is now "Agent Access" (20 px), with the path box and "Set as default"
   directly under it in place of the description; the drag and double-click hint moved into the
   canvas's bottom-left corner.
+
+## 2026-11-14 — Verification deadline follow-up
+
+- Each verification request now uses the smaller of its normal 30-second limit and the
+  check's remaining budget, including response-body reads. Previously a request started just
+  before the 90-second deadline could continue past it by nearly 30 seconds.
+- Check cancellation/expiry before sending and after receiving headers and the body, so a
+  cancelled request's late answer is not accepted or written into the verification cache.
+- Regression coverage added for an in-flight request exceeding a short total budget,
+  expired/pre-cancelled checks sending zero requests, and cancellation during a delayed reply.
+- Superseded the same day by the follow-up below (immediate cancellation); validated there.
+
+## 2026-11-15 — Network log across processes; cancellation stops in-flight requests
+
+- **Shared network log.** The app, the CLI and `invectus mcp` call `net::share_log("app" |
+  "cli" | "agent")` at start; each call is then also appended as one JSON line to
+  `<settings folder>/network-log.jsonl`. Same fields as before (time, host, purpose, status)
+  plus `process` and `via`; never paths, queries, headers or bodies. The file and its folder are
+  owner-only (0600/0700 on Unix; Windows inherits the profile folder's ACL), a link in its place
+  is refused, and it is cut back to the last 500 calls past 256 KB (a line appended by another
+  process during that swap can be lost). Settings → Network activity now lists every process's
+  calls since the app opened. Library code and tests never call `share_log`, so they never
+  write the file.
+- **GitHub starring and client sign-in probes are logged** (`net::record_command`, `via:
+  "command"`). Starring records `api.github.com` with 204 on success or the status `gh` prints
+  (`(HTTP 401)`); sign-in probes record the program name and no status, since inVectus cannot
+  see what the CLI contacts. **UI follow-up:** Network activity shows a missing status as "no
+  answer"; for `via: "command"` rows it should say the program ran instead. Not changed now
+  because another agent has `src/OutboundLog.tsx` open.
+- **Cancellation interrupts an in-flight check.** Each verification request runs on a helper
+  thread; the check waits for it in 50 ms steps and stops at once on cancel or budget expiry.
+  The abandoned request ends by itself within its own timeout (at most 30 s, or the remaining
+  budget); its reply is logged and dropped, never returned or cached.
+- Tests: shared-file merge across processes, start-time filter, older lines without the new
+  fields, owner-only permissions (re-tightened after loosening), size bound, link refused; `gh`
+  status parsing; cancellation during a 2.5 s reply returns in under 1.5 s. The budget test now
+  allows the abandoned request to land after the check gives up (it failed once under
+  full-workspace load) and still asserts no retry.
+- Checks (arm64 macOS): `cargo test --workspace --release --no-fail-fast` 209 passed, 0 failed;
+  `cargo clippy --workspace --all-targets --release -- -D warnings` clean; `cargo fmt --all
+  --check` clean. Not checked in the packaged app; Windows and Linux not verified.
+- Remaining: forwarded verification still holds the transition lock (project switching waits);
+  explicit Windows ACLs; snapshot removal in the app.

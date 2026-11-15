@@ -1003,6 +1003,13 @@ pub fn account(client: Client, env: &Env) -> Option<Account> {
     if invectus_core::net::offline() {
         return Some(Account::unknown("not checked while offline"));
     }
+    // The CLI may contact its own service; inVectus cannot see that, so the run is logged as a
+    // command (program name, no status) rather than as a request.
+    invectus_core::net::record_command(
+        name,
+        &format!("Sign-in check: {name} {}", args.join(" ")),
+        None,
+    );
     Some(match run_with_timeout(program, args, ACCOUNT_TIMEOUT) {
         Ok(out) => probe.read(&out),
         Err(e) => Account::unknown(format!("`{name} {}` failed: {e:#}", args.join(" "))),

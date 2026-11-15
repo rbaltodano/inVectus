@@ -841,6 +841,7 @@ pub fn run() {
     let (session, board) = (state.session.clone(), state.board.clone());
     tauri::Builder::default()
         .setup(move |app| {
+            invectus_core::net::share_log("app");
             start_agent_handoff(app.handle(), session.clone(), board.clone());
             // A release executable launched outside its .app bundle has no Dock icon by
             // default. Set the same icon explicitly, keeping its existing WebKit profile.

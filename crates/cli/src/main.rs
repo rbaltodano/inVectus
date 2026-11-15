@@ -1028,6 +1028,12 @@ fn run() -> Result<()> {
         // SAFETY: set before any other thread is started.
         unsafe { std::env::set_var("INVECTUS_MODELS_DIR", d) };
     }
+    // The app's Network activity lists this process's calls too (SPEC §7.7).
+    invectus_core::net::share_log(if matches!(cli.command, Command::Mcp) {
+        "agent"
+    } else {
+        "cli"
+    });
     match cli.command {
         Command::Mcp => mcp::serve()?,
         Command::Connect { command } => cmd_connect(command)?,

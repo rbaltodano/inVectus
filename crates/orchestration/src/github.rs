@@ -40,10 +40,44 @@ pub fn star_with(gh: &Path, repository: &str) -> Result<StarOutcome> {
         &[("GH_PROMPT_DISABLED", "1")],
         Duration::from_secs(20),
     );
+    // `gh api` exits 0 only on a 2xx (GitHub answers 204 to a star); on failure it prints
+    // "(HTTP 401)" and the like. Its host can differ (`GH_HOST`); the default is recorded.
+    let status = match &out {
+        Ok(o) if o.status.success() => Some(204),
+        Ok(o) => http_status(&String::from_utf8_lossy(&o.stderr)),
+        Err(_) => None,
+    };
+    invectus_core::net::record_command("api.github.com", "Star on GitHub (gh)", status);
     Ok(match out {
         Ok(o) if o.status.success() => StarOutcome::Starred,
         _ => StarOutcome::Unavailable,
     })
+}
+
+/// The status in `gh`'s error text (`gh: Bad credentials (HTTP 401)`), if any.
+fn http_status(stderr: &str) -> Option<u16> {
+    let at = stderr.rfind("(HTTP ")? + 6;
+    let digits: String = stderr[at..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok().filter(|s| (100..600).contains(s))
+}
+
+#[cfg(test)]
+mod status_tests {
+    #[test]
+    fn reads_the_status_from_gh_errors() {
+        assert_eq!(
+            super::http_status("gh: Bad credentials (HTTP 401)\n"),
+            Some(401)
+        );
+        assert_eq!(
+            super::http_status("error connecting to api.github.com"),
+            None
+        );
+        assert_eq!(super::http_status("(HTTP 9999)"), None);
+    }
 }
 
 #[cfg(all(test, unix))]

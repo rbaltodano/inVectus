@@ -318,9 +318,10 @@ impl Agent {
                 let a: GapArgs = parse(args)?;
                 self.ensure_open(a.project.as_deref())?;
                 // Never overrides the project's External checks switch; the session is free
-                // while the sources answer.
+                // while the sources answer. Through the app, the check is tied to the pinned
+                // project (refused if the app switched before it started) and saves there.
                 let form = orch::TableForm {
-                    project: None,
+                    project: self.pinned.as_ref().map(|p| p.display().to_string()),
                     collection: a.collection.clone(),
                     space: a.space.clone(),
                 };

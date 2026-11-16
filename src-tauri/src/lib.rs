@@ -699,6 +699,32 @@ async fn clear_check_cache(state: State<'_, AppState>) -> CmdResult<invectus_ver
         .await
 }
 
+/// Copies pulled from integrations into the open project, with the collections using each.
+#[tauri::command]
+async fn pulled_copies(
+    state: State<'_, AppState>,
+) -> CmdResult<Vec<invectus_ingest::snapshots::SnapshotInfo>> {
+    let session = state.session.clone();
+    off_thread(move || with_session(&session, |s| invectus_ingest::snapshots::list(&s.project)))
+        .await
+}
+
+/// Remove a pulled copy by the name `pulled_copies` gave; refused while a collection uses it.
+#[tauri::command]
+async fn forget_pulled_copy(
+    state: State<'_, AppState>,
+    name: String,
+) -> CmdResult<Vec<invectus_ingest::snapshots::SnapshotInfo>> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            invectus_ingest::snapshots::forget(&s.project, &name)?;
+            invectus_ingest::snapshots::list(&s.project)
+        })
+    })
+    .await
+}
+
 /// The network calls this app made (host, purpose, status, time; never paths or contents).
 #[tauri::command]
 fn outbound_log() -> Vec<invectus_core::net::OutboundCall> {
@@ -894,6 +920,8 @@ pub fn run() {
             projects_dir,
             set_projects_dir,
             check_cache_usage,
+            pulled_copies,
+            forget_pulled_copy,
             clear_check_cache,
             default_gap_weights,
             export_gaps,

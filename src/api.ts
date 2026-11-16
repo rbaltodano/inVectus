@@ -149,7 +149,9 @@ export interface TableRef { project?: string; collection: string; space: string 
 
 /** Something an integration can pull (a Notion database, a Zotero collection, a form…). */
 /** One network call the app made: host and purpose only, never paths, ids or contents. */
-export interface OutboundCall { at_ms: number; host: string; purpose: string; status: number | null }
+/** `via: "command"`: another program (gh, claude, codex, grok) was run and may have used the
+ *  network; its status is unknown unless it reported one. `process`: app, cli or agent. */
+export interface OutboundCall { at_ms: number; host: string; purpose: string; status: number | null; process?: string; via?: "http" | "command" }
 
 /** A file or folder in the agent-folder picker (names and paths only). */
 export interface FolderNode { name: string; path: string; dir: boolean; count: number; children: FolderNode[]; more: number }
@@ -158,6 +160,8 @@ export interface AgentGrant { path: string; dir: boolean; missing: boolean }
 export interface ProjectsDir { path: string; standard: boolean; warning: string | null }
 /** Saved answers from outside sources in the open project. */
 export interface CacheUsage { files: number; bytes: number }
+/** A copy pulled from an integration into the open project (`name` is `<kind>/<file>`). */
+export interface PulledCopy { name: string; origin: string | null; rows: number | null; bytes: number; pulled_at: number | null; used_by: string[] }
 
 export interface SourceChoice {
   /** What a pull takes (`notion:<id>`, `zotero:collection:<KEY>`, …). */
@@ -188,6 +192,8 @@ export const api = {
   setProjectsDir: (path: string | null) => invoke<ProjectsDir>("set_projects_dir", { path }),
   checkCacheUsage: () => invoke<CacheUsage>("check_cache_usage"),
   clearCheckCache: () => invoke<CacheUsage>("clear_check_cache"),
+  pulledCopies: () => invoke<PulledCopy[]>("pulled_copies"),
+  forgetPulledCopy: (name: string) => invoke<PulledCopy[]>("forget_pulled_copy", { name }),
   setVerifySources: (sources: string[]) => invoke<ProjectInfo>("set_verify_sources", { sources }),
   setAgentModel: (project: string, model: string | null) => invoke<ProjectInfo>("set_agent_model", { project, model }),
   setProjectAgent: (project: string, agent: string | null) => invoke<ProjectInfo>("set_project_agent", { project, agent }),

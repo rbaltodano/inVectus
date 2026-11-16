@@ -612,12 +612,17 @@ static VERIFY_IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::
 /// network answers (audit 2026-11-12, item 2): read under the lock, ask the sources unlocked
 /// (bounded and cancellable through [`cancel_verification`]), then rank and save under the lock
 /// again. Never overrides the project's External checks switch.
+///
+/// Projects can be switched while the sources answer. The check still finishes into the
+/// project it started in (owner decision 2026-11-16): if another project is open by then, the
+/// original is opened on its own for the save, with project switching held off for that step
+/// so the same database is never open twice in this process.
 pub fn verify_gap_unlocked(
     session: &Shared,
     form: &TableForm,
     gap_id: i32,
 ) -> OpResult<invectus_verify::Verification> {
-    let (prepared, table) = with_session_wait(session, |s| {
+    let (prepared, table, root) = with_session_wait(session, |s| {
         form.ensure_project(&s.project)?;
         let table =
             invectus_index::select_table(&s.project, &form.collection, form.space.as_deref())?;
@@ -625,6 +630,7 @@ pub fn verify_gap_unlocked(
         Ok((
             invectus_verify::prepare(&s.project, &table, gap_id, &opts)?,
             table,
+            s.project.root.clone(),
         ))
     })?;
     let cancel = invectus_core::CancelToken::default();
@@ -652,11 +658,33 @@ pub fn verify_gap_unlocked(
     if cancel.is_cancelled() {
         return Err("the gap check was stopped".into());
     }
-    with_session_wait(session, |s| {
+    with_project_at(session, &root, |s| {
         encoder_for(s, &table)?;
         let encoder = &mut s.encoder.as_mut().expect("loaded above").1;
         invectus_verify::finish(&s.project, &table, encoder, &prepared, fetched)
     })
+}
+
+/// Run `f` on the project at `root`: the open session when it is that project, else that
+/// project opened on its own (another project is open now, or none). Project switching is held
+/// off throughout, so the same database is never open twice in this process. Takes the
+/// transition lock, then the session, the same order as [`open_project`].
+fn with_project_at<T>(
+    session: &Shared,
+    root: &std::path::Path,
+    f: impl FnOnce(&mut Session) -> anyhow::Result<T>,
+) -> OpResult<T> {
+    let _transition = session.transition.lock().map_err(err)?;
+    let mut guard = session.lock().map_err(err)?;
+    match guard.as_mut() {
+        Some(s) if s.project.root == root => f(s).map_err(err),
+        _ => {
+            drop(guard);
+            let project = Project::open(root)
+                .map_err(|e| format!("saving the gap check into {}: {e:#}", root.display()))?;
+            f(&mut Session::open(project).map_err(err)?).map_err(err)
+        }
+    }
 }
 
 /// Stop the gap check in progress; `false` when none is running.
@@ -684,6 +712,52 @@ mod session_tests {
             "gaps-urban-futures-1794332898914.csv"
         );
         assert_eq!(export_file_name("a/b:c", "x", "md"), "gaps-a_b_c-x.md");
+    }
+
+    /// A gap check finishes into the project it started in, whichever project is open by then.
+    #[test]
+    fn a_check_finishes_into_the_project_it_started_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let session = crate::Shared::default();
+        let board = crate::SharedBoard::default();
+        let first = dir.path().join("first").display().to_string();
+        let second = dir.path().join("second").display().to_string();
+        super::open_project(&session, &board, &first, true).unwrap();
+        let root = session
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .project
+            .root
+            .clone();
+        let saved_into = |session: &crate::Shared| {
+            super::with_project_at(session, &root, |s| Ok(s.project.root.clone())).unwrap()
+        };
+        // Still open: the session itself is used.
+        assert_eq!(saved_into(&session), root);
+        // Switched while the sources answered: the original is opened on its own, and the
+        // session keeps the newly opened project.
+        super::open_project(&session, &board, &second, true).unwrap();
+        assert_eq!(saved_into(&session), root);
+        let open = session
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .project
+            .root
+            .clone();
+        assert_ne!(open, root);
+        // Switching back afterwards works (the separate handle was closed).
+        super::open_project(&session, &board, &first, false).unwrap();
+        // While the save runs, switching projects waits rather than opening it twice.
+        let held = session.transition.lock().unwrap();
+        let Err(err) = super::open_project(&session, &board, &second, false) else {
+            panic!("switching opened a project while a save held the switch");
+        };
+        assert!(err.contains("busy"), "{err}");
+        drop(held);
     }
 
     /// Windows refuses a second open of a database file in one process, so reopening the

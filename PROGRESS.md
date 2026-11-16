@@ -3338,8 +3338,8 @@ Checked on arm64 macOS only.
 - Checks (arm64 macOS): `cargo test --workspace --release --no-fail-fast` 209 passed, 0 failed;
   `cargo clippy --workspace --all-targets --release -- -D warnings` clean; `cargo fmt --all
   --check` clean. Not checked in the packaged app; Windows and Linux not verified.
-- Remaining: forwarded verification still holds the transition lock (project switching waits);
-  explicit Windows ACLs; snapshot removal in the app.
+- Remaining (done 2026-11-16, below): forwarded verification held the transition lock; explicit
+  Windows ACLs; snapshot removal in the app.
 - Checkboxes: the picker's square that fills in (and flickers once touched) is now `BoxCheck`,
   shared by the picker's "Set as default" and Settings → Network → Outside sources. Screenshot
   in the mock harness, dark; 58 UI tests pass.
@@ -3348,3 +3348,35 @@ Checked on arm64 macOS only.
   accent fill flickers in (out when turning off) once touched, and the knob jumps in two steps.
   No animation with flicker off or reduced motion. Screenshots in the mock harness, dark and
   light; a real click toggles it; 58 UI tests pass. Not checked in the packaged app.
+
+## 2026-11-16 — Project switching during gap checks; Windows owner-only ACLs; pulled copies in Settings
+
+- **Gap checks no longer hold off project switching** (owner decision 2026-11-16: a check
+  finishes into the project it started in). A forwarded `verify_gap` releases the transition
+  lock after the pinned-project check; the check is tied to that project (`TableForm.project`,
+  refused if the app switched before it started). After the sources answer,
+  `with_project_at` saves into the original project: the open session when it is still open,
+  otherwise that project opened on its own, with switching held off for the save so one
+  database is never open twice in this process. This also fixes the app's own Check button:
+  switching projects mid-check used to save into the newly opened project's session.
+  Test: `a_check_finishes_into_the_project_it_started_in` (still open; switched away; switching
+  back afterwards; switching refused while the save holds the lock). Not covered end to end
+  (needs a project with gaps and outside sources).
+- **Windows owner-only permissions** (`invectus_core::private`, windows-sys 0.61.2, already in
+  the lock file). Where Unix uses 0700/0600, Windows now sets a protected access list allowing
+  the current user only (SYSTEM and Administrators lose their inherited entries, as with 0700).
+  Folders pass it on to their contents; files are restricted right after creation, before any
+  byte is written; `restrict` skips links and junctions and does nothing when the list is
+  already exactly that. Opening an older project tightens its folder and the system propagates
+  the list inside. Test: `windows_tests::files_and_folders_allow_only_the_current_user`.
+  **Unverified until the Windows CI run** (the code was not compiled locally: no Windows
+  target installed).
+- **Pulled copies in the app** (Settings → Network → Pulled copies; Tauri `pulled_copies`,
+  `forget_pulled_copy`): each copy pulled from an integration, with rows, size and age; Remove
+  is offered only when no collection uses it (the existing `snapshots::forget` rule).
+- **Network activity:** command rows (`via: "command"`) show "ran" instead of "no answer";
+  calls from the CLI or an agent are marked "CLI" / "agent"; the description says it includes
+  them.
+- Checks (arm64 macOS): `cargo test --workspace --release --no-fail-fast` 210 passed, 0 failed;
+  clippy `-D warnings` and `cargo fmt --check` clean; `npm run build`; 58 UI tests pass. The new
+  Settings group and log wording were not checked in the packaged app or the mock harness.

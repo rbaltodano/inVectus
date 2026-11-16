@@ -236,7 +236,7 @@ pub fn app_handler(
                 "version": invectus_core::VERSION,
             })),
             Some("tool") => {
-                let _transition = session.transition.lock().map_err(crate::err)?;
+                let transition = session.transition.lock().map_err(crate::err)?;
                 let Some(pinned) = root() else {
                     return Err("no project is open in the inVectus app".into());
                 };
@@ -249,6 +249,10 @@ pub fn app_handler(
                     );
                 }
                 let name = req["name"].as_str().unwrap_or_default().to_string();
+                // A gap check waits on outside sources for up to 90 s. It pins its project
+                // itself and finishes into it (`verify_gap_unlocked`), so project switching is
+                // not held off meanwhile. Every other tool keeps the lock for its whole run.
+                let _transition = (name != "verify_gap").then_some(transition);
                 let mut agent = crate::agent::Agent {
                     session: session.clone(),
                     board: board.clone(),

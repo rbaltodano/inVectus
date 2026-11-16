@@ -3424,3 +3424,20 @@ Checked on arm64 macOS only.
 - Checks (arm64 macOS): `cargo test --workspace --release --no-fail-fast` 213 passed, 0 failed;
   clippy `-D warnings`, fmt, `npm run build`, 58 UI tests. Windows fixes unverified until CI
   reruns. The Recovery code group was not checked in the packaged app.
+
+## 2026-11-16 — Encryption phase 2: DuckDB is already 2.0; encrypted writes are blocked
+
+- **No upgrade needed.** `duckdb =1.20000.0` bundles DuckDB v2.0.0 (`PRAGMA version` starts with
+  `v2.`; the bundled `pragma_version.cpp` says `v2.0.0-dev88614`). The crate version encodes the
+  engine version (1.10506.x = 1.5.6, 1.20000.x = 2.0.x). The plan assumed 1.2 → 1.4. The newest
+  crate, 1.20000.2 (2026-11-13), is a binding patch on the same engine; not taken.
+- **Encrypted writes refused.** `ATTACH … (ENCRYPTION_KEY …, ENCRYPTION_CIPHER 'GCM')` fails
+  with "DuckDB currently has a read-only crypto module loaded": without `httpfs`, the bundled
+  mbedtls module would make GCM nonces from `duckdb::RandomEngine` (not a cryptographic
+  generator), which DuckDB allows only behind `force_mbedtls_unsafe`. Not acceptable. The
+  crate's `httpfs` feature builds only on Linux and macOS and compiles curl into the app.
+- Test `store::tests::the_bundled_duckdb_will_not_write_encrypted_databases_yet` records the
+  refusal (fails if DuckDB changes it). Options and a recommendation (vendor `libduckdb-sys`
+  and give the mbedtls module the OS random generator) are in docs/encryption-plan.md under
+  phase 2. **Owner decision needed before phase 3.** Phases 4 and 5 do not depend on it.
+- Gapmap-full backtest not re-run: the engine did not change.

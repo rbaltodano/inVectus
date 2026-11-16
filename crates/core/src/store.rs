@@ -1414,6 +1414,28 @@ mod tests {
     use super::*;
     use crate::item::item_id;
 
+    /// Encryption at rest, phase 2 finding (docs/encryption-plan.md): the bundled DuckDB 2.0
+    /// refuses to write an encrypted database without `httpfs` (its OpenSSL), because its
+    /// built-in mbedtls module draws nonces from a non-cryptographic generator. If this starts
+    /// failing, DuckDB changed that rule: revisit the plan before relying on it.
+    #[test]
+    fn the_bundled_duckdb_will_not_write_encrypted_databases_yet() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("secret.duckdb");
+        let conn = scratch_connection().unwrap();
+        let key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let err = conn
+            .execute_batch(&format!(
+                "ATTACH '{}' AS db (ENCRYPTION_KEY '{key}', ENCRYPTION_CIPHER 'GCM')",
+                path.display().to_string().replace('\'', "''")
+            ))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("read-only crypto module"), "{err}");
+        let v: String = conn.query_row("PRAGMA version", [], |r| r.get(0)).unwrap();
+        assert!(v.starts_with("v2."), "{v}");
+    }
+
     fn item(coll: &str, src: &str, text: &str) -> Item {
         let meta = serde_json::json!({"k": src});
         Item {

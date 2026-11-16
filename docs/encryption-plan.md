@@ -87,6 +87,26 @@ machine without a keychain, `INVECTUS_PROJECT_KEY` supplies it (documented as le
    (`.cargo/config.toml`), never the keychain. The app does not yet show the code right after
    creating a project (Settings only).
 2. DuckDB 1.4 upgrade on its own, with every test and benchmark re-run (medium; the main risk).
+   **Finding 2026-11-16: no upgrade needed, but writing is blocked.** `duckdb =1.20000.0`
+   already bundles DuckDB **v2.0.0** (the crate version encodes the engine version; 1.20000.x =
+   2.0.x, and v2.0.0 is the newest DuckDB release). It reads encrypted databases, but refuses
+   to write one ("read-only crypto module"): without `httpfs` its mbedtls module would draw
+   GCM nonces from `RandomEngine`, a non-cryptographic generator, and DuckDB only allows that
+   behind `force_mbedtls_unsafe` ("NOT securely encrypted"). The crate's `httpfs` feature
+   (OpenSSL + curl via CMake) is "supported only on Linux and macOS", and it compiles an HTTP
+   client into the app. Recorded by `store::tests::the_bundled_duckdb_will_not_write_encrypted_databases_yet`.
+   Options, for the owner:
+   - **(a) Patch DuckDB's nonce source (recommended).** Vendor `libduckdb-sys` (as we vendor
+     lancedb) and change `MbedTlsWrapper::AESStateMBEDTLS::GenerateRandomData` to use the OS
+     generator (`BCryptGenRandom`, `getrandom`/`arc4random_buf`), registering it as the
+     database's encryption util. Small diff, all three OSes, no network code; we own a
+     security patch and re-apply it on every DuckDB upgrade (with a test that fails if it is
+     lost). Needs a careful review.
+   - (b) Build `httpfs` with OpenSSL: Windows is unsupported by the crate today, and it adds a
+     network-capable extension and a system OpenSSL dependency.
+   - (c) Wait for DuckDB to give its built-in module a secure generator; phase 3 waits too.
+   Phase 4 (snapshot and cache files) and phase 5 (vectors) use our own layer and do not
+   depend on this; they can go first.
 3. DuckDB encryption on, for new projects first (small once 2 lands).
 4. Encrypted snapshot and cache files (small to medium).
 5. Vectors: prototype route 1, measure on `gapmap-full`, decide, finish (large).

@@ -3274,6 +3274,30 @@ Checked on arm64 macOS only.
   directly under it in place of the description; the drag and double-click hint moved into the
   canvas's bottom-left corner.
 
+## Sidebar: guide line beside the project list (2026-11-13)
+
+- A 1 px line (`--line-2`) runs down from the "Projects" icon beside the sidebar's project list;
+  rows start right of it, and project names still line up with the "Projects" label. The line
+  spans the whole scrolled list (`background-attachment: local`).
+- Checks: `npm run build`; screenshots in the mock harness, dark and light. Not checked in the
+  packaged app.
+- "New project" and "Open project…" left the sidebar; both stay on the Projects page header and
+  Home's empty state.
+
+## Settings: two-column rows, plain tabs, header search (2026-11-13)
+
+- Restyled after an owner-supplied reference: title and one-line summary on the left of the
+  header, search on the right (no shortcut: ⌘K is kept for global search). Tabs are plain text with a 2 px underline; the "01…07" codes are gone.
+- Groups are no longer cards: each is a row with its name and purpose on the left and controls on
+  the right, split by hairlines (`SettingsGroup`, also used by Storage and Network activity).
+  Rows stack below 760 px. Switches sit left of their label. Theme cards show the label beneath.
+- Network splits into Access, Outside sources, Saved answers and Network activity; Appearance's
+  flicker switches are now under "Motion".
+- No Save/Cancel: settings still apply at once.
+- Checks: `npm run build`; 58 UI tests pass; screenshots in the mock harness (headless Chrome,
+  macOS) at 1400 px dark and light and 640 px. The harness stub gained `verify_sources` and
+  `agent_access`; without them Settings crashed there. Not checked in the packaged app.
+
 ## 2026-11-14 — Verification deadline follow-up
 
 - Each verification request now uses the smaller of its normal 30-second limit and the
@@ -3316,3 +3340,11 @@ Checked on arm64 macOS only.
   --check` clean. Not checked in the packaged app; Windows and Linux not verified.
 - Remaining: forwarded verification still holds the transition lock (project switching waits);
   explicit Windows ACLs; snapshot removal in the app.
+- Checkboxes: the picker's square that fills in (and flickers once touched) is now `BoxCheck`,
+  shared by the picker's "Set as default" and Settings → Network → Outside sources. Screenshot
+  in the mock harness, dark; 58 UI tests pass.
+- Switches: new `Switch` replaces the rounded native-styled toggle (Settings and the new-project
+  "Let agents read this project" row). Square 34×18 track and square knob; turning on, the
+  accent fill flickers in (out when turning off) once touched, and the knob jumps in two steps.
+  No animation with flicker off or reduced motion. Screenshots in the mock harness, dark and
+  light; a real click toggles it; 58 UI tests pass. Not checked in the packaged app.

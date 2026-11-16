@@ -12,6 +12,7 @@ import { ArrowUp, File, Folder } from "lucide-react";
 import { api, local, pickDirectory, type FolderNode, type FolderView } from "./api";
 import { ModalBackdrop } from "./Modal";
 import "./FolderPicker.css";
+import BoxCheck from "./BoxCheck";
 
 const ROW = 40, PAD = 28, GAP = 64, CHIP_H = 32;
 /** How long the window stays after "Allow" before it closes. */
@@ -63,7 +64,6 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
   // The path box: filled by clicking a chip, or typed/pasted. A chip is chosen when it matches.
   const [path, setPath] = useState("");
   const [asDefault, setAsDefault] = useState(false);
-  const [touched, setTouched] = useState(false);
   const [phase, setPhase] = useState<"choosing" | "allowing" | "allowed">("choosing");
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean }>();
@@ -182,8 +182,7 @@ export default function FolderPicker({ onAllowed, onClose }: { onAllowed: (path:
             disabled={phase !== "choosing"} onChange={(e) => setPath(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void goTo(); } }} />
           <label className="fp-default small" title="Open the picker here next time">
-            <input type="checkbox" checked={asDefault} disabled={phase !== "choosing"} onChange={(e) => { setAsDefault(e.target.checked); setTouched(true); }} />
-            <span className={`fp-default-box${touched ? " touched" : ""}`} aria-hidden="true" />Set as default
+            <BoxCheck checked={asDefault} disabled={phase !== "choosing"} onChange={setAsDefault} />Set as default
           </label>
         </div>
       </div>

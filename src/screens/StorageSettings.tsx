@@ -6,6 +6,7 @@ import { api, inTauri, pickDirectory, type AgentGrant, type CacheUsage, type Pro
 import { ErrorLine, useAction } from "../App";
 import FolderPicker from "../FolderPicker";
 import { FlickerPresence } from "../Modal";
+import SettingsGroup from "../SettingsGroup";
 
 const home = (p: string) => p.replace(/^\/Users\/[^/]+|^\/home\/[^/]+/, "~");
 
@@ -35,9 +36,7 @@ export default function StorageSettings() {
   const remove = (path: string) => action.run(async () => { await api.revokeAgentFolder(path); refresh(); });
 
   return <>
-    <section aria-labelledby="s-projects-dir" className="panel settings-group stack gap">
-      <div className="settings-group-heading"><h3 id="s-projects-dir">Projects folder</h3>
-        <p>New projects go here. AI agents can always read this folder, so keep only projects in it.</p></div>
+    <SettingsGroup id="s-projects-dir" title="Projects folder" description="New projects go here. AI agents can always read this folder, so keep only projects in it.">
       <div className="storage-path-row">
         <Folder size={15} strokeWidth={1.5} aria-hidden="true" />
         <span className="mono storage-path" title={dir?.path}>{dir ? home(dir.path) : "…"}</span>
@@ -45,10 +44,8 @@ export default function StorageSettings() {
         <button type="button" className="btn small" disabled={!inTauri || action.busy} onClick={changeDir}>Change…</button>
       </div>
       {dir?.warning && <div className="note small">{dir.warning}</div>}
-    </section>
-    <section aria-labelledby="s-agent-folders" className="panel settings-group stack gap">
-      <div className="settings-group-heading"><h3 id="s-agent-folders">Agent folders</h3>
-        <p>Files and folders AI agents may read through inVectus, besides the projects folder and the open project. What they read can reach their provider.</p></div>
+    </SettingsGroup>
+    <SettingsGroup id="s-agent-folders" title="Agent folders" description="Files and folders AI agents may read through inVectus, besides the projects folder and the open project. What they read can reach their provider.">
       {folders.length
         ? <ul className="storage-list">
           {folders.map((g) => <li key={g.path}>
@@ -61,12 +58,13 @@ export default function StorageSettings() {
         : <p className="dim small">None yet: agents can read only the projects folder and the open project.</p>}
       <div><button type="button" className="btn small" disabled={!inTauri} onClick={() => setPicking(true)}>Add a file or folder…</button></div>
       <ErrorLine error={action.error} />
-    </section>
+    </SettingsGroup>
     <FlickerPresence show={picking}>{picking && <FolderPicker onAllowed={refresh} onClose={() => setPicking(false)} />}</FlickerPresence>
   </>;
 }
 
-/** The open project's saved answers from outside sources, with a way to clear them. */
+/** The open project's saved answers from outside sources, with a way to clear them; Settings
+ *  explains them in the group heading. */
 export function CheckCache() {
   const action = useAction();
   const [usage, setUsage] = useState<CacheUsage>();
@@ -75,12 +73,12 @@ export function CheckCache() {
   const clear = () => action.run(async () => { setCleared(await api.clearCheckCache()); setUsage(await api.checkCacheUsage()); });
   return <div className="storage-cache stack gap-s">
     <div className="row wrap storage-cache-row">
-      <span className="small"><b>Saved answers</b> <span className="muted">{usage === undefined ? "…" : usage.files
-        ? `${usage.files} from outside sources · ${bytes(usage.bytes)}`
-        : "none"}</span></span>
+      <span className="small">{usage === undefined ? <span className="muted">Loading…</span> : usage.files
+        ? `${usage.files} saved from outside sources · ${bytes(usage.bytes)}`
+        : <span className="muted">None saved</span>}</span>
       <button type="button" className="btn small push" disabled={!usage?.files || action.busy} onClick={clear}>Clear</button>
     </div>
-    <div className="muted small">Answers are kept in the project for 7 days, so checking a gap again needs no network. Clear them to ask the sources again.{cleared?.files ? ` Cleared ${cleared.files} (${bytes(cleared.bytes)}).` : ""}</div>
+    {cleared?.files ? <div className="muted small" role="status">Cleared {cleared.files} ({bytes(cleared.bytes)}).</div> : null}
     <ErrorLine error={action.error} />
   </div>;
 }

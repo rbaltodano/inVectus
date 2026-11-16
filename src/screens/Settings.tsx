@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Database, Layers, Monitor, Moon, Search, SlidersHorizontal, Sun, X } from "lucide-react";
+import { Database, Layers, Search, X } from "lucide-react";
 import { SETTINGS_SECTIONS, searchSettings, settingsSection, settingsTabIndex, type SettingsSection } from "../settingsNavigation";
 import { api, fmt, inTauri, local, when, type LlmInfo, type ModelInfo, type ProjectInfo, type Weights } from "../api";
 import { ErrorLine, useAction, useStartJob } from "../App";
@@ -10,6 +10,9 @@ import StorageSettings, { CheckCache } from "./StorageSettings";
 import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 import { setFlickerSetting, useFlickerSetting } from "../dot-flicker";
+import SettingsGroup from "../SettingsGroup";
+import BoxCheck from "../BoxCheck";
+import Switch from "../Switch";
 
 const VERIFY_SOURCES: [string, string, string][] = [
   ["pubmed", "PubMed", "Biomedical literature (NCBI)."],
@@ -68,11 +71,11 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
 
   return <div className="page settings-page">
     <header className="settings-header">
-      <div className="settings-title"><SlidersHorizontal size={19} aria-hidden="true" /><h1>Settings</h1></div>
+      <div className="settings-title"><h1>Settings</h1><p>Appearance, models, storage and how each project checks its gaps.</p></div>
       <div className="settings-search-wrap">
         <div className="settings-search">
           <Search size={14} aria-hidden="true" />
-          <input aria-label="Search settings" placeholder="Search settings…" value={query} onChange={(e) => setQuery(e.target.value)}
+          <input aria-label="Search settings" placeholder="Search settings" value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") { e.preventDefault(); setQuery(""); }
               if (e.key === "Enter" && matches[0]) { e.preventDefault(); selectSection(matches[0].id); setQuery(""); setTimeout(() => heading.current?.focus(), 0); }
@@ -99,7 +102,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             const tab = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next];
             tab?.focus(); tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
           }}>
-          <span className="tab-code">{String(index + 1).padStart(2, "0")}</span>{s.label}
+{s.label}
         </button>;
       })}
       <TabIndicator geometry={tabIndicator} />
@@ -110,49 +113,43 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
           <div className="settings-page-heading"><div className="settings-heading-row"><h2 ref={heading} tabIndex={-1}>{current.label}</h2><span className="settings-scope">{current.scope === "app" ? "All projects" : project?.name ?? "No project open"}</span></div><p>{current.description}</p></div>
           <ErrorLine error={error ?? jobs.error} />
           <div id="settings-section-appearance" role="tabpanel" aria-labelledby="settings-tab-appearance" className="settings-section" hidden={section !== "appearance"}>
-            <section aria-labelledby="s-appearance" className="panel settings-group stack gap">
-              <div className="settings-group-heading"><h3 id="s-appearance">Theme</h3><p>Choose a look, or follow your system appearance.</p></div>
+            <SettingsGroup id="s-appearance" title="Theme" description="Pick a look, or follow your system setting.">
               <div role="group" aria-labelledby="s-appearance" className="settings-themes">
-                {(["system", "light", "dark"] as const).map((t) => {
-                  const Icon = t === "system" ? Monitor : t === "light" ? Sun : Moon;
-                  return <button key={t} type="button" className="settings-theme" aria-pressed={theme === t} onClick={() => chooseTheme(t)}>
+                {(["light", "dark", "system"] as const).map((t) =>
+                  <button key={t} type="button" className="settings-theme" aria-pressed={theme === t} onClick={() => chooseTheme(t)}>
                     <span className={`settings-theme-preview settings-theme-${t}`} aria-hidden="true"><span className="theme-mini-sidebar"><i /><i /><i /></span><span className="theme-mini-content"><i /><i /><i /></span></span>
-                    <span className="settings-theme-label"><Icon size={14} aria-hidden="true" />{t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}{theme === t && <Check size={14} className="settings-theme-check" aria-hidden="true" />}</span>
-                  </button>;
-                })}
+                    <span className="settings-theme-label">{t === "system" ? "System" : t === "light" ? "Light" : "Dark"}</span>
+                  </button>)}
               </div>
-            </section>
-            <section aria-label="Flicker animations" className="panel settings-group stack gap">
+            </SettingsGroup>
+            <SettingsGroup id="s-motion" title="Motion" description="How cards, menus and windows come and go. Always off when your system asks for reduced motion.">
               <label className="check top settings-switch-row">
-                <input type="checkbox" role="switch" checked={flicker} onChange={() => setFlickerSetting(!flicker)} />
-                <span><b>Flicker animations</b><div className="muted small">Cards, menus and the map’s squares flicker in and out. Turn off to have them appear and go at once. Always off when your system asks for reduced motion.</div></span>
+                <Switch checked={flicker} onChange={(on) => setFlickerSetting(on)} />
+                <span><b>Flicker animations</b><span className="settings-hint">Cards, menus and the map’s squares flicker in and out. Off: they appear and go at once.</span></span>
               </label>
               <label className="check top settings-switch-row">
-                <input type="checkbox" role="switch" checked={windowFlicker} onChange={() => setFlickerSetting(!windowFlicker, "windows")} />
-                <span><b>Window flicker</b><div className="muted small">Popup windows flicker out when they close. Works on its own, even with flicker animations off.</div></span>
+                <Switch checked={windowFlicker} onChange={(on) => setFlickerSetting(on, "windows")} />
+                <span><b>Window flicker</b><span className="settings-hint">Popup windows flicker out when they close, even with flicker animations off.</span></span>
               </label>
-            </section>
+            </SettingsGroup>
           </div>
           <div id="settings-section-models" role="tabpanel" aria-labelledby="settings-tab-models" className="settings-section" hidden={section !== "models"}>
-            <section aria-labelledby="s-models" className="panel settings-group stack gap">
-              <h3 id="s-models">Embedding models</h3>
+            <SettingsGroup id="s-models" title="Embedding models" description={<>Shared by all projects and loaded only from verified local files. The CLI’s <code>invectus models</code> manages them too.</>}>
               {models.length === 0 && <p className="muted small">{inTauri ? "Loading embedding models…" : "Open the desktop app to see installed models and available downloads."}</p>}
               {models.map((m) => <div key={m.key} className="spread setting-row">
                 <div><b className="mono">{m.key}</b>{m.default && <span className="muted"> · default</span>}<div className="muted small">≈{fmt(m.megabytes)} MB · {m.dimensions} dimensions · {m.installed ? "installed, checksums verified" : "not installed"}</div></div>
                 {!m.installed && <button type="button" className="btn small" onClick={() => setConsent(m)}>Download…</button>}
               </div>)}
               {consent && <DownloadConsent model={{ key: consent.key, repo: consent.repo, megabytes: consent.megabytes }} project={project} onClose={() => setConsent(undefined)} />}
-              <div className="muted small">Models are shared by all projects and loaded only from verified local files. The CLI's <code>invectus models</code> manages them too.</div>
-            </section>
+            </SettingsGroup>
 
-            <section aria-labelledby="s-llm" className="panel settings-group stack gap">
-              <h3 id="s-llm">Local language model</h3>
-              <div className="muted small">Optional. Writes gap descriptions, names regions and paraphrases queries for calibration, on this computer.</div>
+            <SettingsGroup id="s-llm" title="Local language model" description="Optional. Writes gap descriptions, names regions and paraphrases queries for calibration, on this computer.">
+              {llms.length === 0 && <p className="muted small">{inTauri ? "Loading language models…" : "Open the desktop app to see the local language model."}</p>}
               {llms.map((l) => <div key={l.key} className="spread setting-row">
                 <div><b className="mono">{l.key}</b><div className="muted small">≈{fmt(l.megabytes)} MB · {l.installed ? "installed" : "not installed"} · {l.note}</div></div>
               </div>)}
               {!llmReady && <div className="muted small">Not installed: descriptions and language-model calibration are off. <code>invectus llm list</code> shows where the pinned file goes.</div>}
-            </section>
+            </SettingsGroup>
 
           </div>
           <div id="settings-section-storage" role="tabpanel" aria-labelledby="settings-tab-storage" className="settings-section" hidden={section !== "storage"}>
@@ -161,42 +158,42 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
           <div id="settings-section-network" role="tabpanel" aria-labelledby="settings-tab-network" className="settings-section" hidden={section !== "network"}>
             {projectEmpty}
 
-            {project && <section aria-labelledby="s-net" className="panel settings-group stack gap">
-              <h3 id="s-net">Network</h3>
+            {project && <SettingsGroup id="s-net" title="Access" description="What may leave this computer for this project.">
               <label className="check top settings-switch-row">
-                <input type="checkbox" role="switch" checked={project.network_enabled} disabled={busy}
+                <Switch checked={project.network_enabled} disabled={busy}
                   onChange={() => run(async () => setProject(await api.setNetwork(!project.network_enabled)))} />
-                <span><b>External checks</b><div className="muted small">Checking a gap sends its description to the sources below. Off until you turn it on. Pulling from your integrations and downloading models don’t need it; import, indexing, search, map, gaps and descriptions always run on this computer.</div></span>
+                <span><b>External checks</b><span className="settings-hint">Checking a gap sends its description to the outside sources below. Off until you turn it on. Pulling from your integrations and downloading models don’t need it; import, indexing, search, map, gaps and descriptions always run on this computer.</span></span>
               </label>
               <label className="check top settings-switch-row">
-                <input type="checkbox" role="switch" checked={project.agent_access} disabled={busy}
+                <Switch checked={project.agent_access} disabled={busy}
                   onChange={() => run(async () => setProject(await api.setAgentAccess(!project.agent_access)))} />
-                <span><b>Agent access</b><div className="muted small">Lets AI agents (Claude Code, Codex and others you connect) read this project’s items, gaps and files through inVectus. What they read can reach their provider. New projects start with your last choice.</div></span>
+                <span><b>Agent access</b><span className="settings-hint">Lets AI agents (Claude Code, Codex and others you connect) read this project’s items, gaps and files through inVectus. What they read can reach their provider. New projects start with your last choice.</span></span>
               </label>
               {project.offline_env && <div className="note small">INVECTUS_OFFLINE is set: every network use is refused whatever this switch says.</div>}
-              <fieldset className="settings-sources">
-                <legend>Outside sources for checking gaps</legend>
+            </SettingsGroup>}
+            {project && <SettingsGroup id="s-sources" title="Outside sources" description="Where external checks look when you check a gap. Keep at least one.">
+              <div role="group" aria-labelledby="s-sources" className="settings-sources">
                 {VERIFY_SOURCES.map(([id, label, note]) => {
                   const on = project.verify_sources.includes(id);
                   const last = on && project.verify_sources.length === 1;
                   return <label key={id} className="check top">
-                    <input type="checkbox" checked={on} disabled={busy || last} title={last ? "Keep at least one source" : undefined}
+                    <BoxCheck checked={on} disabled={busy || last} title={last ? "Keep at least one source" : undefined}
                       onChange={() => run(async () => setProject(await api.setVerifySources(on ? project.verify_sources.filter((s) => s !== id) : [...project.verify_sources, id])))} />
-                    <span><b>{label}</b><div className="muted small">{note}</div></span>
+                    <span><b>{label}</b><span className="settings-hint">{note}</span></span>
                   </label>;
                 })}
-              </fieldset>
+              </div>
+            </SettingsGroup>}
+            {project && <SettingsGroup id="s-cache" title="Saved answers" description="Kept in the project for 7 days, so checking a gap again needs no network. Clear them to ask the sources again.">
               <CheckCache key={project.root} />
-            </section>}
+            </SettingsGroup>}
             <OutboundLog />
 
           </div>
           <div id="settings-section-scoring" role="tabpanel" aria-labelledby="settings-tab-scoring" className="settings-section" hidden={section !== "scoring"}>
             {projectEmpty}
             {project && !weights && <p className="muted small" role="status">Loading gap scoring settings…</p>}
-            {project && weights && <section aria-labelledby="s-w" className="panel settings-group stack gap">
-              <h3 id="s-w">Gap scoring</h3>
-              <div className="muted small">Weights on each standardised term; they apply the next time gaps are scanned. Stored on this computer for this project.</div>
+            {project && weights && <SettingsGroup id="s-w" title="Weights" description="Weights on each standardised term; they apply the next time gaps are scanned. Stored on this computer for this project.">
               {WEIGHT_LABEL.map(([k, label]) => <label key={k} className="slider">
                 <span>{label}</span>
                 <input type="range" min={0} max={3} step={0.25} value={weights[k]} onChange={(e) => setWeight(k, Number(e.target.value))} />
@@ -204,13 +201,12 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
               </label>)}
               <div className="row"><button type="button" className="btn small" disabled={!changed} onClick={reset}>Reset to defaults</button>
                 <span className="muted small">Defaults were tuned on a 591k-paper benchmark (they still trail simple baselines there).</span></div>
-            </section>}
+            </SettingsGroup>}
 
           </div>
           <div id="settings-section-calibration" role="tabpanel" aria-labelledby="settings-tab-calibration" className="settings-section" hidden={section !== "calibration"}>
             {projectEmpty}
-            {project && <section aria-labelledby="s-cal" className="panel settings-group stack gap">
-              <h3 id="s-cal">Verdict calibration</h3>
+            {project && <SettingsGroup id="s-cal" title="Verdict calibration" description="Fitted per collection and embedding space. Without it, search shows similarity but no verdict.">
               {project.tables.length === 0 && <p className="muted">Nothing indexed yet.</p>}
               {project.tables.map((t) => <div key={t.space_id} className="spread setting-row">
                 <div><b className="mono">{t.collection} · {t.model_key}</b>
@@ -223,14 +219,14 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
                 </div>
               </div>)}
               {running && <div className="muted small">A job is running; calibration can start when it finishes.</div>}
-            </section>}
+            </SettingsGroup>}
 
           </div>
           <div id="settings-section-embedding" role="tabpanel" aria-labelledby="settings-tab-embedding" className="settings-section" hidden={section !== "embedding"}>
             {projectEmpty}
             {project && project.tables.length === 0 && <div className="settings-project-empty"><Database size={24} aria-hidden="true" /><h3>No embedding spaces yet</h3><p>Index a collection to see its model, runtime and vector details here.</p></div>}
-            {project && project.tables.length > 0 && <details open className="panel settings-group">
-              <summary>Embedding details</summary>
+            {project && project.tables.length > 0 && <SettingsGroup id="s-spaces" title="Embedding spaces" description="Model, runtime and vectors for each indexed collection.">
+
               {project.tables.map((t) => <dl key={t.space_id} className="facts mono small">
                 <dt>Collection</dt><dd>{t.collection}</dd>
                 <dt>Space ID</dt><dd>{t.space_id}</dd>
@@ -239,7 +235,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
                 <dt>Origin</dt><dd>{t.origin}</dd>
                 <dt>Vectors</dt><dd>{fmt(t.vectors)}{t.ann_partitions ? ` · ANN ${t.ann_partitions} partitions` : ""}</dd>
               </dl>)}
-            </details>}
+            </SettingsGroup>}
           </div>
           {current.scope === "project" && project && <p className="settings-project-path"><span>Project folder</span><code>{project.root}</code></p>}
         </div>

@@ -8,6 +8,7 @@ import { AgentMark, type AgentOption } from "./agentOptions";
 import { local } from "./api";
 import { useFlickerDelays } from "./dot-flicker";
 import { FlickerPresence, ModalBackdrop } from "./Modal";
+import Switch from "./Switch";
 
 /** Agents chosen in New project, most recent first (this computer only). */
 export const RECENT_AGENTS = "invectus.recent-agents";
@@ -63,7 +64,7 @@ export default function AgentCards({ agents, value, onChoose, access, onAccess, 
       </li>
     </ul>
     <label className="agent-access-row">
-      <input type="checkbox" role="switch" checked={access} disabled={disabled} onChange={(e) => onAccess(e.target.checked)} />
+      <Switch checked={access} disabled={disabled} onChange={onAccess} />
       <span><span className="agent-access-title">Let agents read this project</span>
         <span className="dim small">Agents can search its items, gaps and files through inVectus. What they read can reach their provider. Your next project starts with this choice.</span></span>
     </label>

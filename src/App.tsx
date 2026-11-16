@@ -20,7 +20,7 @@ import NewProject from "./screens/NewProject";
 import AgentChip from "./AgentChip";
 import TabIndicator, { useTabIndicator } from "./TabIndicator";
 import StarPrompt from "./StarPrompt";
-import { ArrowLeft, Blocks, Bot, Folder, FolderOpen, House, Plus, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Blocks, Bot, Folder, House, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, openingTab, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import { baseName } from "./paths";
 import "./App.css";
@@ -207,8 +207,6 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
         </div>
         <div className="side-actions">
           {nav("Home", House, route.view === "home", () => setRoute({ view: "home" }))}
-          {nav("New project", Plus, route.view === "new", () => setRoute({ view: "new" }), opening || switchingBlocked)}
-          {nav("Open project…", FolderOpen, false, openProject, opening || switchingBlocked)}
           {nav("Integrations", Blocks, route.view === "integrations", () => setRoute({ view: "integrations" }))}
           {nav("Agents", Bot, route.view === "agents", () => setRoute({ view: "agents" }))}
         </div>

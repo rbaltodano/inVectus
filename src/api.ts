@@ -160,6 +160,8 @@ export interface AgentGrant { path: string; dir: boolean; missing: boolean }
 export interface ProjectsDir { path: string; standard: boolean; warning: string | null }
 /** Saved answers from outside sources in the open project. */
 export interface CacheUsage { files: number; bytes: number }
+/** Whether the open project's data key is on this computer. */
+export type KeyStatus = { state: "no-key" } | { state: "available"; source: "environment" | "key-file" | "keychain" } | { state: "missing" } | { state: "unusable"; reason: string };
 /** A copy pulled from an integration into the open project (`name` is `<kind>/<file>`). */
 export interface PulledCopy { name: string; origin: string | null; rows: number | null; bytes: number; pulled_at: number | null; used_by: string[] }
 
@@ -192,6 +194,9 @@ export const api = {
   setProjectsDir: (path: string | null) => invoke<ProjectsDir>("set_projects_dir", { path }),
   checkCacheUsage: () => invoke<CacheUsage>("check_cache_usage"),
   clearCheckCache: () => invoke<CacheUsage>("clear_check_cache"),
+  projectKeyStatus: () => invoke<KeyStatus>("project_key_status"),
+  projectRecoveryCode: () => invoke<string>("project_recovery_code"),
+  restoreProjectKey: (code: string) => invoke<KeyStatus>("restore_project_key", { code }),
   pulledCopies: () => invoke<PulledCopy[]>("pulled_copies"),
   forgetPulledCopy: (name: string) => invoke<PulledCopy[]>("forget_pulled_copy", { name }),
   setVerifySources: (sources: string[]) => invoke<ProjectInfo>("set_verify_sources", { sources }),

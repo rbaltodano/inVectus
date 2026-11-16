@@ -1,0 +1,7 @@
+[env]
+# Project data keys go to owner-only files here instead of the system keychain whenever cargo
+# runs something (tests, `cargo run`, `tauri dev`), so tests and dev builds never touch the
+# person's keychain. A packaged app does not have this set and uses the keychain
+# (crates/core/src/keys.rs). `.spike-data/` is git-ignored; keep it: once encryption is on,
+# dev projects need these keys.
+INVECTUS_KEYSTORE_DIR = { value = ".spike-data/dev-keys", relative = true }

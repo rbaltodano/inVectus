@@ -70,6 +70,14 @@ fn setup() -> (tempfile::TempDir, PathBuf, String) {
         &["init", dir.path().join("p").to_str().unwrap()],
     ));
     assert!(o.contains("created"));
+    assert!(o.contains("recovery code"), "{o}");
+    // The key: kept on this computer, and the same recovery code shown again on request.
+    let code = o.lines().last().unwrap().trim().to_string();
+    assert_eq!(code.len(), 65, "{o}");
+    let shown = ok(cli(&models, &["key", "-p", &project, "show"]));
+    assert_eq!(shown.trim(), code);
+    let status = ok(cli(&models, &["key", "-p", &project, "status"]));
+    assert!(status.contains("key available"), "{status}");
     let o = ok(cli(
         &models,
         &[

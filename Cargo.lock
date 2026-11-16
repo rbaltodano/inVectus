@@ -3758,6 +3758,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "duckdb",
+ "getrandom 0.3.4",
  "hex",
  "keyring",
  "serde",

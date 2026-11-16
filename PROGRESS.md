@@ -3380,3 +3380,47 @@ Checked on arm64 macOS only.
 - Checks (arm64 macOS): `cargo test --workspace --release --no-fail-fast` 210 passed, 0 failed;
   clippy `-D warnings` and `cargo fmt --check` clean; `npm run build`; 58 UI tests pass. The new
   Settings group and log wording were not checked in the packaged app or the mock harness.
+
+## 2026-11-16 — Windows CI fixes; encryption at rest phase 1 (project keys)
+
+- **CI run 43921542555** (`8402163`, branch `ci/security-2026-11-16`): Windows failed 3 tests.
+  - `private::windows_tests`: an inheritable allow entry with `GENERIC_ALL` is split by Windows
+    into two entries, so the "exactly one entry" check failed. Now grants `FILE_ALL_ACCESS`
+    and accepts any entries that all allow the current user only.
+  - `agent::tests::content_tools_need_agent_access_on_the_project_they_name`: two agents in one
+    test process opened the same project; Windows refuses a second open of one database file.
+    The first agent is dropped first. (Test artifact; one process has one agent session.)
+  - `agent::tests::projects_outside_granted_folders_cannot_be_opened_by_any_tool` used
+    `/etc/hosts`; now a real file outside the granted folders.
+  - Both agent tests date from `bd81277` (2026-11-12), after the last passing Windows run
+    (42907902558, 2026-11-10): the security overhaul had never run on Windows until now.
+- **Phase 1 of docs/encryption-plan.md: project keys.** `invectus_core::keys`: a random 256-bit
+  data key and a 128-bit project id per new project; the key is stored before `project.json`
+  names it (keychain service `app.invectus.projects`, account = project id). `project.json`
+  gains `project_id` and `key_check` (HMAC-SHA-256 of a fixed label and the id; tested against
+  RFC 4231). The **recovery code** is the key plus a 2-byte checksum in Crockford base32 (55
+  characters, 11 groups); case, spacing and O/I/L look-alikes are tolerated and a typo is caught.
+  Lookup order: `INVECTUS_PROJECT_KEY` (only where its check value matches), then
+  `INVECTUS_KEYSTORE_DIR` key files, then the keychain; a stored key that does not match is an
+  error, never used. Keys are wiped from memory on drop and never printed by `Debug`.
+  - CLI: `invectus init` prints the recovery code; `invectus key status|show|restore` (restore
+    reads stdin, so the code stays out of shell history). App: Settings → Network → Recovery
+    code (show/copy/hide, or restore when missing); Tauri `project_key_status`,
+    `project_recovery_code`, `restore_project_key`.
+  - `.cargo/config.toml` sets `INVECTUS_KEYSTORE_DIR=.spike-data/dev-keys` for everything cargo
+    runs (tests, `cargo run`, `tauri dev`), so tests and dev builds never touch the person's
+    keychain; a packaged app uses the keychain. Test runs leave small key files there (105 after
+    one full run). Dev projects created through cargo keep their keys there, not in the keychain.
+  - Not changed: nothing is encrypted yet (phase 3); existing projects have no key (`no-key`,
+    migration is phase 6); deleting a project leaves its key (so a backup stays openable);
+    the app does not show the code right after creating a project.
+  - Tests: recovery-code round trip, tolerance and typo detection; check values per project;
+    store/load/mismatch/forget; a new project's key status, restore with the right and a wrong
+    code, reopen; CLI `init` → `key show` returns the same code and `key status` says available.
+- **Flaky test (pre-existing):** `agent_imports_a_csv_and_reports_gaps_over_mcp` (cli tests)
+  failed once with "agent access is off" and also failed once with these changes stashed; it
+  passed on reruns. Likely parallel tests sharing the consent file's agent-access default. Not
+  fixed.
+- Checks (arm64 macOS): `cargo test --workspace --release --no-fail-fast` 213 passed, 0 failed;
+  clippy `-D warnings`, fmt, `npm run build`, 58 UI tests. Windows fixes unverified until CI
+  reruns. The Recovery code group was not checked in the packaged app.

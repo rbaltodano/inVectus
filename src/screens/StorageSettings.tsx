@@ -2,7 +2,7 @@
 // under Network, the open project's saved answers from outside sources.
 import { useEffect, useState } from "react";
 import { File, Folder } from "lucide-react";
-import { api, inTauri, pickDirectory, type AgentGrant, type CacheUsage, type ProjectsDir, type PulledCopy } from "../api";
+import { api, inTauri, pickDirectory, type AgentGrant, type CacheUsage, type KeyStatus, type ProjectsDir, type PulledCopy } from "../api";
 import { ago } from "../ago";
 import { ErrorLine, useAction } from "../App";
 import FolderPicker from "../FolderPicker";
@@ -108,6 +108,42 @@ export function PulledCopies() {
         </li>)}
       </ul>
       : <p className="dim small">None: nothing has been pulled from your integrations into this project.</p>}
+    <ErrorLine error={action.error} />
+  </div>;
+}
+
+/** The open project's data key: reveal its recovery code, or restore the key from one. Nothing
+ *  is encrypted with it yet; the code matters once encryption is on. */
+export function RecoveryCode() {
+  const action = useAction();
+  const [status, setStatus] = useState<KeyStatus>();
+  const [code, setCode] = useState<string>();
+  const [typed, setTyped] = useState("");
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { api.projectKeyStatus().then(setStatus).catch(() => undefined); }, []);
+  const reveal = () => action.run(async () => setCode(await api.projectRecoveryCode()));
+  const copy = () => action.run(async () => { if (code) { await navigator.clipboard.writeText(code); setCopied(true); } });
+  const restore = () => action.run(async () => { setStatus(await api.restoreProjectKey(typed)); setTyped(""); });
+  if (!status) return <p className="muted small" role="status">Loading…</p>;
+  return <div className="stack gap-s">
+    {status.state === "no-key" && <p className="dim small">This project was made before projects had keys. It will get one when encryption is turned on for existing projects.</p>}
+    {status.state === "available" && <>
+      <p className="small">The key is {status.source === "keychain" ? "in this computer’s keychain" : status.source === "key-file" ? "in the developer key folder (INVECTUS_KEYSTORE_DIR)" : "set by INVECTUS_PROJECT_KEY"}.</p>
+      {code
+        ? <div className="row wrap storage-cache-row">
+          <code className="mono small recovery-code" aria-label="Recovery code">{code}</code>
+          <button type="button" className="btn small" disabled={action.busy} onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+          <button type="button" className="text-btn" onClick={() => { setCode(undefined); setCopied(false); }}>Hide</button>
+        </div>
+        : <div><button type="button" className="btn small" disabled={action.busy} onClick={reveal}>Show recovery code</button></div>}
+    </>}
+    {(status.state === "missing" || status.state === "unusable") && <>
+      <p className="small">{status.state === "missing" ? "This project’s key is not on this computer." : `The stored key can’t be used: ${status.reason}`} Enter the project’s recovery code to keep its key here.</p>
+      <div className="row wrap storage-cache-row">
+        <input className="mono" aria-label="Recovery code" placeholder="XXXXX-XXXXX-…" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+        <button type="button" className="btn small" disabled={action.busy || !typed.trim()} onClick={restore}>Restore</button>
+      </div>
+    </>}
     <ErrorLine error={action.error} />
   </div>;
 }

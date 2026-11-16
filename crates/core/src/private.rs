@@ -157,7 +157,7 @@ mod win {
     use std::os::windows::ffi::OsStrExt;
     use std::path::Path;
     use std::ptr::null_mut;
-    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_SUCCESS, GENERIC_ALL, HANDLE};
+    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_SUCCESS, HANDLE};
     use windows_sys::Win32::Foundation::{HLOCAL, LocalFree};
     use windows_sys::Win32::Security::Authorization::{
         EXPLICIT_ACCESS_W, GetNamedSecurityInfoW, NO_MULTIPLE_TRUSTEE, SE_FILE_OBJECT, SET_ACCESS,
@@ -170,6 +170,10 @@ mod win {
         SUB_CONTAINERS_AND_OBJECTS_INHERIT, TOKEN_QUERY, TOKEN_USER, TokenUser,
     };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    /// Full control of a file or folder. Not `GENERIC_ALL`: an inheritable entry with generic
+    /// rights is split by the system into two entries (one effective, one inherit-only).
+    const FILE_ALL_ACCESS: u32 = 0x001F_01FF;
 
     fn wide(path: &Path) -> Vec<u16> {
         path.as_os_str().encode_wide().chain(Some(0)).collect()
@@ -206,7 +210,8 @@ mod win {
         unsafe { (*(buf.as_ptr() as *const TOKEN_USER)).User.Sid }
     }
 
-    /// Whether `path` already has a protected list with one "allow" entry, for `sid`.
+    /// Whether `path` already has a protected list whose entries all allow `sid` (and nobody
+    /// else).
     fn is_private(path: &Path, sid: PSID) -> bool {
         let name = wide(path);
         let mut dacl: *mut ACL = null_mut();
@@ -232,15 +237,20 @@ mod win {
             let mut ok = GetSecurityDescriptorControl(sd, &mut control, &mut revision) != 0
                 && control & SE_DACL_PROTECTED != 0
                 && !dacl.is_null()
-                && (*dacl).AceCount == 1;
+                && (*dacl).AceCount >= 1;
             if ok {
-                let mut ace: *mut core::ffi::c_void = null_mut();
-                ok = GetAce(dacl, 0, &mut ace) != 0 && {
-                    let ace = ace as *const ACCESS_ALLOWED_ACE;
-                    // ACCESS_ALLOWED_ACE_TYPE is 0; the SID starts at `SidStart`.
-                    (*ace).Header.AceType == 0
-                        && EqualSid(&(*ace).SidStart as *const u32 as PSID, sid) != 0
-                };
+                for i in 0..u32::from((*dacl).AceCount) {
+                    let mut ace: *mut core::ffi::c_void = null_mut();
+                    ok = GetAce(dacl, i, &mut ace) != 0 && {
+                        let ace = ace as *const ACCESS_ALLOWED_ACE;
+                        // ACCESS_ALLOWED_ACE_TYPE is 0; the SID starts at `SidStart`.
+                        (*ace).Header.AceType == 0
+                            && EqualSid(&(*ace).SidStart as *const u32 as PSID, sid) != 0
+                    };
+                    if !ok {
+                        break;
+                    }
+                }
             }
             LocalFree(sd as HLOCAL);
             ok
@@ -254,7 +264,7 @@ mod win {
             return Ok(());
         }
         let access = EXPLICIT_ACCESS_W {
-            grfAccessPermissions: GENERIC_ALL,
+            grfAccessPermissions: FILE_ALL_ACCESS,
             grfAccessMode: SET_ACCESS,
             grfInheritance: if is_dir {
                 SUB_CONTAINERS_AND_OBJECTS_INHERIT

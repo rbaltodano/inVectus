@@ -97,6 +97,13 @@ enum Command {
         #[command(subcommand)]
         command: AgentsCommand,
     },
+    /// The project's data key: its recovery code, or restoring it on this computer.
+    Key {
+        #[command(flatten)]
+        p: ProjectArg,
+        #[command(subcommand)]
+        command: KeyCommand,
+    },
     /// Pulled copies kept in a project (they stay until removed; nothing expires them).
     Sources {
         #[command(flatten)]
@@ -730,6 +737,56 @@ fn cmd_pull(p: &ProjectArg, spec: &str) -> Result<()> {
 }
 
 #[derive(Subcommand)]
+enum KeyCommand {
+    /// Whether the key is on this computer, and where it is kept.
+    Status,
+    /// Print the recovery code. Keep it in a password manager or on paper: with the keychain
+    /// entry gone, it is the only way to open the project once encryption is on.
+    Show,
+    /// Keep the key on this computer from the recovery code (a project moved here). The code
+    /// is read from standard input so it stays out of the shell history.
+    Restore,
+}
+
+fn cmd_key(p: &ProjectArg, command: KeyCommand) -> Result<()> {
+    let project = open(p)?;
+    match command {
+        KeyCommand::Status => {
+            use invectus_core::project::KeyStatus;
+            println!(
+                "{}",
+                match project.key_status() {
+                    KeyStatus::NoKey => "this project was made before projects had keys".into(),
+                    KeyStatus::Available { source } => format!(
+                        "key available ({})",
+                        match source {
+                            invectus_core::keys::KeySource::Environment =>
+                                "from INVECTUS_PROJECT_KEY",
+                            invectus_core::keys::KeySource::KeyFile =>
+                                "from the INVECTUS_KEYSTORE_DIR folder",
+                            invectus_core::keys::KeySource::Keychain => "in the system keychain",
+                        }
+                    ),
+                    KeyStatus::Missing =>
+                        "the key is not on this computer: run `invectus key restore`".into(),
+                    KeyStatus::Unusable { reason } =>
+                        format!("the stored key is unusable: {reason}"),
+                }
+            );
+        }
+        KeyCommand::Show => println!("{}", project.recovery_code()?),
+        KeyCommand::Restore => {
+            eprintln!("paste the recovery code, then press Enter:");
+            let mut code = String::new();
+            std::io::stdin().read_line(&mut code)?;
+            project.restore_key(&code)?;
+            println!("key restored for {}", project.root.display());
+        }
+    }
+    Ok(())
+}
+
+#[derive(Subcommand)]
 enum SourcesCommand {
     /// Each pulled copy: what it came from, size, when it was pulled, which collections use it.
     List,
@@ -1040,6 +1097,11 @@ fn run() -> Result<()> {
         Command::Init { path } => {
             let p = Project::create(&path)?;
             println!("created {}", p.root.display());
+            println!(
+                "recovery code (keep it safe; `invectus key show` prints it again while the key \
+                 is on this computer):\n  {}",
+                p.recovery_code()?
+            );
             if let Some(w) = p.storage_warning() {
                 eprintln!("warning: {w}");
             }
@@ -1050,6 +1112,7 @@ fn run() -> Result<()> {
         Command::Integrations { command } => cmd_integrations(command)?,
         Command::Agents { command } => cmd_agents(command)?,
         Command::Sources { p, command } => cmd_sources(&p, command)?,
+        Command::Key { p, command } => cmd_key(&p, command)?,
         Command::Embed(a) => cmd_embed(a, &cli.models_dir)?,
         Command::Search(a) => cmd_search(a, &cli.models_dir)?,
         Command::Calibrate(a) => cmd_calibrate(a, &cli.models_dir)?,

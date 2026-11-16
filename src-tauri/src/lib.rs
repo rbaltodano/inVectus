@@ -699,6 +699,38 @@ async fn clear_check_cache(state: State<'_, AppState>) -> CmdResult<invectus_ver
         .await
 }
 
+/// Whether the open project's data key is on this computer (encryption plan, phase 1).
+#[tauri::command]
+async fn project_key_status(
+    state: State<'_, AppState>,
+) -> CmdResult<invectus_core::project::KeyStatus> {
+    let session = state.session.clone();
+    off_thread(move || with_session(&session, |s| Ok(s.project.key_status()))).await
+}
+
+/// The open project's recovery code, shown when the person asks for it.
+#[tauri::command]
+async fn project_recovery_code(state: State<'_, AppState>) -> CmdResult<String> {
+    let session = state.session.clone();
+    off_thread(move || with_session(&session, |s| s.project.recovery_code())).await
+}
+
+/// Keep the open project's key on this computer from its recovery code.
+#[tauri::command]
+async fn restore_project_key(
+    state: State<'_, AppState>,
+    code: String,
+) -> CmdResult<invectus_core::project::KeyStatus> {
+    let session = state.session.clone();
+    off_thread(move || {
+        with_session(&session, |s| {
+            s.project.restore_key(&code)?;
+            Ok(s.project.key_status())
+        })
+    })
+    .await
+}
+
 /// Copies pulled from integrations into the open project, with the collections using each.
 #[tauri::command]
 async fn pulled_copies(
@@ -920,6 +952,9 @@ pub fn run() {
             projects_dir,
             set_projects_dir,
             check_cache_usage,
+            project_key_status,
+            project_recovery_code,
+            restore_project_key,
             pulled_copies,
             forget_pulled_copy,
             clear_check_cache,

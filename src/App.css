@@ -1157,3 +1157,4 @@ label:hover > .sq-switch-input:not(:checked):not(:disabled) + .sq-switch::after 
 .storage-list li { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .storage-cache { padding-top: 4px; }
 .storage-cache-row { align-items: center; gap: 12px; }
+.recovery-code { user-select: all; word-break: break-all; letter-spacing: 0.02em; }

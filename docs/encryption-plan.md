@@ -80,7 +80,12 @@ machine without a keychain, `INVECTUS_PROJECT_KEY` supplies it (documented as le
 
 ## Phases
 
-1. Key management, recovery code, project id, and folder permissions (small).
+1. Key management, recovery code, project id, and folder permissions (small). **Done
+   2026-11-16** (`crates/core/src/keys.rs`): new projects get a key in the keychain and a
+   `project_id`/`key_check` in `project.json`; `invectus key status|show|restore`; Settings →
+   Network → Recovery code. Tests and `cargo run` keep keys in `.spike-data/dev-keys`
+   (`.cargo/config.toml`), never the keychain. The app does not yet show the code right after
+   creating a project (Settings only).
 2. DuckDB 1.4 upgrade on its own, with every test and benchmark re-run (medium; the main risk).
 3. DuckDB encryption on, for new projects first (small once 2 lands).
 4. Encrypted snapshot and cache files (small to medium).

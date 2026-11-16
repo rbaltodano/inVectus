@@ -6,7 +6,7 @@ import { ErrorLine, useAction, useStartJob } from "../App";
 import { isRunning } from "../jobs";
 import { DownloadConsent } from "../models";
 import OutboundLog from "../OutboundLog";
-import StorageSettings, { CheckCache, PulledCopies } from "./StorageSettings";
+import StorageSettings, { CheckCache, PulledCopies, RecoveryCode } from "./StorageSettings";
 import TabIndicator, { useTabIndicator } from "../TabIndicator";
 import { setThemeChoice, themeChoice, type ThemeChoice } from "../theme";
 import { setFlickerSetting, useFlickerSetting } from "../dot-flicker";
@@ -189,6 +189,9 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             </SettingsGroup>}
             {project && <SettingsGroup id="s-pulled" title="Pulled copies" description="What you pulled from your integrations, kept in the project so collections can be updated from it. It stays until you remove it here.">
               <PulledCopies key={project.root} />
+            </SettingsGroup>}
+            {project && <SettingsGroup id="s-key" title="Recovery code" description="This project’s key, for when encryption is on. Keep the code in a password manager or on paper: it opens the project on another computer, or if the keychain entry is lost. Anyone with it can read the project.">
+              <RecoveryCode key={project.root} />
             </SettingsGroup>}
             <OutboundLog />
 

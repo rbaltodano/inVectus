@@ -32,6 +32,30 @@ pub struct ProjectConfig {
     /// gaps, source files). Off unless the person turned it on, on this machine.
     #[serde(default)]
     pub agent_access: bool,
+    /// Random id naming this project's data key in the keychain (encryption at rest, phase 1;
+    /// `keys.rs`). `None` for projects made before keys existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    /// Recognises the right key without storing it: HMAC-SHA-256 of a fixed label and the id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_check: Option<String>,
+}
+
+/// Whether this project's data key is at hand.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "kebab-case")]
+pub enum KeyStatus {
+    /// Made before projects had keys (an existing project; migration is a later phase).
+    NoKey,
+    Available {
+        source: crate::keys::KeySource,
+    },
+    /// Not on this computer: restore it with the recovery code.
+    Missing,
+    /// A stored key exists but does not belong to this project, or could not be read.
+    Unusable {
+        reason: String,
+    },
 }
 
 pub struct Project {
@@ -47,6 +71,13 @@ impl Project {
         if root.join("project.json").exists() {
             bail!("{} already contains a project", root.display());
         }
+        // The key is kept before `project.json` names it, so no project records a key check
+        // without a stored key.
+        let project_id = crate::keys::new_project_id()?;
+        let key = crate::keys::DataKey::generate()?;
+        crate::keys::store(&project_id, &key)?;
+        let key_check = key.check_value(&project_id);
+        drop(key);
         // Owner-only from the start (audit 2026-11-12, item 6).
         for dir in ["vectors", "cache", "exports"] {
             crate::private::create_dir_all(&root.join(dir))?;
@@ -63,6 +94,8 @@ impl Project {
             agent: None,
             verify_sources: None,
             agent_access: false,
+            project_id: Some(project_id),
+            key_check: Some(key_check),
         };
         write_json_atomic(&root.join("project.json"), &config)?;
         let store = Store::open(&root.join("project.duckdb"))?;
@@ -187,6 +220,52 @@ impl Project {
     /// Who does this project's writing work, as last saved (an agent client id or `on-device`).
     pub fn agent(&self) -> Result<Option<String>> {
         Ok(read_config(&self.root)?.agent)
+    }
+
+    /// Whether this project's data key is available here, and from where.
+    pub fn key_status(&self) -> KeyStatus {
+        let (Some(id), Some(check)) = (&self.config.project_id, &self.config.key_check) else {
+            return KeyStatus::NoKey;
+        };
+        match crate::keys::load(id, check) {
+            Ok(Some((_, source))) => KeyStatus::Available { source },
+            Ok(None) => KeyStatus::Missing,
+            Err(e) => KeyStatus::Unusable {
+                reason: format!("{e:#}"),
+            },
+        }
+    }
+
+    /// This project's data key; an error when the project has none or it is not here.
+    pub fn data_key(&self) -> Result<crate::keys::DataKey> {
+        let (Some(id), Some(check)) = (&self.config.project_id, &self.config.key_check) else {
+            bail!("this project was made before projects had keys");
+        };
+        match crate::keys::load(id, check)? {
+            Some((key, _)) => Ok(key),
+            None => bail!(
+                "this project's key is not on this computer: restore it with the project's \
+                 recovery code"
+            ),
+        }
+    }
+
+    /// The recovery code of this project's key, for the person to keep somewhere safe.
+    pub fn recovery_code(&self) -> Result<String> {
+        Ok(self.data_key()?.recovery_code())
+    }
+
+    /// Keep this project's key on this computer from its recovery code (a project moved here,
+    /// or a lost keychain entry). Refused unless the code belongs to this project.
+    pub fn restore_key(&self, code: &str) -> Result<()> {
+        let (Some(id), Some(check)) = (&self.config.project_id, &self.config.key_check) else {
+            bail!("this project was made before projects had keys");
+        };
+        let key = crate::keys::DataKey::from_recovery_code(code)?;
+        if key.check_value(id) != *check {
+            bail!("this recovery code belongs to another project");
+        }
+        crate::keys::store(id, &key)
     }
 
     /// Change the display name without moving the project or touching its database.
@@ -459,6 +538,31 @@ mod tests {
         let p = Project::open(&dir.path().join("demo")).unwrap();
         assert_eq!(p.config.name, "demo");
         assert!(Project::create(&dir.path().join("demo.invectus")).is_err());
+        // A new project has a key: stored, recognised, restorable from its recovery code.
+        let id = p.config.project_id.clone().unwrap();
+        assert!(matches!(p.key_status(), KeyStatus::Available { .. }));
+        let code = p.recovery_code().unwrap();
+        let json = std::fs::read_to_string(p.root.join("project.json")).unwrap();
+        assert!(
+            json.contains(&id) && !json.contains(&code),
+            "the key never goes into project.json"
+        );
+        crate::keys::forget(&id).unwrap();
+        assert_eq!(p.key_status(), KeyStatus::Missing);
+        assert!(p.data_key().is_err());
+        let other = crate::keys::DataKey::generate().unwrap().recovery_code();
+        assert!(
+            p.restore_key(&other)
+                .unwrap_err()
+                .to_string()
+                .contains("another project")
+        );
+        p.restore_key(&code).unwrap();
+        assert!(matches!(p.key_status(), KeyStatus::Available { .. }));
+        assert_eq!(
+            Project::open(&p.root).unwrap().recovery_code().unwrap(),
+            code
+        );
     }
 
     #[test]

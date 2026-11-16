@@ -1182,7 +1182,9 @@ mod tests {
         agent
             .run_tool("project_status", serde_json::json!({"project": b}))
             .unwrap();
-        // Nothing open at all: the same refusal.
+        // Nothing open at all: the same refusal. (The first agent's session holds B open, and
+        // Windows refuses a second open of one database file in a process.)
+        drop(agent);
         let mut fresh = super::Agent::default();
         let args = serde_json::json!({"project": b, "collection": "x", "query": "q", "k": 1});
         assert!(
@@ -1211,11 +1213,11 @@ mod tests {
             let e = agent.run_tool(tool, args).unwrap_err();
             assert!(e.contains("outside the folders granted"), "{tool}: {e}");
         }
+        // A real file outside the granted folders (no Unix-only path).
+        let outside = elsewhere.path().join("notes.csv");
+        std::fs::write(&outside, "text\nhello\n").unwrap();
         let e = agent
-            .run_tool(
-                "inspect_source",
-                serde_json::json!({"source": "/etc/hosts"}),
-            )
+            .run_tool("inspect_source", serde_json::json!({"source": outside}))
             .unwrap_err();
         assert!(e.contains("outside the folders granted"), "{e}");
     }

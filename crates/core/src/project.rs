@@ -44,6 +44,10 @@ pub struct ProjectConfig {
     /// database.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub store_encrypted: bool,
+    /// Sources and verification caches use the authenticated file format (phase 4). Separate
+    /// from store_encrypted: projects created during phase 3 may still have plaintext files.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub files_encrypted: bool,
 }
 
 impl ProjectConfig {
@@ -167,6 +171,7 @@ impl Project {
             project_id: Some(project_id),
             key_check: Some(key_check),
             store_encrypted: true,
+            files_encrypted: true,
         };
         write_json_atomic(&root.join("project.json"), &config)?;
         let store = Store::open_encrypted(&root.join("project.duckdb"), &key)?;
@@ -194,6 +199,7 @@ impl Project {
             with_suffix(path)
         };
         let config = load_config(&root)?;
+        validate_file_encryption(&root, &config)?;
         Ok((root, config))
     }
 
@@ -490,6 +496,10 @@ struct EncryptedRecord {
     ids: Vec<String>,
     #[serde(default)]
     roots: Vec<String>,
+    #[serde(default)]
+    file_ids: Vec<String>,
+    #[serde(default)]
+    file_roots: Vec<String>,
 }
 
 static ENCRYPTED_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -514,37 +524,89 @@ fn known_encrypted(root: &Path, config: &ProjectConfig) -> bool {
             .is_some_and(|id| r.ids.contains(id))
 }
 
+pub(crate) fn validate_file_encryption(root: &Path, config: &ProjectConfig) -> Result<()> {
+    if !config.store_encrypted && known_encrypted(root, config) {
+        bail!(
+            "this project was encrypted on this computer; refusing a plaintext database downgrade"
+        );
+    }
+    let r = read_encrypted();
+    let known = r.file_roots.contains(&root_key(root))
+        || config
+            .project_id
+            .as_ref()
+            .is_some_and(|id| r.file_ids.contains(id));
+    if known && !config.files_encrypted {
+        bail!(
+            "this project's source and cache files were encrypted on this computer; refusing a plaintext downgrade"
+        );
+    }
+    if config.files_encrypted && !config.store_encrypted {
+        bail!("encrypted source and cache files require an encrypted project database");
+    }
+    Ok(())
+}
+
 /// Best effort: the project still opens if the record cannot be written; it is retried on
 /// every open.
 fn remember_encrypted(root: &Path, config: &ProjectConfig) {
+    if let Err(e) = record_encrypted(root, config) {
+        eprintln!(
+            "warning: could not record that {} is encrypted: {e:#}",
+            root.display()
+        );
+    }
+}
+
+fn record_encrypted(root: &Path, config: &ProjectConfig) -> Result<()> {
     let _lock = ENCRYPTED_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let file = encrypted_file().ok_or_else(|| anyhow::anyhow!("no OS data folder"))?;
+    crate::private::create_dir_all(file.parent().context("no settings folder")?)?;
+    // Lock a stable sibling, not the JSON file that is atomically replaced. The process-local
+    // mutex alone cannot stop another app/CLI process overwriting an intervening addition.
+    let lock_path = file.with_extension("lock");
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    // Never truncate a file another process may currently have locked (Windows enforces
+    // byte-range locks). Permissions are tightened without replacing the lock's inode.
+    let record_lock = options.open(&lock_path)?;
+    crate::private::restrict(&lock_path)?;
+    record_lock
+        .lock()
+        .context("locking the encryption downgrade record")?;
     let mut r = read_encrypted();
     let key = root_key(root);
     let id = config.project_id.clone();
-    if r.roots.contains(&key) && id.as_ref().is_none_or(|id| r.ids.contains(id)) {
-        return;
+    let files_recorded = !config.files_encrypted
+        || (r.file_roots.contains(&key) && id.as_ref().is_none_or(|id| r.file_ids.contains(id)));
+    if r.roots.contains(&key) && id.as_ref().is_none_or(|id| r.ids.contains(id)) && files_recorded {
+        return Ok(());
     }
     let tmp = std::env::temp_dir();
     r.roots.retain(|p| {
         p != &key
             && !(Path::new(p).starts_with(&tmp) && !Path::new(p).join("project.json").exists())
     });
-    r.roots.push(key);
-    if let Some(id) = id.filter(|id| !r.ids.contains(id)) {
-        r.ids.push(id);
+    r.roots.push(key.clone());
+    if let Some(id) = id.as_ref().filter(|id| !r.ids.contains(id)) {
+        r.ids.push(id.clone());
     }
-    let written = match encrypted_file() {
-        Some(file) => serde_json::to_vec_pretty(&r)
-            .map_err(anyhow::Error::from)
-            .and_then(|b| crate::private::write(&file, &b)),
-        None => Err(anyhow::anyhow!("no OS data folder")),
-    };
-    if let Err(e) = written {
-        eprintln!(
-            "warning: could not record that {} is encrypted: {e:#}",
-            root.display()
-        );
+    if config.files_encrypted {
+        r.file_roots.retain(|p| {
+            p != &key
+                && !(Path::new(p).starts_with(&tmp) && !Path::new(p).join("project.json").exists())
+        });
+        r.file_roots.push(key);
+        if let Some(id) = id.filter(|id| !r.file_ids.contains(id)) {
+            r.file_ids.push(id);
+        }
     }
+    crate::private::write(&file, &serde_json::to_vec_pretty(&r)?)
 }
 
 // ---- Consent kept per machine --------------------------------------------------------------
@@ -640,6 +702,65 @@ pub fn agent_access_default() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn downgrade_record_child() {
+        let Ok(base) = std::env::var("INVECTUS_GUARD_TEST_ROOT") else {
+            return;
+        };
+        let child: usize = std::env::var("INVECTUS_GUARD_TEST_CHILD")
+            .unwrap()
+            .parse()
+            .unwrap();
+        for i in 0..16 {
+            let root = Path::new(&base).join(format!("project-{child}-{i}.invectus"));
+            std::fs::create_dir_all(&root).unwrap();
+            let config: ProjectConfig = serde_json::from_value(serde_json::json!({
+                "format_version":1,"name":"Guard test","network_enabled":false,
+                "project_id":format!("{child:016x}{i:016x}"),
+                "store_encrypted":true,"files_encrypted":true
+            }))
+            .unwrap();
+            write_json_atomic(&root.join("project.json"), &config).unwrap();
+            record_encrypted(&root, &config).unwrap();
+        }
+    }
+
+    #[test]
+    fn concurrent_processes_preserve_all_encryption_downgrade_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = dir.path().join("settings");
+        let mut children = Vec::new();
+        for i in 0..4 {
+            children.push(
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "project::tests::downgrade_record_child"])
+                    .env("INVECTUS_DATA_DIR", &settings)
+                    .env("INVECTUS_GUARD_TEST_ROOT", dir.path())
+                    .env("INVECTUS_GUARD_TEST_CHILD", i.to_string())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .unwrap(),
+            );
+        }
+        for child in children {
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let record: EncryptedRecord = serde_json::from_slice(
+            &std::fs::read(settings.join("encrypted-projects.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(record.ids.len(), 64);
+        assert_eq!(record.roots.len(), 64);
+        assert_eq!(record.file_ids.len(), 64);
+        assert_eq!(record.file_roots.len(), 64);
+    }
 
     #[test]
     fn agent_model_preference_is_optional_persistent_and_validated() {

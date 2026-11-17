@@ -17,6 +17,7 @@ libduckdb-sys = { version = "=1.20000.0", default-features = false }
 keyring.workspace = true
 url.workspace = true
 getrandom = "0.3"
+ring = "=0.17.14"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

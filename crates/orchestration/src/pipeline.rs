@@ -173,7 +173,10 @@ pub struct ImportPreview {
 /// The first `rows` items an import would produce, and how many chunks each becomes.
 pub fn preview_import(session: &Shared, form: ImportForm, rows: usize) -> OpResult<ImportPreview> {
     let req = request_for_session(session, form)?;
-    let preview = invectus_ingest::preview(&req, rows).map_err(err)?;
+    let files = with_session(session, |s| {
+        invectus_core::project_files::ProjectFiles::for_project(&s.project)
+    })?;
+    let preview = invectus_ingest::preview_with_files(&req, rows, Some(&files)).map_err(err)?;
     let tokenizer = load_chunk_tokenizer(&req.chunking).map_err(err)?;
     let chunk_counts = preview
         .rows
@@ -327,7 +330,11 @@ pub fn inspect_source(
         }
         _ => (Vec::new(), None),
     };
-    let last_pull = invectus_ingest::remote::last_pull(&source);
+    let files = project_root
+        .map(invectus_core::project_files::ProjectFiles::at)
+        .transpose()
+        .map_err(err)?;
+    let last_pull = invectus_ingest::remote::last_pull(&source, files.as_ref()).map_err(err)?;
     if source.is_remote() && !source.path().is_file() {
         return Ok(SourceInfo {
             kind: source.kind().into(),
@@ -342,7 +349,9 @@ pub fn inspect_source(
             unreadable: 0,
         });
     }
-    let table = invectus_ingest::source::read(&source, Some(SOURCE_LOOK_ROWS)).map_err(err)?;
+    let table =
+        invectus_ingest::source::read_with_files(&source, Some(SOURCE_LOOK_ROWS), files.as_ref())
+            .map_err(err)?;
     Ok(SourceInfo {
         kind: source.kind().into(),
         sheets,
@@ -451,14 +460,15 @@ pub fn start_pull(
     board: &SharedBoard,
     spec: &str,
 ) -> OpResult<JobInfo> {
-    let (source, root) = with_session(session, |s| {
+    let (source, root, files) = with_session(session, |s| {
         ensure_idle(board, &s.project)?;
         invectus_core::net::ensure_online("pulling a source")?;
         let source = resolve_source(spec, None, Some(&s.project.root))?;
         if !source.is_remote() {
             anyhow::bail!("{} is a local file; import it directly", source.describe());
         }
-        Ok((source, s.project.root.display().to_string()))
+        let files = invectus_core::project_files::ProjectFiles::for_project(&s.project)?;
+        Ok((source, s.project.root.display().to_string(), files))
     })?;
     let token = match source.integration() {
         Some(name) => invectus_core::secrets::get(name).map_err(err)?,
@@ -473,6 +483,7 @@ pub fn start_pull(
         Box::new(move |cancel, tick| {
             let mut cx = invectus_ingest::remote::PullContext {
                 token,
+                files: Some(&files),
                 cancel,
                 progress: tick,
             };

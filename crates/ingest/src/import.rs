@@ -49,8 +49,17 @@ pub struct Preview {
 
 /// Map the first `n` source rows without writing anything (the import wizard's preview).
 pub fn preview(req: &ImportRequest, n: usize) -> Result<Preview> {
+    preview_with_files(req, n, None)
+}
+
+/// Preview with the project's source-file policy and key, without writing plaintext files.
+pub fn preview_with_files(
+    req: &ImportRequest,
+    n: usize,
+    files: Option<&invectus_core::project_files::ProjectFiles>,
+) -> Result<Preview> {
     req.chunking.validate()?;
-    let table = source::read(&req.source, Some(n))?;
+    let table = source::read_with_files(&req.source, Some(n), files)?;
     let resolved = Resolved::new(&req.mapping, &table)?;
     let mut skipped = BTreeMap::new();
     let mut rows = Vec::new();
@@ -93,7 +102,8 @@ pub fn import_with(
             );
         }
     }
-    let table = source::read(&req.source, req.limit)?;
+    let files = invectus_core::project_files::ProjectFiles::for_project(project)?;
+    let table = source::read_with_files(&req.source, req.limit, Some(&files))?;
     let resolved = Resolved::new(&req.mapping, &table)?;
     let mut report = ImportReport {
         collection: req.collection.clone(),

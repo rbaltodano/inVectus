@@ -8,6 +8,8 @@ pub mod snapshots;
 pub mod source;
 
 pub use chunk::{ChunkPolicy, TokenChunking};
-pub use import::{ImportReport, ImportRequest, Preview, import, import_with, preview};
+pub use import::{
+    ImportReport, ImportRequest, Preview, import, import_with, preview, preview_with_files,
+};
 pub use mapping::{Mapping, MetaMapping, RoleMapping};
 pub use source::Source;

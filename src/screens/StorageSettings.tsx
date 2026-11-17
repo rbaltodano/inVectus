@@ -112,8 +112,7 @@ export function PulledCopies() {
   </div>;
 }
 
-/** The open project's data key: reveal its recovery code, or restore the key from one. Nothing
- *  is encrypted with it yet; the code matters once encryption is on. */
+/** The open project's data key: reveal its recovery code, or restore the key from one. */
 export function RecoveryCode() {
   const action = useAction();
   const [status, setStatus] = useState<KeyStatus>();

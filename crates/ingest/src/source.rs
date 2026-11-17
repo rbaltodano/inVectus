@@ -583,6 +583,16 @@ impl Table {
 }
 
 pub fn read(source: &Source, limit: Option<usize>) -> Result<Table> {
+    read_with_files(source, limit, None)
+}
+
+/// A remote snapshot is decrypted only with its explicit project context. Local files keep
+/// their existing readers; plaintext remote CSV is also parsed in memory to avoid spills.
+pub fn read_with_files(
+    source: &Source,
+    limit: Option<usize>,
+    files: Option<&invectus_core::project_files::ProjectFiles>,
+) -> Result<Table> {
     match source {
         Source::Csv { path } => read_table(path, false, limit),
         Source::Parquet { path } => read_table(path, true, limit),
@@ -603,9 +613,73 @@ pub fn read(source: &Source, limit: Option<usize>) -> Result<Table> {
                     source.describe()
                 );
             }
-            read_table(snapshot, false, limit)
+            let bytes = match files {
+                Some(files) => files.read(snapshot)?,
+                None => {
+                    #[cfg(not(test))]
+                    bail!("open the source's project before reading a pulled snapshot");
+                    #[cfg(test)]
+                    {
+                        let bytes = std::fs::read(snapshot)?;
+                        if invectus_core::encrypted_file::is_encrypted(&bytes) {
+                            bail!("this source is encrypted: open its project before reading it");
+                        }
+                        bytes
+                    }
+                }
+            };
+            read_snapshot_csv(&bytes, limit)
         }
     }
+}
+
+/// Keep pulled data entirely in memory: DuckDB's disk reader could create plaintext spill
+/// files. Empty cells retain the CSV reader's existing NULL behavior; all ids stay strings.
+fn read_snapshot_csv(bytes: &[u8], limit: Option<usize>) -> Result<Table> {
+    let bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes);
+    let mut reader = csv::ReaderBuilder::new().from_reader(bytes);
+    let headers = reader
+        .headers()
+        .context("reading snapshot CSV headers")?
+        .clone();
+    if headers.is_empty() {
+        bail!("the snapshot has no columns");
+    }
+    let mut seen = std::collections::HashSet::new();
+    let columns = headers
+        .iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let base = if h.is_empty() {
+                format!("column{i}")
+            } else {
+                h.to_string()
+            };
+            let mut name = base.clone();
+            let mut suffix = 1;
+            while !seen.insert(name.to_lowercase()) {
+                name = format!("{base}_{suffix}");
+                suffix += 1;
+            }
+            name
+        })
+        .collect();
+    let rows = reader
+        .records()
+        .take(limit.unwrap_or(usize::MAX))
+        .map(|record| {
+            Ok(record
+                .context("reading snapshot CSV row")?
+                .iter()
+                .map(|s| (!s.is_empty()).then(|| s.to_string()))
+                .collect())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Table {
+        columns,
+        rows,
+        unreadable: Vec::new(),
+    })
 }
 
 /// Worksheet names of a workbook, in order.
@@ -1110,6 +1184,58 @@ mod tests {
             .unwrap();
         let e = read(&s, None).err().unwrap().to_string();
         assert!(e.contains("not been pulled"), "{e}");
+    }
+
+    #[test]
+    fn snapshot_csv_preserves_text_and_handles_headers_and_limits() {
+        let table = read_snapshot_csv(
+            b"\xef\xbb\xbfid,name,Name,,name_1,text\n007,first,second,,third,\"line one\nline two\"\n008,last,,,,\n",
+            Some(1),
+        ).unwrap();
+        assert_eq!(
+            table.columns,
+            ["id", "name", "Name_1", "column3", "name_1_1", "text"]
+        );
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0][0].as_deref(), Some("007"));
+        assert_eq!(table.rows[0][3], None);
+        assert_eq!(table.rows[0][5].as_deref(), Some("line one\nline two"));
+        assert!(
+            read_snapshot_csv(b"a,b\n1\n", None).is_err(),
+            "malformed rows are refused"
+        );
+        assert!(read_snapshot_csv(b"", None).is_err());
+        assert!(
+            read_snapshot_csv(b"a,b\n1,2\n", Some(0))
+                .unwrap()
+                .rows
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn legacy_plaintext_snapshot_still_reads_with_explicit_project_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("legacy.invectus");
+        invectus_core::private::write(
+            &root.join("project.json"),
+            br#"{"format_version":1,"name":"Legacy","network_enabled":false}"#,
+        )
+        .unwrap();
+        let files = invectus_core::project_files::ProjectFiles::at(&root).unwrap();
+        assert!(!files.encrypted());
+        let source = Source::parse_remote("notion:0123456789abcdef0123456789abcdef", &root)
+            .unwrap()
+            .unwrap();
+        files
+            .write(source.path(), b"id,text\n007,legacy note\n")
+            .unwrap();
+        let table = read_with_files(&source, None, Some(&files)).unwrap();
+        assert_eq!(table.rows[0][1].as_deref(), Some("legacy note"));
+        assert_eq!(
+            std::fs::read(source.path()).unwrap(),
+            b"id,text\n007,legacy note\n"
+        );
     }
 
     #[test]

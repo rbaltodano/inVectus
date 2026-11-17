@@ -3495,3 +3495,36 @@ no rollback protection, random-nonce bound (docs/encryption-plan.md, phase 3).
 - **Unverified:** Windows and Linux builds of the C++ shim (no CI run yet). The Unlock prompt
   was not exercised in the packaged app. No speed measurement of encrypted versus plaintext
   stores yet (phase 7).
+
+## 2026-11-17 — Encryption phase 4: encrypted pulled copies and check cache; recovery code at creation
+
+Built by gpt-6.1-sol (Codex) in this thread; its run ended at a usage limit before commit, so
+Opus 5.5 re-ran the checks and committed.
+
+### Changes
+- `crates/core/src/encrypted_file.rs`: authenticated file envelope (ring 0.17.14 AES-256-GCM,
+  64 KiB blocks). A fresh random salt per write; HKDF-SHA256 derives a key bound to project id
+  and relative path. Block-index nonces. Header, length and block index are authenticated.
+  512 MiB limit.
+- `crates/core/src/project_files.rs`: source/cache file policy plus key, without a database
+  connection. Only `sources/` and `cache/`; symlinks refused; atomic ciphertext writes.
+- Pulled CSV/JSON snapshots (`crates/ingest`) and verification cache (`crates/verify`) use it
+  for new projects (`files_encrypted: true` in project.json). Decrypted CSV is parsed in memory
+  (`csv` 1.4.0), never written as a plaintext temp file. Key or authentication errors fail;
+  they never fall back to plaintext or the network.
+- Downgrade record now covers `files_encrypted` too and is written under a cross-process file
+  lock (review found app/CLI writes could overwrite each other). Test:
+  `concurrent_processes_preserve_all_encryption_downgrade_records`.
+- New Project shows the recovery code before the first import (`src/SaveRecoveryCode.tsx`),
+  with a "saved it" acknowledgement; it stays in Settings.
+- `docs/encryption-plan.md` (phase 4, coverage section) and `docs/security.md` updated.
+- Older projects keep their coverage until migration (phase 6). Vectors, exports and
+  `project.json` stay plaintext. Do not describe whole projects as encrypted yet.
+
+### Checks (arm64 macOS only)
+- `cargo test --workspace --release --no-fail-fast`: 233 passed, 0 failed (Codex's final run).
+  Opus 5.5 then ran `cargo clippy --workspace --all-targets --release -- -D warnings`
+  and `cargo fmt --all --check`, both clean.
+- `npm run build` passes; `npm run test:ui` 58/58.
+- **Unverified:** Windows/Linux (no CI run on this commit); the recovery-code step and
+  encrypted pulls were not exercised in the packaged app.

@@ -116,6 +116,7 @@ fn accepted_description(
 #[derive(Clone, Debug)]
 pub struct Prepared {
     pub root: std::path::PathBuf,
+    files: invectus_core::project_files::ProjectFiles,
     collection_id: String,
     space_id: String,
     run_id: String,
@@ -240,6 +241,7 @@ pub fn prepare(
             0.8
         });
     Ok(Prepared {
+        files: invectus_core::project_files::ProjectFiles::for_project(project)?,
         root: project.root.clone(),
         collection_id: table.collection_id.clone(),
         space_id: table.space_id.clone(),
@@ -266,7 +268,13 @@ pub fn fetch(p: &Prepared, cancel: Option<&invectus_core::CancelToken>) -> Fetch
         let mut sources = Vec::new();
         let mut hits: Vec<ExternalHit> = Vec::new();
         for s in &opts.sources {
-            match crate::connectors::search_in(&p.root, *s, query, opts.max_per_source) {
+            match crate::connectors::search_with_files(
+                &p.root,
+                &p.files,
+                *s,
+                query,
+                opts.max_per_source,
+            ) {
                 Ok(SourceResult {
                     source,
                     query,

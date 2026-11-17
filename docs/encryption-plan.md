@@ -1,4 +1,4 @@
-# Encryption at rest: plan (proposal, 2026-11-12)
+# Encryption at rest: plan and implementation
 
 Owner request: everything a project stores on the device is encrypted. This plan says what that
 covers, what it protects against, how to build it, and what is left for the owner to decide.
@@ -16,7 +16,13 @@ covers, what it protects against, how to build it, and what is left for the owne
 The honest claim is "encrypted at rest", not "bulletproof". Website and docs must say exactly
 that.
 
-## What a project holds today (all plaintext)
+## Project contents and current coverage (2026-11-17)
+
+New projects encrypt the database, its WAL/spill files, pulled CSV/JSON snapshots and
+verification cache. Vectors, exports and `project.json` remain plaintext. Existing projects
+retain the encryption coverage they were created with until explicit migration; merely opening
+one does not rewrite it. The threat table above describes the completed plan, not today's
+partial coverage.
 
 | Path | Contents | Sensitive |
 |---|---|---|
@@ -43,8 +49,8 @@ files; DuckDB temp files are covered by DuckDB's own encryption (below).
   opens with it. Lose both the keychain entry and the recovery code, and the data is gone. That
   is the price of real encryption, and the UI must say so plainly.
 
-**DuckDB (`project.duckdb`).** Upgrade from DuckDB 1.2 to the newest stable 1.4.x (1.4.2 or
-later; earlier 1.4 releases had encryption fixes). Open with
+**DuckDB (`project.duckdb`).** The original upgrade proposal was superseded: the pinned crate
+already bundles DuckDB 2.0. See phases 2–3 for the OS-random shim and its limits. Open with
 `ATTACH … (ENCRYPTION_KEY …, ENCRYPTION_CIPHER 'GCM')`. That covers the database, its
 write-ahead log and temp files with authenticated AES-256-GCM. The upgrade is a risk on its own
 (storage format, extension and API changes); it needs the full test suite and the gapmap-full
@@ -84,12 +90,13 @@ machine without a keychain, `INVECTUS_PROJECT_KEY` supplies it (documented as le
    2026-11-16** (`crates/core/src/keys.rs`): new projects get a key in the keychain and a
    `project_id`/`key_check` in `project.json`; `invectus key status|show|restore`; Settings →
    Network → Recovery code. Tests and `cargo run` keep keys in `.spike-data/dev-keys`
-   (`.cargo/config.toml`), never the keychain. The app does not yet show the code right after
-   creating a project (Settings only).
+   (`.cargo/config.toml`), never the keychain. The app shows the recovery code after project
+   creation and before the first import, with an explicit saved-code acknowledgement. It stays
+   available in Settings. Navigating away skips acknowledgement without starting the import.
 2. DuckDB 1.4 upgrade on its own, with every test and benchmark re-run (medium; the main risk).
    **Finding 2026-11-16: no upgrade needed, but writing is blocked.** `duckdb =1.20000.0`
    already bundles DuckDB **v2.0.0** (the crate version encodes the engine version; 1.20000.x =
-   2.0.x, and v2.0.0 is the newest DuckDB release). It reads encrypted databases, but refuses
+   2.0.x). It reads encrypted databases, but refuses
    to write one ("read-only crypto module"): without `httpfs` its mbedtls module would draw
    GCM nonces from `RandomEngine`, a non-cryptographic generator, and DuckDB only allows that
    behind `force_mbedtls_unsafe` ("NOT securely encrypted"). The crate's `httpfs` feature
@@ -131,9 +138,31 @@ machine without a keychain, `INVECTUS_PROJECT_KEY` supplies it (documented as le
      the folder.
    - The key passes through SQL text; only our final copy of that string is wiped.
    - A project moved to a new folder *and* stripped of its id is not recognised by the guard.
-4. Encrypted snapshot and cache files (small to medium).
+4. Encrypted snapshot and cache files. **Done for new projects, 2026-11-17.**
+   - `core::encrypted_file` uses ring 0.17.14 AES-256-GCM in 64 KiB blocks. Each write creates a
+     random 256-bit salt; HKDF-SHA256 derives a fresh key bound to the project id and normalized
+     relative path. Block-index nonces are unique under that derived key, including rewrites.
+     The versioned header, total length and block index are authenticated; empty files have a
+     tag. Wrong keys, changed paths, block swaps, truncation and plaintext substitutions fail.
+     The reader bounds plaintext at 512 MiB and validates the exact stored length before
+     allocating a plaintext buffer. See the format contract in `encrypted_file.rs` and the
+     [ring AEAD API](https://docs.rs/ring/0.17.14/ring/aead/struct.LessSafeKey.html).
+   - `core::project_files` carries the policy and key without opening DuckDB. It only handles
+     `sources/` and `cache/`, rejects symlink paths and writes ciphertext through private atomic
+     temporaries. CSV is decrypted and parsed entirely in memory, never via a plaintext temp
+     CSV or scratch-DuckDB disk scan. JSON source records and verification answers use the same
+     envelope; authentication/key errors do not trigger a network fallback.
+   - `files_encrypted` is separate from `store_encrypted`: existing phase-3 projects may already
+     contain plaintext sources/cache. Older projects remain unchanged. The per-machine
+     downgrade record covers both flags and is updated under a cross-process file lock.
+     The record remains best-effort if settings are unwritable; moving and stripping a
+     project's identity can still evade the local guard.
+   - Complete old versions of a file can still be replayed; filenames and sizes remain visible.
+     Plaintext exists in process memory, and comprehensive wiping of all runtime/library
+     copies is not guaranteed. This phase does not encrypt Lance vectors or existing projects.
 5. Vectors: prototype route 1, measure on `gapmap-full`, decide, finish (large).
-6. Migration of existing projects, export warning, log audit (medium).
+6. Migration of existing projects, export warning, log audit (medium). Deleting an old plaintext
+   copy cannot guarantee erasure on SSDs, snapshots or backups; migration must explain that.
 7. Docs, website Privacy copy, PROGRESS measurements (search and import speed before and after).
 
 Until phase 7 lands, the website must not claim on-device encryption.

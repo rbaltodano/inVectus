@@ -33,6 +33,7 @@ fn short_name(path: &Path) -> Option<String> {
 
 /// Every pulled copy in `project`, with the collections that use it.
 pub fn list(project: &Project) -> Result<Vec<SnapshotInfo>> {
+    let files = invectus_core::project_files::ProjectFiles::for_project(project)?;
     let mut users: Vec<(String, String)> = Vec::new(); // (snapshot short name, collection)
     for id in project.store.collection_ids()? {
         if let Some(c) = project.store.collection(&id)?
@@ -59,9 +60,18 @@ pub fn list(project: &Project) -> Result<Vec<SnapshotInfo>> {
             if !f.file_type()?.is_file() {
                 continue;
             }
-            let record: Option<serde_json::Value> = std::fs::read(path.with_extension("json"))
-                .ok()
-                .and_then(|b| serde_json::from_slice(&b).ok());
+            let record: Option<serde_json::Value> = match files.read(&path.with_extension("json")) {
+                Ok(bytes) => {
+                    Some(serde_json::from_slice(&bytes).context("reading the snapshot record")?)
+                }
+                Err(e)
+                    if e.downcast_ref::<std::io::Error>()
+                        .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+                {
+                    None
+                }
+                Err(e) => return Err(e),
+            };
             let pull = record.as_ref().map(|r| &r["pull"]);
             out.push(SnapshotInfo {
                 used_by: users
@@ -119,13 +129,15 @@ mod tests {
     fn a_shared_copy_survives_until_no_collection_uses_it() {
         let dir = tempfile::tempdir().unwrap();
         let p = Project::create(&dir.path().join("p")).unwrap();
+        let files = invectus_core::project_files::ProjectFiles::for_project(&p).unwrap();
         let snap = p.root.join("sources/notion/abc.csv");
-        invectus_core::private::write(&snap, b"a\n1\n").unwrap();
-        invectus_core::private::write(
-            &snap.with_extension("json"),
-            br#"{"pull":{"origin":"Notion database abc","rows":1,"pulled_at":5}}"#,
-        )
-        .unwrap();
+        files.write(&snap, b"a\n1\n").unwrap();
+        files
+            .write(
+                &snap.with_extension("json"),
+                br#"{"pull":{"origin":"Notion database abc","rows":1,"pulled_at":5}}"#,
+            )
+            .unwrap();
         for c in ["one", "two"] {
             p.store
                 .upsert_collection(&CollectionRecord {
@@ -154,9 +166,10 @@ mod tests {
     fn an_unused_copy_and_its_record_are_removed() {
         let dir = tempfile::tempdir().unwrap();
         let p = Project::create(&dir.path().join("p")).unwrap();
+        let files = invectus_core::project_files::ProjectFiles::for_project(&p).unwrap();
         let snap = p.root.join("sources/tally/f1.csv");
-        invectus_core::private::write(&snap, b"a\n1\n").unwrap();
-        invectus_core::private::write(&snap.with_extension("json"), b"{}").unwrap();
+        files.write(&snap, b"a\n1\n").unwrap();
+        files.write(&snap.with_extension("json"), b"{}").unwrap();
         forget(&p, "tally/f1.csv").unwrap();
         assert!(!snap.exists() && !snap.with_extension("json").exists());
         assert!(

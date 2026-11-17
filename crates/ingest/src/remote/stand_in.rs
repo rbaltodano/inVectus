@@ -147,6 +147,7 @@ fn pull_spec(spec: &str, token: &str) -> anyhow::Result<(Vec<String>, Vec<Vec<St
     let mut progress = |_: &str, _: usize, _: usize| {};
     let mut cx = PullContext {
         token: Some(token.into()),
+        files: None,
         cancel: &cancel,
         progress: &mut progress,
     };
@@ -957,6 +958,7 @@ fn cancelling_stops_a_rate_limit_wait() {
     let mut progress = |_: &str, _: usize, _: usize| {};
     let mut cx = PullContext {
         token: Some("tly".into()),
+        files: None,
         cancel: &cancel,
         progress: &mut progress,
     };
@@ -1040,4 +1042,105 @@ fn google_sheets_redirects_stay_on_google() {
     .unwrap();
     assert_eq!(h, ["name", "idea"]);
     assert_eq!(rows.len(), 1);
+}
+
+#[test]
+fn encrypted_pull_reads_lists_previews_and_imports_without_plaintext_files() {
+    use crate::{ChunkPolicy, ImportRequest, Mapping, MetaMapping, RoleMapping};
+    use invectus_core::project_files::ProjectFiles;
+    invectus_core::paths::use_data_dir_for_tests(
+        std::env::temp_dir().join(format!("invectus-ingest-test-{}", std::process::id())),
+    );
+    let service = start(|_| Reply {
+        status: 200,
+        body: "id,title,text\n007,Private title,PRIVATE-SNAPSHOT-MARKER\n".into(),
+        headers: vec![("Content-Type".into(), "text/csv".into())],
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let mut project = invectus_core::Project::create(&dir.path().join("encrypted")).unwrap();
+    let files = ProjectFiles::for_project(&project).unwrap();
+    assert!(files.encrypted());
+    let source = Source::parse_remote(
+        "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/edit",
+        &project.root,
+    )
+    .unwrap()
+    .unwrap();
+    let cancel = CancelToken::default();
+    let mut progress = |_: &str, _: usize, _: usize| {};
+    let pulled = pull(
+        &source,
+        &mut PullContext {
+            token: None,
+            files: Some(&files),
+            cancel: &cancel,
+            progress: &mut progress,
+        },
+    )
+    .unwrap();
+    assert_eq!(pulled.rows, 1);
+    let ciphertext = std::fs::read(source.path()).unwrap();
+    assert!(
+        !ciphertext
+            .windows(b"PRIVATE-SNAPSHOT-MARKER".len())
+            .any(|w| w == b"PRIVATE-SNAPSHOT-MARKER")
+    );
+    let record = std::fs::read(source.path().with_extension("json")).unwrap();
+    assert!(
+        !record
+            .windows(b"Google Sheet".len())
+            .any(|w| w == b"Google Sheet")
+    );
+    assert!(
+        crate::source::read(&source, None).is_err(),
+        "no context must not read ciphertext"
+    );
+    let req = ImportRequest {
+        collection: "private".into(),
+        source: source.clone(),
+        mapping: Mapping {
+            id: Some("id".into()),
+            title: Some("title".into()),
+            text: vec!["text".into()],
+            date: None,
+            url: None,
+            role: RoleMapping::default(),
+            meta: MetaMapping::All,
+        },
+        chunking: ChunkPolicy::default(),
+        limit: None,
+    };
+    invectus_core::net::scoped_offline(true, || {
+        let table = crate::source::read_with_files(&source, None, Some(&files)).unwrap();
+        assert_eq!(table.rows[0][0].as_deref(), Some("007"));
+        assert_eq!(
+            super::last_pull(&source, Some(&files)).unwrap().unwrap()["rows"],
+            1
+        );
+        let preview = crate::preview_with_files(&req, 5, Some(&files)).unwrap();
+        assert_eq!(preview.rows.len(), 1);
+        let report = crate::import(&mut project, &req).unwrap();
+        assert_eq!(report.inserted, 1);
+        assert_eq!(crate::import(&mut project, &req).unwrap().unchanged, 1);
+        let copies = crate::snapshots::list(&project).unwrap();
+        assert_eq!(copies[0].used_by, ["private"]);
+        assert!(crate::snapshots::forget(&project, &copies[0].name).is_err());
+    });
+    assert_eq!(service.seen().len(), 1, "offline reads must not re-pull");
+    let mut damaged = ciphertext.clone();
+    *damaged.last_mut().unwrap() ^= 1;
+    std::fs::write(source.path(), damaged).unwrap();
+    assert!(crate::source::read_with_files(&source, None, Some(&files)).is_err());
+    std::fs::write(source.path(), &ciphertext).unwrap();
+    let mut damaged = record;
+    *damaged.last_mut().unwrap() ^= 1;
+    std::fs::write(source.path().with_extension("json"), damaged).unwrap();
+    assert!(super::last_pull(&source, Some(&files)).is_err());
+    assert!(crate::snapshots::list(&project).is_err());
+    for kind in std::fs::read_dir(project.root.join("sources")).unwrap() {
+        for file in std::fs::read_dir(kind.unwrap().path()).unwrap() {
+            let file = file.unwrap();
+            assert!(!file.file_name().to_string_lossy().ends_with(".part"));
+        }
+    }
 }

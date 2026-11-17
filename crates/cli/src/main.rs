@@ -22,7 +22,7 @@ use invectus_index::{
 use invectus_ingest::gapmap::{GapmapPaths, import_gapmap, parse_models_yaml};
 use invectus_ingest::{
     ChunkPolicy, ImportRequest, Mapping, MetaMapping, RoleMapping, Source, TokenChunking,
-    import_with, preview,
+    import_with, preview_with_files,
 };
 use invectus_regions::{RegionOptions, STABLE_AT, map_data, run_regions};
 use invectus_unsearch::{CalibrateOptions, CheckOptions, check, run_calibration};
@@ -698,6 +698,7 @@ fn models(cli_dir: &Option<PathBuf>) -> Result<ModelStore> {
 
 fn cmd_pull(p: &ProjectArg, spec: &str) -> Result<()> {
     let project = open(p)?;
+    let files = invectus_core::project_files::ProjectFiles::for_project(&project)?;
     let source = invectus_orchestration::resolve_source(spec, None, Some(&project.root))?;
     if !source.is_remote() {
         bail!("{} is a local file; import it directly", source.describe());
@@ -718,6 +719,7 @@ fn cmd_pull(p: &ProjectArg, spec: &str) -> Result<()> {
         &source,
         &mut invectus_ingest::remote::PullContext {
             token,
+            files: Some(&files),
             cancel: &cancel,
             progress: &mut tick,
         },
@@ -1460,7 +1462,8 @@ fn cmd_import(a: ImportArgs, models_dir: &Option<PathBuf>) -> Result<()> {
         limit: a.limit,
     };
     if let Some(n) = a.preview {
-        let pv = preview(&req, n)?;
+        let files = invectus_core::project_files::ProjectFiles::for_project(&project)?;
+        let pv = preview_with_files(&req, n, Some(&files))?;
         if a.json {
             return print_json(&pv);
         }

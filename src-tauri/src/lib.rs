@@ -710,9 +710,23 @@ async fn project_key_status(
 
 /// The open project's recovery code, shown when the person asks for it.
 #[tauri::command]
-async fn project_recovery_code(state: State<'_, AppState>) -> CmdResult<String> {
+async fn project_recovery_code(
+    state: State<'_, AppState>,
+    project: Option<String>,
+) -> CmdResult<String> {
     let session = state.session.clone();
-    off_thread(move || with_session(&session, |s| s.project.recovery_code())).await
+    off_thread(move || {
+        with_session(&session, |s| {
+            if project
+                .as_deref()
+                .is_some_and(|root| std::path::Path::new(root) != s.project.root)
+            {
+                anyhow::bail!("the open project changed; show its recovery code in Settings");
+            }
+            s.project.recovery_code()
+        })
+    })
+    .await
 }
 
 /// Keep the open project's key on this computer from its recovery code.

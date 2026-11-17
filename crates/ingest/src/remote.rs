@@ -61,6 +61,8 @@ pub struct Pulled {
 /// ([`Source::integration`]), progress and cancellation.
 pub struct PullContext<'a> {
     pub token: Option<String>,
+    /// Policy and key of the destination project (no key is serialized into the source).
+    pub files: Option<&'a invectus_core::project_files::ProjectFiles>,
     pub cancel: &'a CancelToken,
     /// `(phase, done, total)`; `total` is 0 when unknown.
     pub progress: &'a mut dyn FnMut(&str, usize, usize),
@@ -68,6 +70,10 @@ pub struct PullContext<'a> {
 
 /// Fetch `source` and replace its snapshot. Local sources are refused.
 pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
+    #[cfg(not(test))]
+    if cx.files.is_none() {
+        bail!("open the destination project before pulling a source");
+    }
     invectus_core::net::ensure_online(&format!("pulling {}", source.describe()))?;
     let (csv, rows) = match source {
         Source::GoogleSheet {
@@ -134,7 +140,7 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
         other => bail!("{} is a local source; nothing to pull", other.describe()),
     };
     let snapshot = source.path();
-    write_snapshot(snapshot, csv.as_bytes())?;
+    write_snapshot(snapshot, csv.as_bytes(), cx.files)?;
     let pulled = Pulled {
         origin: source.describe(),
         snapshot: snapshot.display().to_string(),
@@ -145,9 +151,10 @@ pub fn pull(source: &Source, cx: &mut PullContext) -> Result<Pulled> {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs()),
     };
-    invectus_core::private::write(
+    write_snapshot(
         &snapshot.with_extension("json"),
         &serde_json::to_vec_pretty(&json!({ "source": source, "pull": &pulled }))?,
+        cx.files,
     )?;
     Ok(pulled)
 }
@@ -319,17 +326,61 @@ pub(crate) fn wait_cancellable(d: Duration, cancel: Option<&CancelToken>) -> Res
 }
 
 /// The record of the last pull of `source`, if any.
-pub fn last_pull(source: &Source) -> Option<Value> {
-    let bytes = std::fs::read(source.path().with_extension("json")).ok()?;
-    serde_json::from_slice::<Value>(&bytes)
-        .ok()?
+pub fn last_pull(
+    source: &Source,
+    files: Option<&invectus_core::project_files::ProjectFiles>,
+) -> Result<Option<Value>> {
+    if !source.is_remote() {
+        return Ok(None);
+    }
+    let path = source.path().with_extension("json");
+    let read = match files {
+        Some(files) => files.read(&path),
+        None => {
+            #[cfg(not(test))]
+            bail!("open the source's project before reading its pull record");
+            #[cfg(test)]
+            {
+                std::fs::read(&path).map_err(anyhow::Error::from)
+            }
+        }
+    };
+    let bytes = match read {
+        Ok(bytes) => bytes,
+        Err(e)
+            if e.downcast_ref::<std::io::Error>()
+                .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    };
+    if files.is_none() && invectus_core::encrypted_file::is_encrypted(&bytes) {
+        bail!("this source record is encrypted: open its project before reading it");
+    }
+    Ok(serde_json::from_slice::<Value>(&bytes)
+        .context("reading the source's pull record")?
         .get("pull")
-        .cloned()
+        .cloned())
 }
 
 /// The snapshot, owner-only and written atomically (no partial file is left on failure).
-fn write_snapshot(path: &Path, bytes: &[u8]) -> Result<()> {
-    invectus_core::private::write(path, bytes)
+fn write_snapshot(
+    path: &Path,
+    bytes: &[u8],
+    files: Option<&invectus_core::project_files::ProjectFiles>,
+) -> Result<()> {
+    match files {
+        Some(files) => files.write(path, bytes),
+        None => {
+            #[cfg(not(test))]
+            bail!("open the destination project before writing a pulled snapshot");
+            #[cfg(test)]
+            {
+                invectus_core::private::write(path, bytes)
+            }
+        }
+    }
 }
 
 // ---- Google Sheets -------------------------------------------------------------------------
@@ -852,7 +903,7 @@ mod tests {
         ];
         let csv = write_csv(&cols, &rows);
         assert_eq!(csv_rows(&csv), 2);
-        write_snapshot(s.path(), csv.as_bytes()).unwrap();
+        write_snapshot(s.path(), csv.as_bytes(), None).unwrap();
         let t = source::read(&s, None).unwrap();
         assert_eq!(t.columns, cols);
         assert_eq!(t.rows[0][1].as_deref(), Some("A, \"quoted\""));
@@ -867,6 +918,7 @@ mod tests {
         let mut tick = |_: &str, _: usize, _: usize| {};
         let mut cx = PullContext {
             token: None,
+            files: None,
             cancel: &cancel,
             progress: &mut tick,
         };

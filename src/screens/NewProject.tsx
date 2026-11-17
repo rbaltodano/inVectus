@@ -9,14 +9,16 @@ import type { Page } from "../App";
 import SourcePicker, { type Picked } from "../SourcePicker";
 import { baseName, joinPath } from "../paths";
 import "./NewProject.css";
+import SaveRecoveryCode from "../SaveRecoveryCode";
 
 interface Props {
+  onProjectOpened: (p: ProjectInfo) => void;
   onCreated: (p: ProjectInfo, first?: Page) => void;
   onIntegrations: () => void;
   blocked?: JobInfo;
 }
 
-export default function NewProject({ onCreated, onIntegrations, blocked }: Props) {
+export default function NewProject({ onProjectOpened, onCreated, onIntegrations, blocked }: Props) {
   const [name, setName] = useState("");
   const [dir, setDir] = useState("");
   const [sources, setSources] = useState<Picked[]>([]);
@@ -26,6 +28,7 @@ export default function NewProject({ onCreated, onIntegrations, blocked }: Props
   const [access, setAccess] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState<{ project: ProjectInfo; first?: Page }>();
   const { agents, fallback } = useAgentOptions();
 
   useEffect(() => {
@@ -48,17 +51,23 @@ export default function NewProject({ onCreated, onIntegrations, blocked }: Props
     setError(undefined); setBusy(true);
     try {
       const p = await api.open(joinPath(dir, projectName), true);
+      // Keep the shell's identity in step with the backend while the recovery step waits.
+      // Navigating to Settings must show the project whose controls it will change.
+      onProjectOpened(p);
       const chosen = agent ? await api.setProjectAgent(p.root, agent).catch(() => p) : p;
       // Recorded on this computer; new projects start with the same choice next time.
       const withAgent = await api.setAgentAccess(access).catch(() => chosen);
+      onProjectOpened(withAgent);
       if (agent) { local.set(LAST_AGENT, agent); rememberAgent(agent); }
       // Each chosen source goes through Import in turn.
       const [first, ...rest] = sources.map((p) => p.path);
-      onCreated(withAgent, first ? { kind: "import", path: first, next: rest } : undefined);
+      setCreated({ project: withAgent, first: first ? { kind: "import", path: first, next: rest } : undefined });
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   };
 
   const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
+  if (created) return <SaveRecoveryCode project={created.project}
+    onContinue={() => onCreated(created.project, created.first)} />;
   return <div className="page new-project">
     <div className="page-head">
       <div className="np-head"><p className="eyebrow">Setup</p>

@@ -4,7 +4,7 @@
 //! (`cache/verify/`, 7 days), so repeating a verification needs no network.
 
 use anyhow::{Context, Result, bail};
-use invectus_core::Project;
+use invectus_core::{Project, project_files::ProjectFiles};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -427,7 +427,8 @@ pub fn search(
     query: &KeywordQuery,
     max: usize,
 ) -> Result<SourceResult> {
-    search_in(&project.root, source, query, max)
+    let files = ProjectFiles::for_project(project)?;
+    search_with_files(&project.root, &files, source, query, max)
 }
 
 /// [`search`] for the project at `root`, without holding the project.
@@ -437,10 +438,33 @@ pub fn search_in(
     query: &KeywordQuery,
     max: usize,
 ) -> Result<SourceResult> {
+    let files = ProjectFiles::at(root)?;
+    search_with_files(root, &files, source, query, max)
+}
+
+/// Uses the policy and key captured when the check was prepared, even if the app switches
+/// projects while waiting for outside sources.
+pub(crate) fn search_with_files(
+    root: &std::path::Path,
+    files: &ProjectFiles,
+    source: Source,
+    query: &KeywordQuery,
+    max: usize,
+) -> Result<SourceResult> {
     let q = source.query(query);
     let key = format!("{}|{q}|{}|{max}", source.name(), query.reviews_only);
     let path = cache_path(root, source, &key);
-    if let Ok(bytes) = std::fs::read(&path)
+    let cached = match files.read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(e)
+            if e.downcast_ref::<std::io::Error>()
+                .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            None
+        }
+        Err(e) => return Err(e).context("reading the saved external-check answer"),
+    };
+    if let Some(bytes) = cached
         && let Ok(mut r) = serde_json::from_slice::<SourceResult>(&bytes)
         && now().saturating_sub(r.fetched_at) < CACHE_DAYS * 86_400
     {
@@ -551,7 +575,7 @@ pub fn search_in(
             }
         }
     };
-    invectus_core::private::write(&path, &serde_json::to_vec(&result)?)?;
+    files.write(&path, &serde_json::to_vec(&result)?)?;
     Ok(result)
 }
 
@@ -909,7 +933,10 @@ mod tests {
                 &format!("openalex|{}|false|5", q.openalex()),
             );
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(&path, serde_json::to_vec(&cached).unwrap()).unwrap();
+            ProjectFiles::for_project(&p)
+                .unwrap()
+                .write(&path, &serde_json::to_vec(&cached).unwrap())
+                .unwrap();
             let r = search(&p, Source::OpenAlex, &q, 5).unwrap();
             assert!(r.cached && r.total == Some(1));
         });
@@ -963,7 +990,57 @@ mod tests {
     }
 
     fn fresh_root() -> tempfile::TempDir {
-        tempfile::tempdir().unwrap()
+        let root = tempfile::tempdir().unwrap();
+        // Legacy, plaintext cache policy without opening a database (these tests exercise
+        // transport failures rather than project creation).
+        std::fs::write(
+            root.path().join("project.json"),
+            br#"{"format_version":1,"name":"Transport test","network_enabled":false}"#,
+        )
+        .unwrap();
+        root
+    }
+
+    #[test]
+    fn encrypted_cache_round_trips_offline_and_refuses_tampering_and_missing_keys() {
+        let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let count = stand_in(Duration::ZERO, |_| {
+            (
+                200,
+                r#"{"meta":{"count":1},"results":[{"id":"https://openalex.org/W1","display_name":"PRIVATE_CACHE_MARKER"}]}"#,
+            )
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let project = Project::create(&dir.path().join("encrypted-cache")).unwrap();
+        let q = query();
+        let first = search(&project, Source::OpenAlex, &q, 5).unwrap();
+        assert_eq!(first.hits[0].title, "PRIVATE_CACHE_MARKER");
+        let key = format!("openalex|{}|false|5", q.openalex());
+        let path = cache_path(&project.root, Source::OpenAlex, &key);
+        let mut stored = std::fs::read(&path).unwrap();
+        assert!(invectus_core::encrypted_file::is_encrypted(&stored));
+        assert!(
+            !stored
+                .windows(b"PRIVATE_CACHE_MARKER".len())
+                .any(|w| w == b"PRIVATE_CACHE_MARKER")
+        );
+        let cached =
+            invectus_core::net::scoped_offline(true, || search(&project, Source::OpenAlex, &q, 5))
+                .unwrap();
+        assert!(cached.cached);
+        assert_eq!(cached.hits[0].title, first.hits[0].title);
+        *stored.last_mut().unwrap() ^= 1;
+        std::fs::write(&path, stored).unwrap();
+        let error = search(&project, Source::OpenAlex, &q, 5).unwrap_err();
+        assert!(format!("{error:#}").contains("authentication"), "{error:#}");
+        let code = project.recovery_code().unwrap();
+        let id = project.config.project_id.as_ref().unwrap();
+        invectus_core::keys::forget(id).unwrap();
+        let error = search_in(&project.root, Source::OpenAlex, &q, 5).unwrap_err();
+        assert!(format!("{error:#}").contains("key"), "{error:#}");
+        project.restore_key(&code).unwrap();
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        *ROUTE.lock().unwrap() = None;
     }
 
     #[test]

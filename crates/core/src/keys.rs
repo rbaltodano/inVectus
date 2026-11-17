@@ -16,7 +16,8 @@
 //!    app does not have it set.
 //! 3. The system keychain.
 //!
-//! Nothing is encrypted with the key yet (phase 3 turns that on); losing it now loses nothing.
+//! New project databases are encrypted with this key. Losing both the stored key and the
+//! recovery code makes their encrypted data inaccessible. Legacy projects await migration.
 
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};

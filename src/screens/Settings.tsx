@@ -190,7 +190,7 @@ export default function Settings({ project, setProject }: { project?: ProjectInf
             {project && <SettingsGroup id="s-pulled" title="Pulled copies" description="What you pulled from your integrations, kept in the project so collections can be updated from it. It stays until you remove it here.">
               <PulledCopies key={project.root} />
             </SettingsGroup>}
-            {project && <SettingsGroup id="s-key" title="Recovery code" description="This project’s key, for when encryption is on. Keep the code in a password manager or on paper: it opens the project on another computer, or if the keychain entry is lost. Anyone with it can read the project.">
+            {project && <SettingsGroup id="s-key" title="Recovery code" description="Keep the code in a password manager or on paper: it opens this project’s encrypted data on another computer, or if the keychain entry is lost. Anyone with it can read the encrypted data. Older projects stay unencrypted until migrated.">
               <RecoveryCode key={project.root} />
             </SettingsGroup>}
             <OutboundLog />

@@ -15,7 +15,7 @@ what was tested on which platform.
     offline.
 - **External checks** (a per-project switch, off by default) gates calls that send text derived
   from the collection to another service: gap checks against PubMed, OpenAlex, Semantic Scholar
-  and arXiv. The choice is recorded per machine (`<OS data dir>/inVectus/external-checks.json`)
+  and arXiv. The choice is recorded per machine (`<OS data dir>/inVectus/consent.json`)
   as well as in the project, so a copied or shared project arrives with checks off.
 - **Credentials** (integration tokens) are stored only in the system keychain.
   - Each client is bound to its service's exact origin (`https://api.notion.com`, …). Every URL,
@@ -70,21 +70,32 @@ the agent's provider.**
 - Writes go through an owner-only temporary file that is renamed into place, and are removed on
   failure.
 - Projects made by older versions are tightened when opened (the root and its standard folders).
-- **Windows:** files inherit their folder's ACL (the user's profile is user-only by default). No
-  explicit ACL is set, so a project in a shared folder keeps that folder's permissions.
+- **Windows:** project files/folders and shared settings get a protected ACL granting access
+  to the current user, including inheritance for new children. Platform validation is recorded
+  per CI run in PROGRESS.md; macOS checks alone do not verify Windows behavior.
 - **Pulled copies** stay in the project until removed: nothing expires them.
   - `invectus sources list` shows each copy, its origin, size, pull time, and the collections
     using it.
   - `invectus sources forget <name>` removes a copy and its record, and refuses while a collection
     still uses it.
+  - Settings → Network → Pulled copies offers the same list and guarded removal.
+- **Encryption coverage (new projects):** the database, WAL/spills, pulled CSV/JSON copies and
+  verification cache are encrypted. Source/cache encryption uses authenticated 64 KiB blocks,
+  bound to project id, relative path, header and block index, with a fresh derived key per write.
+  Decrypted remote CSV is parsed in memory; temporary writes contain ciphertext only.
+  Authentication/key errors fail rather than falling back to plaintext or a fresh network call.
+- New-project setup shows a recovery code before the first import. Save it separately: losing
+  both the stored key and recovery code loses access to encrypted data. Settings can show it again.
+- Existing projects keep their previous coverage until migration. Filenames, sizes and
+  `project.json` remain visible. Encryption does not prevent replay of complete older files;
+  DuckDB also has the format limitations documented in `docs/encryption-plan.md`.
 
 ## Not yet (planned or open)
 
-- **Encryption at rest:** `docs/encryption-plan.md`. Until it lands, project data is plaintext on
-  disk, protected only by file permissions and the OS's disk encryption (FileVault, BitLocker,
-  LUKS).
+- Lance vectors remain plaintext, as do intentional exports and `project.json`. Migration of
+  existing projects is not implemented. Do not describe entire projects as encrypted yet;
+  see `docs/encryption-plan.md` for phases 5–7 and measurement work.
 - Linux keeps integration tokens in the kernel keyring, which does not survive a reboot.
-- An app UI for removing pulled copies (CLI only today).
 - Spreadsheet imports have no decompression-size cap.
 - Model files are re-hashed only when their size or modification time changes.
 

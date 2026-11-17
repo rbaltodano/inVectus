@@ -25,3 +25,28 @@ The crates.io archive omits that file. Copyright notices in the upstream source
 are preserved. The three modified files (`src/job.rs`, `src/lib.rs`, `Cargo.toml`)
 carry a description of the inVectus changes. These attribution comments supplement
 the functional patch above; they do not change its behavior.
+
+## duckdb 1.20000.0 (owned raw database handle)
+
+Upstream `duckdb` (duckdb-rs) 1.20000.0 (MIT, crates.io archive SHA-256
+`54411716279c39d685e0f3f10346ff503def53fd9b8aa8fbf4ea1db4499c312a`), patched in the root
+`Cargo.toml` (`[patch.crates-io]`). The engine itself (`libduckdb-sys`, the bundled DuckDB
+v2.0.0 sources) is **not** vendored or modified.
+
+Why: encrypted projects need a DuckDB instance opened through the C API, so that
+`crates/core/cpp/duckdb_os_random.cpp` can install its encryption module before anything is
+attached (docs/encryption-plan.md, phase 2). Upstream's `Connection::open_from_raw` never closes
+the handle it is given, so the caller has to; a connection cloned from it could then outlive the
+database and use freed memory (found in review 2026-11-17, reproduced as a SIGSEGV). The patch,
+[`duckdb-1.20000.0-owned-raw.patch`](duckdb-1.20000.0-owned-raw.patch), adds
+`Connection::open_from_raw_owned`: the same code path with `close_on_drop = true`, so the
+handle joins duckdb-rs's reference-counted ownership and closes with the last clone. Nothing
+else changes.
+
+Vendored files: `src/`, `README.md`, `Cargo.toml` (its `[[example]]` and `[[test]]` sections
+removed; their files are not vendored) and `LICENSE`, copied verbatim from the upstream
+`v1.20000.0` tag (https://raw.githubusercontent.com/duckdb/duckdb-rs/v1.20000.0/LICENSE); the
+crates.io archive omits it. `src/lib.rs` and `Cargo.toml` carry a note of the change. On a DuckDB
+upgrade: re-copy the new crate, re-apply the patch, and keep the store tests passing
+(`a_connection_cloned_out_of_an_encrypted_store_keeps_the_database_alive` covers this patch).
+Remove the copy if upstream gains an owning constructor.

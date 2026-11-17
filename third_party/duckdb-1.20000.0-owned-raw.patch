@@ -1,0 +1,32 @@
+--- src/lib.rs	2006-07-23 21:21:28
++++ src/lib.rs	2026-11-17 11:15:50
+@@ -1,3 +1,4 @@
++// Modified for inVectus (2026): adds `Connection::open_from_raw_owned`; see third_party/README.md.
+ //! duckdb-rs is an ergonomic wrapper for using DuckDB from Rust. It attempts to
+ //! expose an interface similar to [rusqlite](https://github.com/rusqlite/rusqlite).
+ //!
+@@ -355,6 +356,24 @@
+         })
+     }
+ 
++    /// Like [`Connection::open_from_raw`], but the connection takes ownership of `raw`: it is
++    /// closed when this connection and every connection cloned from it are dropped.
++    ///
++    /// # Safety
++    ///
++    /// `raw` must be a valid database handle that nothing else closes.
++    // invectus patch: lets a database opened through the C API (to install an encryption
++    // module before use) share duckdb-rs's reference-counted ownership, so no clone can
++    // outlive it. See third_party/README.md.
++    #[inline]
++    pub unsafe fn open_from_raw_owned(raw: ffi::duckdb_database) -> Result<Self> {
++        unsafe { InnerConnection::new_from_raw_db(raw, true) }.map(|db| Self {
++            db: RefCell::new(db),
++            cache: StatementCache::with_capacity(STATEMENT_CACHE_DEFAULT_CAPACITY),
++            path: None,
++        })
++    }
++
+     /// Open a new connection to a DuckDB database.
+     ///
+     /// # Failure

@@ -69,6 +69,14 @@ pub fn harden(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn in_use(path: &Path) -> String {
+    format!(
+        "opening {} (a project can be used by one inVectus process at a time; close the desktop \
+         app or other `invectus` commands using it)",
+        path.display()
+    )
+}
+
 /// Open an in-memory DuckDB with the same network hardening (used to read CSV/Parquet).
 pub fn scratch_connection() -> Result<Connection> {
     let conn =
@@ -317,30 +325,80 @@ pub struct WriteCounts {
 
 pub struct Store {
     conn: Connection,
+    /// The project database is attached (encrypted) as [`ATTACHED`] rather than opened as the
+    /// connection's main database.
+    encrypted: bool,
 }
+
+/// The catalog name an encrypted project database is attached under.
+const ATTACHED: &str = "project";
 
 impl Store {
     /// Another connection to the same database, for a background job that runs while the
     /// session keeps serving reads (DuckDB connections of one database share its state).
     pub fn try_clone(&self) -> Result<Self> {
+        let conn = self.conn.try_clone()?;
+        if self.encrypted {
+            // A new connection starts in the instance's in-memory catalog.
+            conn.execute_batch(&format!("USE {ATTACHED}"))?;
+        }
         Ok(Self {
-            conn: self.conn.try_clone()?,
+            conn,
+            encrypted: self.encrypted,
         })
     }
 
+    /// Open (or create) an unencrypted project database: projects made before encryption.
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open_with_flags(
-            path,
-            Config::default().enable_autoload_extension(false)?,
-        )
-        .with_context(|| {
-            format!(
-                "opening {} (a project can be used by one inVectus process at a time; close the \
-                 desktop app or other `invectus` commands using it)",
-                path.display()
-            )
-        })?;
+        let conn =
+            Connection::open_with_flags(path, Config::default().enable_autoload_extension(false)?)
+                .with_context(|| in_use(path))?;
         harden(&conn)?;
+        Self::init(conn, false)
+    }
+
+    /// Open (or create) a project database encrypted with AES-256-GCM under `key`: its blocks,
+    /// write-ahead log and temporary files. A wrong key, or an unencrypted file in its place,
+    /// is refused.
+    pub fn open_encrypted(path: &Path, key: &crate::keys::DataKey) -> Result<Self> {
+        let conn = crate::duck_crypto::instance()?;
+        harden(&conn)?;
+        // Spill files next to the database (DuckDB would use `.tmp` in the working directory for
+        // an in-memory instance), encrypted with a random per-process key. Set before anything
+        // can spill.
+        let tmp = path.with_extension("duckdb.tmp");
+        conn.execute_batch(&format!(
+            "SET temp_directory = '{}'; SET temp_file_encryption = true;",
+            tmp.display().to_string().replace('\'', "''")
+        ))?;
+        let attach = crate::duck_crypto::attach_sql(&path.display().to_string(), ATTACHED, key);
+        let attached = conn.execute_batch(&attach);
+        crate::duck_crypto::wipe(attach);
+        attached.map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("Wrong encryption key") {
+                anyhow::anyhow!(
+                    "{} could not be unlocked: the key does not match",
+                    path.display()
+                )
+            } else if msg.contains("is not encrypted") {
+                anyhow::anyhow!(
+                    "{} should be encrypted but is not; it was replaced or damaged",
+                    path.display()
+                )
+            } else if msg.contains("being used by another process")
+                || msg.to_lowercase().contains("lock")
+            {
+                anyhow::Error::new(e).context(in_use(path))
+            } else {
+                anyhow::Error::new(e).context(format!("opening {}", path.display()))
+            }
+        })?;
+        conn.execute_batch(&format!("USE {ATTACHED}"))?;
+        Self::init(conn, true)
+    }
+
+    fn init(conn: Connection, encrypted: bool) -> Result<Self> {
         conn.execute_batch(SCHEMA)?;
         let v: Option<i32> = conn
             .query_row("SELECT max(version) FROM schema_version", [], |r| r.get(0))
@@ -353,7 +411,12 @@ impl Store {
             Some(1) => {}
             Some(other) => bail!("project schema version {other} is newer than this build"),
         }
-        Ok(Self { conn })
+        Ok(Self { conn, encrypted })
+    }
+
+    /// Whether this store is an encrypted database.
+    pub fn is_encrypted(&self) -> bool {
+        self.encrypted
     }
 
     pub fn connection(&self) -> &Connection {
@@ -1418,22 +1481,170 @@ mod tests {
     /// refuses to write an encrypted database without `httpfs` (its OpenSSL), because its
     /// built-in mbedtls module draws nonces from a non-cryptographic generator. If this starts
     /// failing, DuckDB changed that rule: revisit the plan before relying on it.
+    fn contains(path: &Path, needle: &[u8]) -> bool {
+        std::fs::read(path).is_ok_and(|b| b.windows(needle.len()).any(|w| w == needle))
+    }
+
     #[test]
-    fn the_bundled_duckdb_will_not_write_encrypted_databases_yet() {
+    fn a_stock_duckdb_instance_still_refuses_encrypted_writes() {
+        // The refusal our module works around: if this starts passing, DuckDB changed its
+        // crypto module and docs/encryption-plan.md (phase 2) needs revisiting.
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("secret.duckdb");
         let conn = scratch_connection().unwrap();
-        let key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let key = crate::keys::DataKey::generate().unwrap();
+        let path = dir.path().join("secret.duckdb").display().to_string();
         let err = conn
-            .execute_batch(&format!(
-                "ATTACH '{}' AS db (ENCRYPTION_KEY '{key}', ENCRYPTION_CIPHER 'GCM')",
-                path.display().to_string().replace('\'', "''")
-            ))
+            .execute_batch(&crate::duck_crypto::attach_sql(&path, "db", &key))
             .unwrap_err()
             .to_string();
         assert!(err.contains("read-only crypto module"), "{err}");
         let v: String = conn.query_row("PRAGMA version", [], |r| r.get(0)).unwrap();
         assert!(v.starts_with("v2."), "{v}");
+    }
+
+    #[test]
+    fn encrypted_store_hides_its_contents_and_needs_its_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.duckdb");
+        let key = crate::keys::DataKey::generate().unwrap();
+        let needle = "needle-plaintext-marker";
+        let calls = crate::duck_crypto::os_random_calls();
+        {
+            let store = Store::open_encrypted(&path, &key).unwrap();
+            assert!(store.is_encrypted());
+            store
+                .conn
+                .execute_batch(&format!(
+                    "CREATE TABLE t AS SELECT '{needle}-' || i AS s FROM range(50000) r(i)"
+                ))
+                .unwrap();
+            // Uncheckpointed rows sit in the write-ahead log: it must be encrypted too.
+            store
+                .conn
+                .execute_batch(&format!("INSERT INTO t VALUES ('{needle}-wal')"))
+                .unwrap();
+            let wal = path.with_extension("duckdb.wal");
+            assert!(
+                std::fs::metadata(&wal).is_ok_and(|m| m.len() > 0),
+                "the insert is in the WAL"
+            );
+            assert!(!contains(&wal, needle.as_bytes()), "plaintext in the WAL");
+            // A cloned connection sees the attached project, not the empty in-memory catalog.
+            let clone = store.try_clone().unwrap();
+            let n: i64 = clone
+                .conn
+                .query_row("SELECT count(*) FROM t", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 50_001);
+        }
+        assert!(
+            crate::duck_crypto::os_random_calls() > calls,
+            "nonces come from the OS generator"
+        );
+        assert!(
+            !contains(&path, needle.as_bytes()),
+            "plaintext in the database"
+        );
+        assert!(
+            !contains(&path, b"CREATE TABLE"),
+            "plaintext schema in the database"
+        );
+
+        let n: i64 = Store::open_encrypted(&path, &key)
+            .unwrap()
+            .conn
+            .query_row("SELECT count(*) FROM t", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 50_001, "rows survive closing and reopening");
+
+        let other = crate::keys::DataKey::generate().unwrap();
+        let err = Store::open_encrypted(&path, &other)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(err.contains("key does not match"), "{err}");
+        let err = Store::open(&path).err().unwrap();
+        assert!(format!("{err:#}").contains("without a key"), "{err:#}");
+
+        // An unencrypted file put in its place is refused, not silently used.
+        let plain = dir.path().join("plain.duckdb");
+        drop(Store::open(&plain).unwrap());
+        let err = Store::open_encrypted(&plain, &key)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(err.contains("should be encrypted"), "{err}");
+    }
+
+    #[test]
+    fn a_connection_cloned_out_of_an_encrypted_store_keeps_the_database_alive() {
+        // Review 2026-11-17: with a borrowed raw handle, cloning an escaped connection after
+        // the store was dropped used a freed database (SIGSEGV). The connection now owns it.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.duckdb");
+        let key = crate::keys::DataKey::generate().unwrap();
+        let escaped = {
+            let store = Store::open_encrypted(&path, &key).unwrap();
+            store.connection().try_clone().unwrap()
+        };
+        let again = escaped.try_clone().unwrap();
+        drop(escaped);
+        let n: i64 = again
+            .query_row("SELECT count(*) FROM project.schema_version", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(n, 1);
+        drop(again);
+        // The last connection closed the database (and released its lock).
+        drop(Store::open_encrypted(&path, &key).unwrap());
+    }
+
+    #[test]
+    fn encrypted_store_spills_only_ciphertext() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.duckdb");
+        let key = crate::keys::DataKey::generate().unwrap();
+        let store = Store::open_encrypted(&path, &key).unwrap();
+        let tmp = path.with_extension("duckdb.tmp");
+        let dir_setting: String = store
+            .conn
+            .query_row("SELECT current_setting('temp_directory')", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(Path::new(&dir_setting), tmp);
+        let enc: bool = store
+            .conn
+            .query_row("SELECT current_setting('temp_file_encryption')", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(enc);
+        // Force a spill: a sort far larger than the memory limit, inspected while it runs.
+        store
+            .conn
+            .execute_batch(
+                "SET memory_limit = '64MB'; SET threads = 1; SET preserve_insertion_order = false;
+                 CREATE TABLE big AS SELECT 'spill-marker-' || i || repeat('x', 200) AS s
+                 FROM range(600000) r(i);",
+            )
+            .unwrap();
+        let mut stmt = store
+            .conn
+            .prepare("SELECT s FROM big ORDER BY s DESC")
+            .unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        let _first = rows.next().unwrap();
+        let spilled: Vec<_> = std::fs::read_dir(&tmp)
+            .map(|d| d.flatten().map(|e| e.path()).collect())
+            .unwrap_or_default();
+        assert!(!spilled.is_empty(), "the sort spilled to {}", tmp.display());
+        for f in &spilled {
+            assert!(
+                !contains(f, b"spill-marker-"),
+                "plaintext in {}",
+                f.display()
+            );
+        }
     }
 
     fn item(coll: &str, src: &str, text: &str) -> Item {

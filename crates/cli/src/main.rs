@@ -749,13 +749,15 @@ enum KeyCommand {
 }
 
 fn cmd_key(p: &ProjectArg, command: KeyCommand) -> Result<()> {
-    let project = open(p)?;
+    // Key commands read project.json only, so they work on a locked project (one whose key is
+    // not here yet) and while the app has the project open.
+    let (root, config) = Project::config_at(&p.project)?;
     match command {
         KeyCommand::Status => {
             use invectus_core::project::KeyStatus;
             println!(
                 "{}",
-                match project.key_status() {
+                match config.key_status() {
                     KeyStatus::NoKey => "this project was made before projects had keys".into(),
                     KeyStatus::Available { source } => format!(
                         "key available ({})",
@@ -773,14 +775,22 @@ fn cmd_key(p: &ProjectArg, command: KeyCommand) -> Result<()> {
                         format!("the stored key is unusable: {reason}"),
                 }
             );
+            println!(
+                "{}",
+                if config.store_encrypted {
+                    "database: encrypted (AES-256-GCM)"
+                } else {
+                    "database: not encrypted (made before encryption)"
+                }
+            );
         }
-        KeyCommand::Show => println!("{}", project.recovery_code()?),
+        KeyCommand::Show => println!("{}", config.data_key()?.recovery_code()),
         KeyCommand::Restore => {
             eprintln!("paste the recovery code, then press Enter:");
             let mut code = String::new();
             std::io::stdin().read_line(&mut code)?;
-            project.restore_key(&code)?;
-            println!("key restored for {}", project.root.display());
+            config.restore_key(&code)?;
+            println!("key restored for {}", root.display());
         }
     }
     Ok(())

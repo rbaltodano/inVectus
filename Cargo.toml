@@ -65,6 +65,7 @@ llama-cpp-2 = { version = "=0.1.160", default-features = false }
 
 [patch.crates-io]
 lancedb = { path = "third_party/lancedb-0.40.0" }
+duckdb = { path = "third_party/duckdb-1.20000.0" }
 
 [profile.dev]
 debug = 0

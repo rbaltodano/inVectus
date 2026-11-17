@@ -731,6 +731,12 @@ async fn restore_project_key(
     .await
 }
 
+/// Unlock an encrypted project that is not open (its key is missing here) from its recovery code.
+#[tauri::command]
+async fn unlock_project(path: String, code: String) -> CmdResult<()> {
+    off_thread(move || orch::unlock_project(&path, &code)).await
+}
+
 /// Copies pulled from integrations into the open project, with the collections using each.
 #[tauri::command]
 async fn pulled_copies(
@@ -930,6 +936,7 @@ pub fn run() {
             open_project,
             project_info,
             rename_project,
+            unlock_project,
             inspect_source,
             pull_source,
             integration_tokens,

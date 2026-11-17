@@ -95,19 +95,42 @@ machine without a keychain, `INVECTUS_PROJECT_KEY` supplies it (documented as le
    behind `force_mbedtls_unsafe` ("NOT securely encrypted"). The crate's `httpfs` feature
    (OpenSSL + curl via CMake) is "supported only on Linux and macOS", and it compiles an HTTP
    client into the app. Recorded by `store::tests::the_bundled_duckdb_will_not_write_encrypted_databases_yet`.
-   Options, for the owner:
-   - **(a) Patch DuckDB's nonce source (recommended).** Vendor `libduckdb-sys` (as we vendor
-     lancedb) and change `MbedTlsWrapper::AESStateMBEDTLS::GenerateRandomData` to use the OS
-     generator (`BCryptGenRandom`, `getrandom`/`arc4random_buf`), registering it as the
-     database's encryption util. Small diff, all three OSes, no network code; we own a
-     security patch and re-apply it on every DuckDB upgrade (with a test that fails if it is
-     lost). Needs a careful review.
-   - (b) Build `httpfs` with OpenSSL: Windows is unsupported by the crate today, and it adds a
-     network-capable extension and a system OpenSSL dependency.
-   - (c) Wait for DuckDB to give its built-in module a secure generator; phase 3 waits too.
-   Phase 4 (snapshot and cache files) and phase 5 (vectors) use our own layer and do not
-   depend on this; they can go first.
-3. DuckDB encryption on, for new projects first (small once 2 lands).
+   **Resolved 2026-11-17 (owner chose option a): OS random generator, no vendoring.** Instead
+   of vendoring `libduckdb-sys`, `crates/core/cpp/duckdb_os_random.cpp` subclasses DuckDB's
+   mbedtls AES state and overrides only `GenerateRandomData` with `BCryptGenRandom` (Windows) or
+   `getentropy` (macOS, Linux). It is installed as the instance's `encryption_util`, the hook
+   httpfs uses for OpenSSL, on an in-memory instance opened through the C API
+   (`crates/core/src/duck_crypto.rs`) and handed to duckdb-rs with
+   `Connection::open_from_raw_owned`, our one-function patch to the vendored duckdb-rs
+   (`third_party/duckdb-1.20000.0`; the engine is not vendored). Project databases are attached
+   to it. The cipher is
+   DuckDB's own; block, WAL and canary nonces and the temp-file key all come from the OS
+   generator. `crates/core/build.rs` compiles it against the bundled DuckDB headers with the
+   same defines. A DuckDB upgrade that changes these classes fails to compile;
+   `store::tests::a_stock_duckdb_instance_still_refuses_encrypted_writes` fails if DuckDB's own
+   module changes. Not affected: the per-file salt and key ids still use `RandomEngine`; they
+   need to be unique, not secret, and the key is a uniformly random 256-bit value.
+3. DuckDB encryption on, for new projects first (small once 2 lands). **Done 2026-11-17.**
+   New projects record `store_encrypted: true` and open `project.duckdb` with
+   `ATTACH … (ENCRYPTION_KEY, ENCRYPTION_CIPHER 'GCM')`: blocks, write-ahead log and spill files
+   (`temp_file_encryption`, spill folder `project.duckdb.tmp` beside the database) are AES-256-GCM.
+   A wrong key, a missing key, or a plaintext file in place of the database is refused. A
+   project whose key is not on this computer is *locked*: the app asks for its recovery code
+   (`UnlockProject`), the CLI uses `invectus key restore`. Older projects, including phase-1
+   projects that have a key, stay plaintext until phase 6. Opening never creates a missing
+   database. **Downgrade guard:** this machine records which projects it created or opened
+   encrypted (`<data dir>/encrypted-projects.json`, by id and folder); such a project never
+   opens unencrypted, even if `project.json` is edited to say so and a plaintext database is put
+   in its place. **Limits (document, not fixed):**
+   - Random 96-bit GCM nonces: collision chance about q²/2^97 over all q block writes under one
+     key, negligible below about 2^32 writes.
+   - Each block's tag detects modification, but blocks are not bound to their position (no AAD),
+     the main file header is not authenticated, and a person able to write the folder can roll
+     the whole database back to an older copy or swap in older valid blocks. Encryption gives
+     confidentiality against copies; it is not tamper-proofing against someone who can write
+     the folder.
+   - The key passes through SQL text; only our final copy of that string is wiped.
+   - A project moved to a new folder *and* stripped of its id is not recognised by the guard.
 4. Encrypted snapshot and cache files (small to medium).
 5. Vectors: prototype route 1, measure on `gapmap-full`, decide, finish (large).
 6. Migration of existing projects, export warning, log audit (medium).

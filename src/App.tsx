@@ -23,6 +23,7 @@ import StarPrompt from "./StarPrompt";
 import { ArrowLeft, Blocks, Bot, Folder, House, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 import { PROJECT_TABS, pageTab, navigateTo, openingTab, returnFromDetail, tabKeyIndex, type ProjectTab, type TabStacks } from "./navigation";
 import { baseName } from "./paths";
+import UnlockProject, { isLocked } from "./UnlockProject";
 import "./App.css";
 
 /** A page beside the circle; Saved and Gaps retain their own detail return paths. */
@@ -88,6 +89,11 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
   const [stack, setStack] = useState<Page[]>([{ kind: "search" }]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string>();
+  // An encrypted project whose key is not here: ask for its recovery code instead of an error.
+  const [locked, setLocked] = useState<string>();
+  const failed = (path: string) => (e: unknown) => {
+    if (isLocked(e)) { setLocked(path); setError(undefined); } else setError(String(e));
+  };
   const jobs = useJobs();
   const job = jobs.current;
   const switchingBlocked = isRunning(job) && !!job?.project;
@@ -112,7 +118,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     setHomeLoading(true);
     api.open(last.root, false)
       .then((p) => { if (!cancelled) { quietRoot.current = p.root; setProject(p); } })
-      .catch((e) => { if (!cancelled) setError(String(e)); })
+      .catch((e) => { if (!cancelled) failed(last.root)(e); })
       .finally(() => { if (!cancelled) setHomeLoading(false); });
     return () => { cancelled = true; };
   }, [route.view]);
@@ -133,7 +139,7 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
   };
 
   const opened = (p: ProjectInfo, first?: Page) => {
-    setProject(p); setError(undefined);
+    setProject(p); setError(undefined); setLocked(undefined);
     setStack(first ? [{ kind: "search" }, first] : [{ kind: "search" }]);
     setRoute({ view: "project" });
   };
@@ -142,14 +148,15 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     setQuery(""); setError(undefined); setStack([{ kind: "search" }]);
     if (project?.root === r.root) { setRoute({ view: "project" }); return; }
     setOpening(true);
-    try { opened(await api.open(r.root, false)); } catch (e) { setError(String(e)); }
+    try { opened(await api.open(r.root, false)); } catch (e) { failed(r.root)(e); }
     finally { setOpening(false); }
   };
   const openProject = async () => {
     if (opening || switchingBlocked) return;
     setError(undefined); setOpening(true);
-    try { const path = await pickProject(); if (path) opened(await api.open(path, false)); }
-    catch (e) { setError(String(e)); }
+    let path: string | undefined;
+    try { path = await pickProject() ?? undefined; if (path) opened(await api.open(path, false)); }
+    catch (e) { if (path) failed(path)(e); else setError(String(e)); }
     finally { setOpening(false); }
   };
   const matches = recent.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()));
@@ -238,6 +245,8 @@ function Shell({ project, setProject, refresh }: { project?: ProjectInfo; setPro
     <main className="main">
       {!inTauri && <p className="banner">Browser preview: the engine runs only in the desktop app.</p>}
       {(route.view === "projects" || route.view === "home") && error && <p className="banner err" role="alert">{error}</p>}
+      {locked && <UnlockProject key={locked} path={locked} onCancel={() => setLocked(undefined)}
+        onUnlocked={() => { setOpening(true); api.open(locked, false).then((p) => opened(p)).catch(failed(locked)).finally(() => setOpening(false)); }} />}
       {route.view === "home" && <Home project={project} recent={recent} job={job} loading={homeLoading || opening}
         onEnter={enter} onPick={openRecent} onNew={() => setRoute({ view: "new" })} onOpen={openProject} onProjects={() => setRoute({ view: "projects" })} />}
       {route.view === "projects" && <ProjectsPage current={project} recent={recent} job={job}

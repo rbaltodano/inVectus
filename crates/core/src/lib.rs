@@ -1,4 +1,5 @@
 //! Data model, project store and schema contracts shared by every inVectus crate (SPEC §7.2).
+pub mod duck_crypto;
 pub mod embedder;
 pub mod identity;
 pub mod item;

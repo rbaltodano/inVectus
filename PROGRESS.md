@@ -3441,3 +3441,57 @@ Checked on arm64 macOS only.
   and give the mbedtls module the OS random generator) are in docs/encryption-plan.md under
   phase 2. **Owner decision needed before phase 3.** Phases 4 and 5 do not depend on it.
 - Gapmap-full backtest not re-run: the engine did not change.
+
+## 2026-11-17 — Encryption phases 2–3: DuckDB writes encrypted projects; new projects encrypted
+
+Owner chose option (a) (patch DuckDB's random source). Done without vendoring the engine.
+
+### Changes
+- `crates/core/cpp/duckdb_os_random.cpp` + `crates/core/build.rs`: a subclass of DuckDB's mbedtls
+  AES state that overrides only `GenerateRandomData` with `BCryptGenRandom` / `getentropy`,
+  installed as the instance's `encryption_util`. Compiled against the bundled DuckDB headers
+  (`DEP_DUCKDB_INCLUDE`; `libduckdb-sys` is now a direct dependency of `invectus-core`) with
+  libduckdb-sys's defines. DuckDB's cipher code is unchanged.
+- `crates/core/src/duck_crypto.rs`: opens an in-memory instance through the C API (extension
+  auto-install/auto-load off), installs the module, attaches the project with
+  `ENCRYPTION_KEY` (base64 of the 256-bit key) and `ENCRYPTION_CIPHER 'GCM'`.
+- Vendored duckdb-rs (`third_party/duckdb-1.20000.0`, 1.1 MB of Rust) with one added function,
+  `Connection::open_from_raw_owned` (see third_party/README.md).
+- `Store::open_encrypted`: database, WAL and spill files encrypted (`temp_file_encryption`,
+  spill folder `project.duckdb.tmp`); wrong key, missing key and a plaintext file in place of
+  the database are refused with plain messages.
+- Projects: new projects set `store_encrypted: true`. A missing key gives `ProjectLocked`; the
+  app shows an Unlock prompt for the recovery code (`src/UnlockProject.tsx`, Tauri
+  `unlock_project`); `invectus key status|show|restore` now read `project.json` only (work on a
+  locked or open project); `key status` says whether the database is encrypted. `Project::open`
+  no longer creates a missing `project.duckdb`. Downgrade guard: `<data dir>/encrypted-projects.json`.
+- Older projects (including phase-1 projects with a key) open unencrypted as before.
+- Fixed the Windows CI failure in run 43933329547 (commit f9627ef): `project::tests::create_then_open`
+  reopened the project while its handle was open (Windows locks the file). That run's other
+  Windows tests passed, including the owner-only ACL tests and the two agent tests fixed in
+  f9627ef. Windows support for those is still not claimed until a full green run.
+
+### Review
+Independent review by gpt-6.1-sol (Codex), 2026-11-17. Fable 5.2 was unavailable (usage credits).
+Findings, all fixed with tests:
+- (high) A connection cloned out of an encrypted store could outlive the borrowed database
+  handle (use-after-free, reproduced as SIGSEGV). Fixed by the owning constructor.
+  Test: `a_connection_cloned_out_of_an_encrypted_store_keeps_the_database_alive`.
+- (high) A plaintext database swapped in with `store_encrypted: false` opened silently.
+  Fixed by the downgrade guard (test in `project::tests::create_then_open`).
+- (medium) Opening silently recreated a deleted database. Now an error.
+- Also: the misleading "used by one process at a time" context is now only added to lock errors,
+  and the `wipe` comment no longer overstates what is wiped.
+Documented, not fixed: no block-position binding or header authentication in DuckDB's format,
+no rollback protection, random-nonce bound (docs/encryption-plan.md, phase 3).
+
+### Checks (arm64 macOS only)
+- `cargo test --workspace --release --no-fail-fast`: 218 passed, 0 failed (the intermittent
+  CLI test passed this run).
+- `cargo clippy --workspace --all-targets --release -- -D warnings` and `cargo fmt --all --check` clean.
+- `npm run build` passes; `npm run test:ui` 58/58.
+- New store tests check that no plaintext marker appears in the database, the WAL or spill files.
+  A spill really happens (64 MB limit, 600k-row sort), and the OS generator's call counter rises.
+- **Unverified:** Windows and Linux builds of the C++ shim (no CI run yet). The Unlock prompt
+  was not exercised in the packaged app. No speed measurement of encrypted versus plaintext
+  stores yet (phase 7).

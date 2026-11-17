@@ -197,6 +197,7 @@ export const api = {
   projectKeyStatus: () => invoke<KeyStatus>("project_key_status"),
   projectRecoveryCode: () => invoke<string>("project_recovery_code"),
   restoreProjectKey: (code: string) => invoke<KeyStatus>("restore_project_key", { code }),
+  unlockProject: (path: string, code: string) => invoke<void>("unlock_project", { path, code }),
   pulledCopies: () => invoke<PulledCopy[]>("pulled_copies"),
   forgetPulledCopy: (name: string) => invoke<PulledCopy[]>("forget_pulled_copy", { name }),
   setVerifySources: (sources: string[]) => invoke<ProjectInfo>("set_verify_sources", { sources }),

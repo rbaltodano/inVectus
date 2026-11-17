@@ -340,6 +340,13 @@ pub fn open_project(
     project_info(guard.as_ref().unwrap(), board).map_err(err)
 }
 
+/// Unlock an encrypted project whose key is not on this computer: check the recovery code
+/// against `project.json` and keep the key here. The database is not opened.
+pub fn unlock_project(path: &str, code: &str) -> OpResult<()> {
+    let (_, config) = Project::config_at(&user_path(path)).map_err(err)?;
+    config.restore_key(code).map_err(err)
+}
+
 /// Rename a project: the open one in place, any other on disk.
 pub fn rename_project(session: &Shared, path: &str, name: &str) -> OpResult<String> {
     let root = std::fs::canonicalize(user_path(path)).map_err(err)?;
